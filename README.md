@@ -1,1 +1,5 @@
-Please do not upload your .venv or .git folder man
+Please do not upload your :
+.venv
+.git
+sqlconnect.py
+__pycache__

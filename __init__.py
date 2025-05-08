@@ -1,13 +1,18 @@
 from flask import Flask, render_template, url_for,request,redirect,session,jsonify, send_file
 from datetime import timedelta
 from flask_sqlalchemy import SQLAlchemy
+import sqlconnect
+#no idea what this does, but it is important to have it here
+from sqlalchemy.sql import text
+conn = "mysql+pymysql://{0}:{1}@{2}/{3}".format(sqlconnect.mysql_user,sqlconnect.mysql_password,sqlconnect.mysql_host,sqlconnect.mysql_name)
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SECRET_KEY'] = 'hermos12345'
+app.config['SQLALCHEMY_DATABASE_URI'] = conn
 app.permanent_session_lifetime = timedelta(minutes=5)
+db = SQLAlchemy(app)
+app.app_context().push()
 
-#antonio: just to verify things work 
 @app.route('/', methods = ['GET'])
 def index():
     return render_template('index.html')

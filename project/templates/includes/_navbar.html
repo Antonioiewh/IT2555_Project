@@ -1,0 +1,30 @@
+<nav class="navbar navbar-expand-xl navbar-dark bg-black">
+    <div class="container-fluid">
+        <div class="collapse navbar-collapse" id="mynavbar">
+            <div class="d-flex flex-column w-100"> <!--This makes sure that per <div>, theres a separate line -->
+
+                <div> <!--start of first row-->    
+                    <ul class="navbar-nav w-100 " > <!--first row first half, idk why w-100 makes its width not the full lenghth of the navbar, edit: fixed it by adding w-100 to the line above-->
+                        <div class="d-flex align-items-center me-auto" >
+                            <a class="navbar-brand p-auto">Simple Book</a>
+                        </div>
+                        <div class="d-flex align-items-center" style="margin-right:2%">
+                        </div>
+                        <div class="d-flex align-items-center" style="margin-right:1%"> <!--Does a bit out of alignment but idc-->
+                            <div class="btn-group"> <!--very impt to have this here-->
+                                <button type="button" class="btn btn-primary border-dark bg-dark rounded d-flex justify-content-center align-items-center" id="dropdownMenuButton1" data-bs-toggle="dropdown" aria-expanded="false" style="width: 3.3rem; height: 3.3rem; padding: 0;">
+                                    <li class="nav-item m-auto me-auto">
+                                        <i class="bi bi-person-circle" style="color: white; font-size: 2rem;"></i>
+                                    </li>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownMenuButton1">
+                                    <li><p>something</p></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </ul>
+                </div>
+            </div>  
+        </div>
+    </div>
+</nav>

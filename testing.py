@@ -1,3 +1,4 @@
+'''
 from __init__ import db
 from flask_sqlalchemy import SQLAlchemy
 from flask import Flask
@@ -14,3 +15,4 @@ app.app_context().push()
 #antonio: just to verify can contact server, we will be executing this command
 result = db.session.execute(text("SHOW DATABASES"))
 print(result.all())
+'''

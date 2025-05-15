@@ -1,14 +1,41 @@
 services:
+  
+  mysql:
+    build:
+      context: mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: test_db
+    ports:
+      - "3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
+      interval: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - flask-sql
+
+
   app:
     build:
       context: project
     ports:
       - "5000"
+    environment:
+      - FLASK_APP=__init__.py
     develop:
       watch:
         - action: sync
           path: ./project/
           target: /code
+    depends_on:
+      mysql:
+         condition: service_healthy
+    networks:
+      - flask-sql
+
   nginx:
     image: nginx:latest
     volumes:
@@ -17,4 +44,10 @@ services:
       - app
     ports:
       - "80:80"
-    
+    networks:
+      - flask-sql
+volumes:
+  two-tier:
+networks:
+  flask-sql:
+    driver: bridge

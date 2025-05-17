@@ -1,5 +1,5 @@
 services:
-  
+
   mysql:
     build:
       context: mysql
@@ -40,12 +40,18 @@ services:
     image: nginx:latest
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro 
     depends_on:
       - app
     ports:
       - "80:80"
+      - "443:443"
+    restart: always
     networks:
       - flask-sql
+
+
+
 volumes:
   two-tier:
 networks:

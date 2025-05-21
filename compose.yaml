@@ -25,16 +25,21 @@ services:
       - "5000"
     environment:
       - FLASK_APP=__init__.py
-    develop:
-      watch:
-        - action: sync
-          path: ./project/
-          target: /code
+      - FLASK_ENV=development
+    volumes:
+      - ./project:/code
+    #develop:
+      #watch:
+        #- action: sync
+          #path: ./project/
+          #target: /code
     depends_on:
       mysql:
          condition: service_healthy
     networks:
       - flask-sql
+    command: gunicorn --bind 0.0.0.0:5000 --reload __init__:app
+    
 
   nginx:
     image: nginx:latest
@@ -46,6 +51,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    
     restart: always
     networks:
       - flask-sql

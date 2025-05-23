@@ -40,7 +40,7 @@ def index():
     for row in rs:
         test_list.append(row)
     return render_template('index.html', test_list=test_list)
-
+print('hello world!')
 
 
 #antonio: i forgot what this does, but it is important to have it here

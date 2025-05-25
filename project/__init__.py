@@ -46,6 +46,11 @@ def index():
 def rate_limit():
     return render_template('rate_limit.html')
 
+#error 404 page
+@app.errorhandler(404)
+def not_found(error):
+    return render_template('404_error.html'), 404
+
 #antonio: i forgot what this does, but it is important to have it here
 if __name__ == "__main__":
     app.secret_key = 'super secret key'

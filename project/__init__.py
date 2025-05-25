@@ -40,8 +40,11 @@ def index():
     for row in rs:
         test_list.append(row)
     return render_template('index.html', test_list=test_list)
-print('hello world!')
 
+#rate limit page
+@app.route('/rate_limit', methods=['GET'])
+def rate_limit():
+    return render_template('rate_limit.html')
 
 #antonio: i forgot what this does, but it is important to have it here
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-from flask import Flask, render_template, url_for,request,redirect,session,jsonify, send_file
+from flask import Flask, render_template, url_for,request,redirect,session,jsonify, send_file,flash
 from datetime import timedelta
 from flask_sqlalchemy import SQLAlchemy
 import sqlconnect
@@ -7,10 +7,22 @@ from sqlalchemy import create_engine,URL
 from sqlalchemy.sql import text
 #antonio: impt to ensure can connect to mysql
 import cryptography
-
+#antonio: forms
+from forms import SignupForm
+#antonio: to generate secret KEY to use for CSRF for Flask-WTF
+import os
+import binascii
+def generate_key():
+  """Generates a random key for Flask-WTF."""
+  return binascii.hexlify(os.urandom(24)).decode()
 #antonio: this is the connection string to connect to mysql
 
+
+
+key = generate_key()
 app = Flask(__name__)
+app.config['SECRET_KEY'] =  key
+#set this to false when in production
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 '''
 app.config['SQLALCHEMY_DATABASE_URI'] = conn
@@ -31,15 +43,27 @@ mysql_database_URL = URL.create(
     port=sqlconnect.mysql_port,
     database=sqlconnect.mysqldb_name
 )
-@app.route('/', methods = ['GET'])
-def index():
-    engine = create_engine(mysql_database_URL)
-    connection = engine.connect()
-    rs = connection.execute(text("SHOW DATABASES"))
-    test_list = []
-    for row in rs:
-        test_list.append(row)
-    return render_template('index.html', test_list=test_list)
+#signup page
+@app.route('/', methods=['GET', 'POST'])
+def signup():
+    Signupform = SignupForm()
+    #uses sqlalchemy to connect to mysql
+    #engine = create_engine(mysql_database_URL)
+    #connection = engine.connect()
+    #if request method code here
+    #code to test if sms works
+    if Signupform.validate_on_submit():
+        #antonio: this is where you can add code to insert into mysql
+        #connection.execute(text("INSERT INTO users (name, password, phone_no) VALUES (:name, :password, :phone_no)"),
+        #                   name=Signupform.username.data,
+        #                   password=Signupform.password.data,
+        #                   phone_no=Signupform.phone_no.data)
+        #connection.close()
+        print("Form submitted successfully!")
+
+    
+    
+    return render_template('UserSignup.html',form=Signupform)
 
 #rate limit page
 @app.route('/rate_limit', methods=['GET'])
@@ -51,13 +75,15 @@ def rate_limit():
 def not_found(error):
     return render_template('404_error.html'), 404
 
+@app.errorhandler(500)
+def internal_error(error):
+    return render_template('500_error.html'), 500
+
 #antonio: i forgot what this does, but it is important to have it here
 if __name__ == "__main__":
-    app.secret_key = 'super secret key'
+    #app.secret_key = 'super secret key'
     app.config['SESSION_TYPE'] = 'filesystem'
-    
-
-    #determine the create the obj
+    #set debug to false when prod
     app.run(debug=True)
 
 

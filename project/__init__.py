@@ -64,6 +64,22 @@ def signup():
     
     
     return render_template('UserSignup.html',form=Signupform)
+#home page
+@app.route('/home', methods=['GET'])
+def home():
+    #antonio: this is where you can add code to check if user is logged in
+    #if session.get('logged_in'):
+    #    return render_template('home.html')
+    #else:
+    #    return redirect(url_for('signup'))
+    engine = create_engine(mysql_database_URL)
+    connection = engine.connect()
+    rs = connection.execute(text("SHOW DATABASES"))
+    test_list = []
+    for row in rs:
+        test_list.append(row)
+        print(row)
+    return render_template('home.html', test_list=test_list)
 
 #rate limit page
 @app.route('/rate_limit', methods=['GET'])

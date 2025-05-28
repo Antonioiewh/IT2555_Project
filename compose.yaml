@@ -42,19 +42,33 @@ services:
     
 
   nginx:
-    image: nginx:latest
+    build: ./nginxproxy # Build from the Dockerfile in the nginx-proxy directory
+    ports:
+      - "80:80" # Expose Nginx on port 80
+      - "443:443" # Expose Nginx on port 443 if you set up SSL
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      # Optional: Mount a volume for Nginx/ModSecurity logs to persist them
+      - ./nginxproxy/custom_modsec_rules:/etc/nginx/modsec/custom_modsec_rules # If you create custom rules
       - ./certs:/etc/nginx/certs:ro 
     depends_on:
-      - app
-    ports:
-      - "80:80"
-      - "443:443"
-    
+      - app # Nginx depends on the Flask app being ready
     restart: always
     networks:
       - flask-sql
+  #nginx:
+    #image: nginx:latest
+    #volumes:
+      #- ./nginx.conf:/etc/nginx/nginx.conf:ro
+      #- ./certs:/etc/nginx/certs:ro 
+    #depends_on:
+      #- app
+    #ports:
+      #- "80:80"
+      #- "443:443"
+    
+    #restart: always
+    #networks:
+      #- flask-sql
 
 
 

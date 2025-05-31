@@ -1,11 +1,10 @@
-CREATE DATABASE IF NOT EXISTS 'test_db';
+CREATE DATABASE IF NOT EXISTS test_db;
 USE test_db;
 
-
 CREATE TABLE `romanian` (
-  `id`, int(11) NOT NULL AUTO_INCREMENT,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `wallets_stolen` int(11) NOT NULL AUTO_INCREMENT,
-  `name` varchar(255) DEFAULT NULL
+  `name` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 

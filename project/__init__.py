@@ -81,10 +81,11 @@ def home():
         print(row)
     return render_template('home.html', test_list=test_list)
 
-#rate limit page
-@app.route('/rate_limit', methods=['GET'])
-def rate_limit():
-    return render_template('rate_limit.html')
+
+#error 403 page
+@app.errorhandler(403)
+def forbidden(error):
+    return render_template('403_error.html'), 403
 
 #error 404 page
 @app.errorhandler(404)

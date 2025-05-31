@@ -47,9 +47,13 @@ services:
       - "80:80" # Expose Nginx on port 80
       - "443:443" # Expose Nginx on port 443 if you set up SSL
     volumes:
+      #Copy over some internal files idfk
+      - ./project/templates/includes/rate_limit.html:/usr/share/nginx/html/rate_limit.html:ro
       # Optional: Mount a volume for Nginx/ModSecurity logs to persist them
       - ./nginxproxy/custom_modsec_rules:/etc/nginx/modsec/custom_modsec_rules # If you create custom rules
       - ./certs:/etc/nginx/certs:ro 
+      - ./modsec_logs:/var/log/nginx/modsec_audit_data 
+      - ./nginx_logs:/var/log/nginx
     depends_on:
       - app # Nginx depends on the Flask app being ready
     restart: always

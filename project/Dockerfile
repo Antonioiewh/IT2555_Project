@@ -7,4 +7,4 @@ RUN pip install -r requirements.txt
 COPY . . 
 #use 127.0.0.1
 
-CMD gunicorn --reload -b 0.0.0.0:5000 __init__:app
+CMD gunicorn --reload -b 0.0.0.0:5000 app:app

@@ -1,14 +1,16 @@
 services:
 
   mysql:
-    build:
-      context: mysql
-    restart: always
+    image: mysql:8.0 # Using MySQL 8.0
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: test_db
+      MYSQL_ROOT_PASSWORD: rootpassword # Root password for MySQL
+      MYSQL_DATABASE: flaskdb          # Database for Flask app
+      MYSQL_USER: flaskuser            # User for Flask app
+      MYSQL_PASSWORD: password         # Password for Flask user
+    volumes:
+      - ./mysql:/docker-entrypoint-initdb.d  # Mount SQL initialization script
     ports:
-      - "3306"
+      - "3306:3306" # Expose MySQL port for local access if needed (optional)
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
       interval: 5s
@@ -24,8 +26,13 @@ services:
     ports:
       - "5000"
     environment:
-      - FLASK_APP=__init__.py
+      - FLASK_APP=app.py
       - FLASK_ENV=development
+      - MYSQL_USER=flaskuser
+      - MYSQL_PASSWORD=password
+      - MYSQL_DATABASE=flaskdb
+      - MYSQL_HOST=mysql # This matches the service name of the MySQL container
+      - SECRET_KEY=your_super_secret_key_change_me_in_production # IMPORTANT: Change this!
     volumes:
       - ./project:/code
     #develop:
@@ -38,7 +45,7 @@ services:
          condition: service_healthy
     networks:
       - flask-sql
-    command: gunicorn --bind 0.0.0.0:5000 --reload __init__:app
+    command: gunicorn --bind 0.0.0.0:5000 --reload app:app
     
 
   nginx:

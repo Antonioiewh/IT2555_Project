@@ -3,33 +3,44 @@
 {% from "includes/_formHelper.html" import render_field %}
 {% block content %}
 
-<div class="d-flex flex-column w-50 d-flex justify-content-center" style=" margin:auto; height:50vh; background-color:lightgray; margin-top:10vh;">
-    <form method="POST" action="" enctype="multipart/form-data">
-        <h2 style="justify-self:center">Sign up today!</h2>
-        {{ form.hidden_tag() }}
+<div class="d-flex justify-content-center align-items-center" style="min-height: 80vh;">
+    <div class="card p-4 shadow-lg" style="width: 100%; max-width: 500px;">
+        <form method="POST" action="" enctype="multipart/form-data">
+            <h2 class="text-center mb-4">Sign up today!</h2>
+            {{ form.hidden_tag() }}
 
-        <div class="form-group" style="margin-left:3vh; margin-right:3vh;">
-            {{ render_field(form.username, class="form-control") }}
-        </div>
+            <div class="row"> {# Start a Bootstrap row for horizontal alignment #}
+                <div class="col-md-6"> {# Column for the Name field - takes half width on medium screens and up #}
+                    <div class="mb-3"> {# Add margin-bottom for vertical spacing of this field group #}
+                        {{ render_field(form.username, class="form-control") }}
+                    </div>
+                </div>
+                <div class="col-md-6"> {# Column for the Phone Number field - takes half width on medium screens and up #}
+                    <div class="mb-3"> {# Add margin-bottom for vertical spacing of this field group #}
+                        {{ render_field(form.phone_no, class="form-control") }}
+                    </div>
+                </div>
+            </div> {# End of the row containing Name and Phone Number #}
 
-        <div class="form-group" style="margin-left:3vh; margin-right:3vh;">
-            {{ render_field(form.phone_no, class="form-control") }}
-        </div>
+            <div class="mb-3"> {# Wrapper for the Password field with margin-bottom #}
+                {{ render_field(form.password, class="form-control") }}
+            </div>
+            
+            {# <div class="mb-3">
+                {{ render_field(form.email, class="form-control") }}
+            </div> #}
+            {# <div class="mb-3">
+                {{ render_field(form.confirm_password, class="form-control") }}
+            </div> #}
 
-        <div class="form-group" style="margin-left:3vh; margin-right:3vh;">
-            {{ render_field(form.password, class="form-control") }}
-        </div>
-        
+            <div class="d-grid gap-2 mb-3"> {# d-grid makes button full width, gap-2 adds spacing #}
+                <input type="submit" value="Register" class="btn btn-primary"/>
+            </div>
 
-        <div class="align-items-center " style="justify-self:center; margin-top:10px;">  <!--div for text-->
-            <p>Already a user? <a href="/login">Login</a></p>
-        </div>
-
-        <div style="justify-self:center"> <!--div for button only-->
-            <input type="submit" value="Register" class="btn btn-primary"/>
-        </div>
-
-    </form>
+            <div class="text-center mt-3"> {# text-center centers the text, mt-3 adds top margin #}
+                <p>Already a user? <a href="/login" class="link-primary">Login</a></p>
+            </div>
+        </form>
+    </div>
 </div>
 {% endblock %}
-{% from "includes/_formHelper.html" import render_field %}

@@ -1,0 +1,31 @@
+{% extends "UserBase.html" %}
+
+{% block title %}Login{% endblock %}
+{% from "includes/_formHelper.html" import render_field %}
+{% block content %}
+<div class="d-flex justify-content-center align-items-center" style="min-height: 80vh;">
+    <div class="card p-4 shadow-lg" style="width: 100%; max-width: 500px;">
+        <form method="POST" action="" enctype="multipart/form-data">
+            <h2 class="text-center mb-4">Login!</h2>
+            {{ form.hidden_tag() }}
+
+            <div class="mb-3"> {# Wrapper for the Password field with margin-bottom #}
+                {{ render_field(form.username, class="form-control") }}
+            </div>
+
+            <div class="mb-3"> {# Wrapper for the Password field with margin-bottom #}
+                {{ render_field(form.password, class="form-control") }}
+            </div>
+            
+
+            <div class="d-grid gap-2 mb-3"> {# d-grid makes button full width, gap-2 adds spacing #}
+                <input type="submit" value="Login" class="btn btn-primary"/>
+            </div>
+
+            <div class="text-center mt-3"> {# text-center centers the text, mt-3 adds top margin #}
+                <p>Not a user? <a href="/signup" class="link-primary">Register</a></p>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

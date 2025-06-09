@@ -335,14 +335,14 @@ def permission_required(permission_name):
 
 @app.route('/')
 @login_required
-def index():
+def home():
     return render_template('UserHome.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     form = LoginForm()
     if current_user.is_authenticated:
-        return redirect(url_for('index'))
+        return redirect(url_for('home'))
 
     if request.method == 'POST':
         if form.validate_on_submit():
@@ -374,7 +374,6 @@ def logout():
         # --- END NEW ---
     logout_user()
     return redirect(url_for('index'))
-
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
@@ -413,7 +412,7 @@ def signup():
             db.session.commit() # Commit again to save the role assignment
             flash('Your account has been created successfully!', 'success')
             login_user(new_user)
-            return redirect(url_for('index')) # Redirect to a dashboard or home page after login
+            return redirect(url_for('home')) # Redirect to a dashboard or home page after login
         else:
             
             return redirect(url_for('login')) # Redirect to login if role assignment fails
@@ -421,14 +420,17 @@ def signup():
     return render_template('UserSignup.html', form=form)
 
 
-# app.py
+@app.errorhandler(404)
+def not_found_error(error):
+    return render_template('404_error.html'), 404
 
-# Make sure these imports are at the top of your app.py
-from werkzeug.security import generate_password_hash
-from datetime import datetime
+@app.errorhandler(403)
+def forbidden_error(error): 
+    return render_template('403_error.html'), 403
 
-
-
+@app.errorhandler(500)
+def internal_server_error(error):
+    return render_template('500_error.html'), 500
 
 # --- Run the App ---
 if __name__ == '__main__':

@@ -2,41 +2,5 @@
 {% block title %}Welcome - SimpleBook{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-8 col-lg-7"> {# Adjust column sizes as needed for homepage content #}
-        <div class="card shadow-lg p-4 mt-5"> {# Added shadow and padding, top margin #}
-            <div class="card-body text-center"> {# Center text in the card body #}
-                <h1 class="card-title display-4 mb-4">Welcome to SimpleBook!</h1> {# Larger, prominent title #}
-                <p class="lead mb-4">
-                    Your go-to platform for connecting, sharing, and discovering.
-                    Join our community today!
-                </p>
 
-                {# Conditional content based on login status #}
-                {% if current_user.is_authenticated %}
-                    <p class="mb-4">
-                        You're already logged in as <strong>{{ current_user.username }}</strong>.
-                        Ready to explore?
-                    </p>
-                    <a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-lg">Go to Dashboard</a>
-                    <a href="{{ url_for('logout') }}" class="btn btn-outline-secondary btn-lg ms-2">Logout</a>
-                {% else %}
-                    <p class="mb-4">
-                        To get started, please log in or create a new account.
-                    </p>
-                    <a href="{{ url_for('login') }}" class="btn btn-primary btn-lg">Login</a>
-                    <a href="{{ url_for('signup') }}" class="btn btn-outline-success btn-lg ms-2">Sign Up</a>
-                {% endif %}
-
-                <hr class="my-4"> {# A horizontal rule for separation #}
-
-                <p class="text-muted">
-                    Learn more about our features and how to use SimpleBook.
-                </p>
-                {# You can add more links or introductory content here #}
-                <a href="#" class="btn btn-link">Explore Features</a>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}

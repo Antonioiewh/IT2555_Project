@@ -8,12 +8,9 @@ DROP TABLE IF EXISTS permissions;
 DROP TABLE IF EXISTS roles;
 DROP TABLE IF EXISTS posts;         -- Assuming posts table exists and links to users
 DROP TABLE IF EXISTS post_images;   -- Assuming post_images exists
-DROP TABLE IF EXISTS post_likes;    -- Assuming post_likes exists
-DROP TABLE IF EXISTS comments;      -- Assuming comments exists
+
 DROP TABLE IF EXISTS events;        -- Assuming events exists
 DROP TABLE IF EXISTS notifications; -- Assuming notifications exists
-DROP TABLE IF EXISTS faq_categories;-- Assuming faq_categories exists
-DROP TABLE IF EXISTS faqs;          -- Assuming faqs exists
 DROP TABLE IF EXISTS reports;       -- Assuming reports exists
 DROP TABLE IF EXISTS messages;      -- Assuming messages exists
 DROP TABLE IF EXISTS chat_participants; -- Assuming chat_participants exists
@@ -28,12 +25,16 @@ DROP TABLE IF EXISTS users; -- Drop users table last
 -- 1. User Accounts
 -- **************************************
 CREATE TABLE users (
-    user_id INT AUTO_INCREMENT PRIMARY KEY, -- Renamed 'id' to 'user_id' for consistency with schema
+    user_id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(80) UNIQUE NOT NULL,
-    phone_number VARCHAR(8) UNIQUE NULL, -- Added phone number as per the full schema
-    password_hash VARCHAR(255) NOT NULL,        -- Added as per the full schema
+
+    phone_number VARCHAR(8) UNIQUE NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    -- Removed first_name VARCHAR(50) DEFAULT NULL,
+    -- Removed last_name VARCHAR(50) DEFAULT NULL,
     profile_pic_url VARCHAR(255) DEFAULT NULL,
     bio TEXT DEFAULT NULL,
+    current_status VARCHAR(50) NOT NULL DEFAULT 'offline',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     last_active_at DATETIME DEFAULT NULL
@@ -108,28 +109,6 @@ CREATE TABLE post_images (
     FOREIGN KEY (post_id) REFERENCES posts(post_id) ON DELETE CASCADE
 );
 
-CREATE TABLE post_likes (
-    like_id INT AUTO_INCREMENT PRIMARY KEY,
-    post_id INT NOT NULL,
-    user_id INT NOT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (post_id, user_id), -- A user can like a post only once
-    FOREIGN KEY (post_id) REFERENCES posts(post_id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
-);
-
-CREATE TABLE comments (
-    comment_id INT AUTO_INCREMENT PRIMARY KEY,
-    post_id INT NOT NULL,
-    user_id INT NOT NULL,
-    comment_text TEXT NOT NULL,
-    parent_comment_id INT NULL, -- For nested comments
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (post_id) REFERENCES posts(post_id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (parent_comment_id) REFERENCES comments(comment_id) ON DELETE CASCADE
-);
 
 -- **************************************
 -- 5. Notifications
@@ -148,20 +127,7 @@ CREATE TABLE notifications (
 -- **************************************
 -- 6. Customer Service
 -- **************************************
-CREATE TABLE faq_categories (
-    category_id INT AUTO_INCREMENT PRIMARY KEY,
-    category_name VARCHAR(100) NOT NULL UNIQUE
-);
 
-CREATE TABLE faqs (
-    faq_id INT AUTO_INCREMENT PRIMARY KEY,
-    category_id INT NULL,
-    question VARCHAR(500) NOT NULL,
-    answer TEXT NOT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (category_id) REFERENCES faq_categories(category_id) ON DELETE SET NULL
-);
 
 CREATE TABLE reports (
     report_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -313,8 +279,8 @@ WHERE r.role_name = 'user' AND p.permission_name IN (
 -- In a real application, ensure each user has a unique email.
 
 INSERT INTO users (username, phone_number, password_hash) VALUES
-('admin', '12345678', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
-('editor', '12345678', 'scrypt:32768:8:1$MACB13gQmz07eh4r$70fe403cc30e93c0605e8c1b5ecf64c43698b421268327e7a18cba40a3e5c25093d399ddbf774653715e2decbf3605d917a749a450dc60790d4e12c3e42c588d'),
+('admin', '12345679', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
+('editor', '12345671', 'scrypt:32768:8:1$MACB13gQmz07eh4r$70fe403cc30e93c0605e8c1b5ecf64c43698b421268327e7a18cba40a3e5c25093d399ddbf774653715e2decbf3605d917a749a450dc60790d4e12c3e42c588d'),
 ('user', '12345678', 'scrypt:32768:8:1$V460O7kVZYEBrWGC$d7a6bd9c8feced05b6d118ec8ef7d2c65c66d41171eb05c9589a49e60a95fda7d830ed98d7eb2e50830034bea978f6db05be620883bacb0bf4c5fc3a0e1d7b38');
 
 -- Assign roles to the newly created users

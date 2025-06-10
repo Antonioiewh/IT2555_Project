@@ -9,14 +9,17 @@
             <h2 class="text-center mb-4">Login!</h2>
             {{ form.hidden_tag() }}
 
-            <div class="mb-3"> {# Wrapper for the Password field with margin-bottom #}
+            <div class="mb-3"> 
                 {{ render_field(form.username, class="form-control") }}
             </div>
 
-            <div class="mb-3"> {# Wrapper for the Password field with margin-bottom #}
+            <div class="mb-3"> 
                 {{ render_field(form.password, class="form-control") }}
             </div>
-            
+
+            <div class="mb-3"> 
+                {{ render_field(form.recaptcha, class="form-control") }}
+            </div>
 
             <div class="d-grid gap-2 mb-3"> {# d-grid makes button full width, gap-2 adds spacing #}
                 <input type="submit" value="Login" class="btn btn-primary"/>

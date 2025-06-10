@@ -131,16 +131,30 @@ CREATE TABLE notifications (
 
 CREATE TABLE reports (
     report_id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NULL, -- NULL if anonymous
-    report_type ENUM('bug', 'feature_request', 'abuse', 'other') NOT NULL,
+    reporter_id INT NULL,
+    reported_user_id INT NOT NULL,
+
+    report_type ENUM(
+        'spam',
+        'harassment',
+        'impersonation',
+        'inappropriate_content',
+        'fraud',
+        'other'
+    ) NOT NULL,
+
     description TEXT NOT NULL,
-    status ENUM('open', 'in_progress', 'closed', 'rejected') NOT NULL DEFAULT 'open',
+    status ENUM('open', 'in_review', 'action_taken', 'rejected') NOT NULL DEFAULT 'open',
     submitted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     resolved_at DATETIME NULL,
     admin_notes TEXT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL
-);
 
+    -- Corrected Foreign Key: REFERENCES users(user_id)
+    FOREIGN KEY (reporter_id) REFERENCES users(user_id) ON DELETE SET NULL,
+
+    -- Corrected Foreign Key: REFERENCES users(user_id)
+    FOREIGN KEY (reported_user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
 -- **************************************
 -- 7. Messaging
 -- **************************************

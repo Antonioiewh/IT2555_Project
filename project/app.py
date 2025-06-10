@@ -14,6 +14,8 @@ from sqlalchemy.dialects.mysql import ENUM
 
 app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
+app.config['RECAPTCHA_PUBLIC_KEY'] = '6LdQNVsrAAAAAMp8AX4H_J4CwZ5OXVixltEf4RaC'
+app.config['RECAPTCHA_PRIVATE_KEY'] = '6LdQNVsrAAAAAMOmgh-7Tp-KAwQUQ6iIbi8_pRvM'
 
 # --- Configuration ---
 # Use environment variables for database connection
@@ -71,7 +73,20 @@ class User(UserMixin, db.Model):
     events = db.relationship('Event', backref='user', lazy=True)
     posts = db.relationship('Post', backref='user', lazy=True)
     notifications = db.relationship('Notification', backref='user', lazy=True)
-    reports = db.relationship('Report', backref='user_reporter', lazy=True)
+    submitted_reports = db.relationship(
+        'Report',
+        primaryjoin="User.user_id == Report.reporter_id", # Explicitly join User.user_id to Report.reporter_id
+        backref=db.backref('reporter_obj', lazy=True), # Use a unique backref name if needed, or let backref handle it
+        lazy=True
+    )
+
+    # A User can be reported in many reports
+    received_reports = db.relationship(
+        'Report',
+        primaryjoin="User.user_id == Report.reported_user_id", # Explicitly join User.user_id to Report.reported_user_id
+        backref=db.backref('reported_user_obj', lazy=True), # Use a unique backref name if needed
+        lazy=True
+    )
     chat_participants = db.relationship('ChatParticipant', backref='user', lazy=True)
     messages_sent = db.relationship('Message', foreign_keys='Message.sender_id', backref='sender', lazy=True)
     admin_actions_performed = db.relationship('AdminAction', foreign_keys='AdminAction.admin_user_id', backref='admin_user', lazy=True)
@@ -188,24 +203,39 @@ class Notification(db.Model):
         return f"<Notification {self.notification_id} for User:{self.user_id}>"
 
 
+
 # **************************************
 # 6. Customer Service
 # **************************************
 class Report(db.Model):
     __tablename__ = 'reports'
-    report_id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id', ondelete='SET NULL'), nullable=True)
-    type = db.Column(ENUM('bug', 'feature_request', 'abuse', 'other', name='report_type'), nullable=False)
+
+    report_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+
+    reporter_id = db.Column(db.Integer, db.ForeignKey('users.user_id', ondelete='SET NULL'), nullable=True)
+    reported_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id', ondelete='CASCADE'), nullable=False)
+
+    report_type = db.Column(db.String(50), nullable=False)
     description = db.Column(db.Text, nullable=False)
-    status = db.Column(ENUM('open', 'in_progress', 'closed', 'rejected', name='report_status'), nullable=False, default='open')
+    status = db.Column(db.String(20), nullable=False, default='open')
     submitted_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     resolved_at = db.Column(db.DateTime, nullable=True)
     admin_notes = db.Column(db.Text, nullable=True)
 
+    # Relationships:
+    # Add the overlaps parameter for the 'reporter' relationship
+    reporter = db.relationship('User', foreign_keys=[reporter_id],
+                               overlaps="reporter_obj,submitted_reports")
+
+    # This one already has the overlaps parameter from the previous fix
+    reported_user = db.relationship('User', foreign_keys=[reported_user_id],
+                                    overlaps="received_reports,reported_user_obj")
+
     def __repr__(self):
-        return f"<Report {self.report_id} ({self.type}) - Status: {self.status}>"
+        return f"<Report {self.report_id} - Type: {self.report_type} - Status: {self.status}>"
 
-
+    def __repr__(self):
+        return f"<Report {self.report_id} - Type: {self.report_type} - Status: {self.status}>"
 # **************************************
 # 7. Messaging
 # **************************************
@@ -359,7 +389,7 @@ def login():
                 # --- END NEW ---
                 flash('Logged in successfully!', 'success')
                 next_page = request.args.get('next')
-                return redirect(next_page or url_for('index'))
+                return redirect(next_page or url_for('home'))
         else:
             flash('Invalid username or password.', 'danger')
     return render_template('UserLogin.html', form=form)
@@ -373,31 +403,30 @@ def logout():
         db.session.commit()
         # --- END NEW ---
     logout_user()
-    return redirect(url_for('index'))
+    return redirect(url_for('login'))
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     form = SignupForm() # Make sure SignupForm is imported or defined
     if form.validate_on_submit():
         username = form.username.data
-        phone_number = form.phone_no.data # Corrected to phone_number
+        phone_no = form.phone_no.data # Corrected to phone_number
         password = form.password.data
 
         # 1. REMOVED EMAIL FROM THE EXISTING USER CHECK
         existing_user = User.query.filter(
             (User.username == username) |
-            (User.phone_number == phone_number) # Check phone_number as well
+            (User.phone_number == phone_no) # Check phone_number as well
         ).first()
 
         if existing_user:
             # 2. Updated flash message to reflect no email check
-            flash('Username or Phone Number already exists. Please choose a different one.', 'danger')
             return redirect(url_for('signup'))
 
         # 3. Ensure 'email' is NOT passed to the User constructor
         new_user = User(
             username=username,
-            phone_number=phone_number, # Pass phone_number here
+            phone_number=phone_no, # Pass phone_no here
             password_hash=generate_password_hash(password),
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
@@ -420,6 +449,8 @@ def signup():
     return render_template('UserSignup.html', form=form)
 
 
+
+
 @app.errorhandler(404)
 def not_found_error(error):
     return render_template('404_error.html'), 404
@@ -427,6 +458,7 @@ def not_found_error(error):
 @app.errorhandler(403)
 def forbidden_error(error): 
     return render_template('403_error.html'), 403
+
 
 @app.errorhandler(500)
 def internal_server_error(error):

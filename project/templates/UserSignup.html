@@ -25,6 +25,10 @@
             <div class="mb-3"> {# Wrapper for the Password field with margin-bottom #}
                 {{ render_field(form.password, class="form-control") }}
             </div>
+
+            <div class="mb-3"> 
+                {{ render_field(form.recaptcha, class="form-control") }}
+            </div>
             
             {# <div class="mb-3">
                 {{ render_field(form.email, class="form-control") }}

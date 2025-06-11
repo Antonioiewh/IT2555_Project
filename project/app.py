@@ -1,4 +1,4 @@
-from flask import Flask, render_template, redirect, url_for, flash, request
+from flask import Flask, render_template, redirect, url_for, flash, request, current_app
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -7,9 +7,10 @@ import os
 from datetime import datetime # Keep datetime for datetime.utcnow()
 
 # antonio: forms
-from forms import SignupForm,LoginForm # Assuming you have a SignupForm defined
+from forms import SignupForm,LoginForm,ReportForm # Assuming you have a SignupForm defined
 
 from sqlalchemy.dialects.mysql import ENUM
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 
 app = Flask(__name__)
@@ -448,8 +449,57 @@ def signup():
 
     return render_template('UserSignup.html', form=form)
 
+# --- User Reporting ---
 
+@app.route('/report_user', methods=['GET', 'POST'])
+@login_required # Ensure only logged-in users can access this page
+def report_user():
+    form = ReportForm()
 
+    if form.validate_on_submit():
+        # The custom validator `validate_reported_username` in forms.py
+        # has already found the user and stored it in `form.user_to_report_obj`
+        reported_user = form.user_to_report_obj
+
+        # At this point, reported_user is guaranteed to exist and not be the current user
+        # due to the form's custom validator.
+
+        new_report = Report(
+            reporter_id=current_user.user_id, # The current logged-in user is the reporter
+            reported_user_id=reported_user.user_id, # Get ID from the found user object
+            report_type=form.report_type.data,
+            description=form.description.data,
+            submitted_at=datetime.utcnow(),
+            status='open' # Default status
+        )
+
+        try:
+            db.session.add(new_report)
+            db.session.commit()
+            flash('Your report has been submitted successfully. Thank you for helping us keep the community safe!', 'success')
+            # Redirect to the profile of the user who was reported, or a confirmation page
+            return redirect(url_for('report_confirmation', reported_username=reported_user.username))
+        except IntegrityError as e:
+            db.session.rollback()
+            current_app.logger.error(f"IntegrityError submitting report: {e}", exc_info=True)
+            flash('Could not submit report due to a data conflict.', 'danger')
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Database error submitting report: {e}", exc_info=True)
+            flash('An unexpected database error occurred. Please try again later.', 'danger')
+        except Exception as e:
+            db.session.rollback() # Rollback in case of any unhandled exception during DB ops
+            current_app.logger.error(f"Unhandled exception submitting report: {e}", exc_info=True)
+            flash('An unknown error occurred while submitting your report. Please try again.', 'danger')
+
+    # For GET request or if validation fails, render the form
+    return render_template('UserReport.html', form=form)
+
+@app.route('/report_confirmation')
+def report_confirmation():
+    # You can get the reported_username from the query parameters if passed
+    reported_username = request.args.get('reported_username', 'the user')
+    return render_template('UserReportConfirmed.html', reported_username=reported_username)
 
 @app.errorhandler(404)
 def not_found_error(error):

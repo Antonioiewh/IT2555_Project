@@ -291,7 +291,7 @@ WHERE r.role_name = 'user' AND p.permission_name IN (
 -- IMPORTANT: Replace YOUR_ADMIN_HASH_HERE, etc., with the actual hashes you generated!
 -- For this example, I'll use placeholders for email, first_name, last_name.
 -- In a real application, ensure each user has a unique email.
-
+-- user|userpass , editor|editorpass, admin|adminpass
 INSERT INTO users (username, phone_number, password_hash) VALUES
 ('admin', '12345679', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
 ('editor', '12345671', 'scrypt:32768:8:1$MACB13gQmz07eh4r$70fe403cc30e93c0605e8c1b5ecf64c43698b421268327e7a18cba40a3e5c25093d399ddbf774653715e2decbf3605d917a749a450dc60790d4e12c3e42c588d'),

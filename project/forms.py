@@ -1,7 +1,7 @@
 #where all your form objects are defined
 #Basic signup form - name, password + phone no.
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField, IntegerField,SelectField,TextAreaField
+from wtforms import StringField, PasswordField, SubmitField, IntegerField,SelectField,TextAreaField,HiddenField
 from wtforms.validators import DataRequired, Length, Email, EqualTo,ValidationError
 from flask_wtf.recaptcha import RecaptchaField # Import RecaptchaField
 
@@ -20,7 +20,9 @@ class LoginForm(FlaskForm):
     recaptcha = RecaptchaField()
     submit = SubmitField('Login')
 
+
 class ReportForm(FlaskForm):
+    
     reported_username = StringField(
         'Username of User to Report',
         validators=[
@@ -64,3 +66,21 @@ class ReportForm(FlaskForm):
 
         # Store the found user object on the form instance for easy access in the route
         self.user_to_report_obj = user_to_report
+
+class UpdateUserStatusForm(FlaskForm):
+    # Dropdown to select the action (status)
+    status = SelectField(
+        'Select Action',
+        choices=[
+            ('offline', 'Restore User Account'),
+            ('suspended', 'Suspend User Account'),
+            ('terminated', 'Terminate User Account')
+        ],
+        render_kw={"class": "form-select"}  # Optional: Add Bootstrap class for styling
+    )
+    
+    # CAPTCHA field for security
+    recaptcha = RecaptchaField()
+    
+    # Submit button
+    submit = SubmitField('Submit', render_kw={"class": "btn btn-primary"})

@@ -41,7 +41,7 @@
             {% if current_user.is_authenticated %} 
                 {% if current_user.has_role('admin')%} <!--only users can view profile-->
                     
-                    <a class="nav-link" href="#" style="color:#232946;border-radius:0.5rem;margin:0.5rem 1rem;display:flex;align-items:center;font-size:1.1rem;">
+                    <a class="nav-link" href="users_dashboard" style="color:#232946;border-radius:0.5rem;margin:0.5rem 1rem;display:flex;align-items:center;font-size:1.1rem;">
                         <i class="bi bi-person-fill" style="margin-right:1rem;font-size:1.3rem;"></i> Manage users <!--go to users dashboard-->
                     </a>
                 {% elif current_user.has_role('user') %} <!--only admin can manage users-->

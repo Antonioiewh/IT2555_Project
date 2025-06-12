@@ -1,11 +1,11 @@
-from flask import Flask, render_template, redirect, url_for, flash, request, current_app
+from flask import Flask, render_template, redirect, url_for, flash, request, current_app, abort
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import os
 from datetime import datetime # Keep datetime for datetime.utcnow()
-
+import re
 # antonio: forms
 from forms import SignupForm,LoginForm,ReportForm # Assuming you have a SignupForm defined
 
@@ -30,9 +30,32 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'a_very_secret_key_for_dev') # Change in production!
 
 db = SQLAlchemy(app)
-login_manager = LoginManager()
+login_manager = LoginManager(app)
 login_manager.init_app(app)
 login_manager.login_view = 'login' # Redirect to login if user not authenticated
+
+# --- Flask-Login User Loader ---
+@login_manager.user_loader
+def load_user(user_id):
+    """Loads a user from the database given their ID."""
+    return db.session.get(User, int(user_id))
+
+
+# --- Admin Required Decorator ---
+def admin_required(f):
+    """
+    Decorator to restrict access to views to users with the 'admin' role.
+    Ensures user is logged in and has the 'admin' role.
+    """
+    @wraps(f)
+    @login_required # Ensure user is logged in first
+    def decorated_function(*args, **kwargs):
+        if not current_user.has_role('admin'):
+            flash('Access denied. You do not have administrator privileges.', 'danger')
+            # Abort with 403 Forbidden status code
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated_function
 
 # --- Models ---
 
@@ -501,6 +524,79 @@ def report_confirmation():
     # You can get the reported_username from the query parameters if passed
     reported_username = request.args.get('reported_username', 'the user')
     return render_template('UserReportConfirmed.html', reported_username=reported_username)
+
+
+
+# --- Admin Routes ---
+@app.route('/users_dashboard')
+@admin_required # Protect this route with the admin_required decorator
+def manage_users():
+    # Get query parameters
+    search_query = request.args.get('search', '').strip()
+    sort_by = request.args.get('sort_by', 'id')  # Default sort by ID
+    order = request.args.get('order', 'asc')  # Default order is ascending
+
+    # Base query
+    query = User.query
+
+    # Apply search filters with enhanced validation
+    if search_query:
+        filters = search_query.split(',')
+        for filter_item in filters:
+            filter_item = filter_item.strip()  # Remove extra spaces
+            filter_item = re.sub(r'[^\w=]', '', filter_item)  # Remove special characters except '='
+
+            if 'id=' in filter_item:
+                try:
+                    user_id = int(filter_item.split('id=')[1])
+                    query = query.filter(User.user_id == user_id)
+                except ValueError:
+                    flash("Invalid ID format. ID must be a number.", "danger")
+            elif 'username=' in filter_item:
+                username = filter_item.split('username=')[1].strip()
+                if re.match(r'^[a-zA-Z0-9_]+$', username):  # Allow alphanumeric and underscores
+                    query = query.filter(User.username.ilike(f"%{username}%"))
+                else:
+                    flash("Invalid username format. Username must be alphanumeric.", "danger")
+            elif 'phone=' in filter_item:
+                phone = filter_item.split('phone=')[1].strip()
+                if re.match(r'^\d+$', phone):  # Ensure phone contains only digits
+                    query = query.filter(User.phone_number.ilike(f"%{phone}%"))
+                else:
+                    flash("Invalid phone format. Phone must contain only digits.", "danger")
+            elif 'status=' in filter_item:
+                status = filter_item.split('status=')[1].strip().lower()
+                if status in ['online', 'offline']:  # Ensure status is valid
+                    query = query.filter(User.current_status.ilike(f"%{status}%"))
+                else:
+                    flash("Invalid status format. Status must be 'online' or 'offline'.", "danger")
+            else:
+                flash("Invalid query format. Please use id=, username=, phone=, or status=.", "danger")
+
+    # Apply sorting
+    if sort_by == 'username':
+        query = query.order_by(User.username.asc() if order == 'asc' else User.username.desc())
+    elif sort_by == 'registration_date':
+        query = query.order_by(User.created_at.asc() if order == 'asc' else User.created_at.desc())
+    else:  # Default sort by ID
+        query = query.order_by(User.user_id.asc() if order == 'asc' else User.user_id.desc())
+
+    users = query.all()
+
+    total_users = User.query.count()
+    online_users = User.query.filter_by(current_status='online').count()
+    offline_users = User.query.filter_by(current_status='offline').count()
+
+    return render_template(
+        'AdminManageUsers.html',
+        total_users=total_users,
+        online_users=online_users,
+        offline_users=offline_users,
+        users=users,
+        sort_by=sort_by,
+        order=order,
+        search_query=search_query
+    )
 
 @app.errorhandler(404)
 def not_found_error(error):

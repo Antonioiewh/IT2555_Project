@@ -2,11 +2,13 @@
 {% block title %}Admin - Manage Users{% endblock %}
 
 {% block content %}
-<div class="container" style="height: 66vh; display: flex; flex-direction: column; justify-content: space-between; margin-top: 20px;"> <!-- Added margin-top for spacing -->
-    <!-- Top Section: Cards -->
+<div class="container mt-5">
+    <h1 class="text-center mb-4">Admin Dashboard - Manage Users</h1>
+
+    <!-- Top Section: Statistics -->
     <div class="row mb-4">
         <div class="col-md-4">
-            <div class="card shadow-sm border-0" style="background-color: #ffffff; border-radius: 10px;"> <!-- Changed background color to lighter (#ffffff) -->
+            <div class="card shadow-sm border-0 rounded">
                 <div class="card-body">
                     <h6 class="card-title text-uppercase text-muted">Total Users</h6>
                     <p class="card-text display-4 text-dark">{{ total_users }}</p>
@@ -14,7 +16,7 @@
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card shadow-sm border-0" style="background-color: #ffffff; border-radius: 10px;"> <!-- Changed background color to lighter (#ffffff) -->
+            <div class="card shadow-sm border-0 rounded">
                 <div class="card-body">
                     <h6 class="card-title text-uppercase text-muted">Online Users</h6>
                     <p class="card-text display-4 text-success">{{ online_users }}</p>
@@ -22,7 +24,7 @@
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card shadow-sm border-0" style="background-color: #ffffff; border-radius: 10px;"> <!-- Changed background color to lighter (#ffffff) -->
+            <div class="card shadow-sm border-0 rounded">
                 <div class="card-body">
                     <h6 class="card-title text-uppercase text-muted">Offline Users</h6>
                     <p class="card-text display-4 text-secondary">{{ offline_users }}</p>
@@ -32,103 +34,85 @@
     </div>
 
     <!-- Search Bar -->
-    <div class="card shadow-sm border-0 mb-4" style="background-color: #f8f9fa; border-radius: 10px;">
+    <div class="card shadow-sm border-0 mb-4 rounded">
         <div class="card-body">
             <form method="get" action="/users_dashboard">
                 <div class="input-group">
-                    <input type="text" name="search" class="form-control" placeholder="Search (e.g., id=1,username=admin,status=online)" value="{{ search_query }}" style="border: 1px solid #ddd; border-radius: 5px;"> <!-- Reduced border thickness -->
-                    <button class="btn btn-primary" type="submit" style="border: 1px solid #ddd; border-radius: 5px;">Search</button> <!-- Reduced border thickness -->
+                    <input type="text" name="search" class="form-control" placeholder="Search (e.g., id=1,username=admin,status=online)" value="{{ search_query }}">
+                    <button class="btn btn-primary" type="submit">Search</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Bottom Section: Table -->
+    <!-- Bottom Section: User Table -->
     {% if users %}
-<div class="table-responsive" style="width: 85%; max-width: 85%; margin: auto; border-radius: 15px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-    <table class="table table-hover table-striped align-middle" style="border-radius: 15px; overflow: hidden;">
-        <thead class="table-dark">
-            <tr>
-                <th scope="col">
-                    <a href="?sort_by=id&order={{ 'asc' if sort_by != 'id' or order == 'desc' else 'desc' }}&search={{ search_query }}" class="text-white text-decoration-none">
-                        ID 
-                        <i class="bi {% if sort_by == 'id' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %}" style="font-size: 0.8rem; color: #0d6efd;"></i>
-                    </a>
-                </th>
-                <th scope="col">
-                    <a href="?sort_by=username&order={{ 'asc' if sort_by != 'username' or order == 'desc' else 'desc' }}&search={{ search_query }}" class="text-white text-decoration-none">
-                        Username 
-                        <i class="bi {% if sort_by == 'username' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %}" style="font-size: 0.8rem; color: #0d6efd;"></i>
-                    </a>
-                </th>
-                <th scope="col">Phone</th>
-                <th scope="col">Status</th>
-                <th scope="col">Roles</th>
-                <th scope="col">
-                    <a href="?sort_by=registration_date&order={{ 'asc' if sort_by != 'registration_date' or order == 'desc' else 'desc' }}&search={{ search_query }}" class="text-white text-decoration-none">
-                        Registration Date 
-                        <i class="bi {% if sort_by == 'registration_date' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %}" style="font-size: 0.8rem; color: #0d6efd;"></i>
-                    </a>
-                </th>
-                <th scope="col">Actions</th>
-            </tr>
-        </thead>
-
-        <tbody>
-            {% for user in users %}
-            <tr>
-                <th scope="row">{{ user.user_id }}</th>
-                <td>{{ user.username }}</td>
-                <td>{{ user.phone_number if user.phone_number else 'N/A' }}</td>
-                <td>
-                    <span class="badge {% if user.current_status == 'online' %}bg-success{% else %}bg-secondary{% endif %}">{{ user.current_status }}</span>
-                </td>
-                <td>
-                    {% for role in user.roles %}
-                        <span class="badge bg-info text-dark me-1">{{ role.role_name }}</span>
-                    {% else %}
-                        <span class="badge bg-warning text-dark">No Roles</span>
-                    {% endfor %}
-                </td>
-                <td>{{ user.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
-                <td>
-                    <button type="button" class="btn btn-sm btn-primary" title="User Actions" data-bs-toggle="modal" data-bs-target="#userActionModal{{ user.user_id }}" 
-                        {% if 'admin' in user.roles|map(attribute='role_name') %}disabled{% endif %}>
-                        Actions
-                    </button>
-                    <div class="modal fade" id="userActionModal{{ user.user_id }}" tabindex="-1" aria-labelledby="userActionModalLabel{{ user.user_id }}" aria-hidden="true">
-                        <div class="modal-dialog">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title" id="userActionModalLabel{{ user.user_id }}">Manage User: {{ user.username }}</h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                </div>
-                                <div class="modal-body">
-                                    <p>Choose an action for user <strong>{{ user.username }}</strong>:</p>
-                                    <div class="d-grid gap-2">
-                                        <button type="button" class="btn btn-secondary" {% if user.account_status != 'suspended' %}disabled{% endif %}>
-                                            Restore User Account
-                                        </button>
-                                        <button type="button" class="btn btn-danger">
-                                            Terminate User Account
-                                        </button>
-                                        <button type="button" class="btn btn-warning">
-                                            Suspend User Account
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+    <div class="table-responsive">
+        <table class="table table-hover table-striped align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th scope="col">
+                        <a href="?sort_by=id&order={{ 'asc' if sort_by != 'id' or order == 'desc' else 'desc' }}&search={{ search_query }}" class="text-white text-decoration-none">
+                            ID 
+                            <i class="bi {% if sort_by == 'id' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %}" style="font-size: 0.8rem; color: #0d6efd;"></i>
+                        </a>
+                    </th>
+                    <th scope="col">
+                        <a href="?sort_by=username&order={{ 'asc' if sort_by != 'username' or order == 'desc' else 'desc' }}&search={{ search_query }}" class="text-white text-decoration-none">
+                            Username 
+                            <i class="bi {% if sort_by == 'username' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %}" style="font-size: 0.8rem; color: #0d6efd;"></i>
+                        </a>
+                    </th>
+                    <th scope="col">Phone</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Roles</th>
+                    <th scope="col">
+                        <a href="?sort_by=registration_date&order={{ 'asc' if sort_by != 'registration_date' or order == 'desc' else 'desc' }}&search={{ search_query }}" class="text-white text-decoration-none">
+                            Registration Date 
+                            <i class="bi {% if sort_by == 'registration_date' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %}" style="font-size: 0.8rem; color: #0d6efd;"></i>
+                        </a>
+                    </th>
+                    <th scope="col">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <th scope="row">{{ user.user_id }}</th>
+                    <td>{{ user.username }}</td>
+                    <td>{{ user.phone_number if user.phone_number else 'N/A' }}</td>
+                    <td>
+                        <span class="badge 
+                            {% if user.current_status == 'online' %}bg-success
+                            {% elif user.current_status == 'offline' %}bg-secondary
+                            {% elif user.current_status == 'suspended' %}bg-warning
+                            {% elif user.current_status == 'terminated' %}bg-danger
+                            {% endif %}">
+                            {{ user.current_status }}
+                        </span>
+                    </td>
+                    <td>
+                        {% for role in user.roles %}
+                            <span class="badge bg-info text-dark me-1">{{ role.role_name }}</span>
+                        {% else %}
+                            <span class="badge bg-warning text-dark">No Roles</span>
+                        {% endfor %}
+                    </td>
+                    <td>{{ user.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>
+                        {% if 'admin' in user.roles|map(attribute='role_name') %}
+                            <button class="btn btn-sm btn-secondary" disabled>Manage User</button>
+                        {% else %}
+                            <a href="{{ url_for('manage_user', user_id=user.user_id) }}" class="btn btn-sm btn-primary">
+                                Manage User
+                            </a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
     {% else %}
     <p class="text-center text-muted">No users found in the database.</p>
     {% endif %}

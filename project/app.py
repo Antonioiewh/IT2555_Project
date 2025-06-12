@@ -7,7 +7,7 @@ import os
 from datetime import datetime # Keep datetime for datetime.utcnow()
 import re
 # antonio: forms
-from forms import SignupForm,LoginForm,ReportForm # Assuming you have a SignupForm defined
+from forms import SignupForm,LoginForm,ReportForm,UpdateUserStatusForm # Assuming you have a SignupForm defined
 
 from sqlalchemy.dialects.mysql import ENUM
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -532,6 +532,7 @@ def report_confirmation():
 @admin_required # Protect this route with the admin_required decorator
 def manage_users():
     # Get query parameters
+    
     search_query = request.args.get('search', '').strip()
     sort_by = request.args.get('sort_by', 'id')  # Default sort by ID
     order = request.args.get('order', 'asc')  # Default order is ascending
@@ -595,8 +596,30 @@ def manage_users():
         users=users,
         sort_by=sort_by,
         order=order,
-        search_query=search_query
+        search_query=search_query,
+        form=UpdateUserStatusForm()
     )
+
+@app.route('/manage_user/<int:user_id>', methods=['GET', 'POST'])
+@admin_required
+def manage_user(user_id):
+    user = User.query.get(user_id)
+    if not user:
+        flash("User not found.", "danger")
+        return redirect(url_for('manage_users'))
+
+    form = UpdateUserStatusForm()
+    if form.validate_on_submit():  # Validate the form, including the CAPTCHA
+        new_status = form.status.data
+        if new_status in ['offline', 'online', 'suspended', 'terminated']:
+            user.current_status = new_status
+            db.session.commit()
+            flash(f"User {user.username}'s status updated to {new_status}.", "success")
+        else:
+            flash("Invalid status.", "danger")
+        return redirect(url_for('manage_users'))
+
+    return render_template('AdminChangeUserStatus.html', user=user, form=form)
 
 @app.errorhandler(404)
 def not_found_error(error):

@@ -24,6 +24,7 @@ DROP TABLE IF EXISTS users; -- Drop users table last
 -- **************************************
 -- 1. User Accounts
 -- **************************************
+-- status is offline, online, suspended, terminated
 CREATE TABLE users (
     user_id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(80) UNIQUE NOT NULL,

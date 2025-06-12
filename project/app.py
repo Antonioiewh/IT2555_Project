@@ -496,6 +496,7 @@ def report_user():
     return render_template('UserReport.html', form=form)
 
 @app.route('/report_confirmation')
+@login_required
 def report_confirmation():
     # You can get the reported_username from the query parameters if passed
     reported_username = request.args.get('reported_username', 'the user')

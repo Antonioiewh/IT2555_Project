@@ -621,6 +621,110 @@ def manage_user(user_id):
 
     return render_template('AdminChangeUserStatus.html', user=user, form=form)
 
+
+
+@app.route('/reports_dashboard', methods=['GET'])
+@admin_required
+def manage_reports():
+    # Get query parameters for filtering and sorting
+    search_query = request.args.get('search', '').strip()
+    sort_by = request.args.get('sort_by', 'submitted_at')  # Default sort by submission date
+    order = request.args.get('order', 'desc')  # Default order is descending
+
+    # Base query
+    query = Report.query
+
+    # Apply search filters
+    if search_query:
+        filters = search_query.split(',')
+        for filter_item in filters:
+            filter_item = filter_item.strip()
+            if 'report_id=' in filter_item:
+                try:
+                    report_id = int(filter_item.split('report_id=')[1])
+                    query = query.filter(Report.report_id == report_id)
+                except ValueError:
+                    flash("Invalid report ID format. ID must be a number.", "danger")
+            elif 'status=' in filter_item:
+                status = filter_item.split('status=')[1].strip().lower()
+                if status in ['open', 'in_review', 'action_taken', 'rejected']:
+                    query = query.filter(Report.status.ilike(f"%{status}%"))
+                else:
+                    flash("Invalid status format. Status must be 'open', 'in_review', 'action_taken', or 'rejected'.", "danger")
+            elif 'report_type=' in filter_item:
+                report_type = filter_item.split('report_type=')[1].strip().lower()
+                if report_type in ['spam', 'harassment', 'impersonation', 'inappropriate_content', 'fraud', 'other']:
+                    query = query.filter(Report.report_type.ilike(f"%{report_type}%"))
+                else:
+                    flash("Invalid report type format.", "danger")
+            else:
+                flash("Invalid query format. Please use report_id=, status=, or report_type=.", "danger")
+
+    # Apply sorting
+    if sort_by == 'submitted_at':
+        query = query.order_by(Report.submitted_at.asc() if order == 'asc' else Report.submitted_at.desc())
+    elif sort_by == 'resolved_at':
+        query = query.order_by(Report.resolved_at.asc() if order == 'asc' else Report.resolved_at.desc())
+    else:  # Default sort by report ID
+        query = query.order_by(Report.report_id.asc() if order == 'asc' else Report.report_id.desc())
+
+    reports = query.all()
+
+    # Calculate counts for each status
+    open_reports = Report.query.filter_by(status='open').count()
+    in_review_reports = Report.query.filter_by(status='in_review').count()
+    action_taken_reports = Report.query.filter_by(status='action_taken').count()
+    rejected_reports = Report.query.filter_by(status='rejected').count()
+
+    return render_template(
+        'AdminManageReports.html',
+        reports=reports,
+        sort_by=sort_by,
+        order=order,
+        search_query=search_query,
+        open_reports=open_reports,
+        in_review_reports=in_review_reports,
+        action_taken_reports=action_taken_reports,
+        rejected_reports=rejected_reports
+    )
+
+
+@app.route('/manage_report/<int:report_id>', methods=['GET', 'POST'])
+@admin_required
+def manage_report(report_id):
+    report = Report.query.get(report_id)
+    if not report:
+        flash("Report not found.", "danger")
+        return redirect(url_for('manage_reports'))
+
+    # Fetch usernames for reporter and reported user
+    reporter_username = None
+    if report.reporter_id:
+        reporter = User.query.get(report.reporter_id)
+        reporter_username = reporter.username if reporter else "Deleted User"
+
+    reported_user = User.query.get(report.reported_user_id)
+    reported_username = reported_user.username if reported_user else "Deleted User"
+
+    if request.method == 'POST':
+        new_status = request.form.get('status')
+        admin_notes = request.form.get('admin_notes')
+        if new_status in ['open', 'in_review', 'action_taken', 'rejected']:
+            report.status = new_status
+            report.admin_notes = admin_notes
+            report.resolved_at = datetime.utcnow() if new_status in ['action_taken', 'rejected'] else None
+            db.session.commit()
+            flash(f"Report {report.report_id} updated successfully.", "success")
+        else:
+            flash("Invalid status.", "danger")
+        return redirect(url_for('manage_reports'))
+
+    return render_template(
+        'AdminChangeReportStatus.html',
+        report=report,
+        reporter_username=reporter_username,
+        reported_username=reported_username
+    )
 @app.errorhandler(404)
 def not_found_error(error):
     return render_template('404_error.html'), 404

@@ -12,7 +12,8 @@ from forms import SignupForm,LoginForm,ReportForm,UpdateUserStatusForm # Assumin
 from sqlalchemy.dialects.mysql import ENUM
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-
+#parsing stufff
+from parse_test import parse_modsec_audit_log
 app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config['RECAPTCHA_PUBLIC_KEY'] = '6LdQNVsrAAAAAMp8AX4H_J4CwZ5OXVixltEf4RaC'
@@ -352,6 +353,14 @@ class UserLog(db.Model):
     def __repr__(self):
         return f"<UserLog {self.log_type} for User:{self.user_id}>"
 
+class ModSecLog(db.Model): #actually in use
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.String(20), nullable=False)
+    time = db.Column(db.String(20), nullable=False)
+    source = db.Column(db.String(50), nullable=False)
+    request = db.Column(db.Text, nullable=False)
+    response = db.Column(db.Text, nullable=False)
+    attack_detected = db.Column(db.Text, nullable=False)
 
 # --- Flask-Login User Loader ---
 @login_manager.user_loader
@@ -725,6 +734,7 @@ def manage_report(report_id):
         reporter_username=reporter_username,
         reported_username=reported_username
     )
+
 @app.errorhandler(404)
 def not_found_error(error):
     return render_template('404_error.html'), 404

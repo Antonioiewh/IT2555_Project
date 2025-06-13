@@ -35,6 +35,8 @@ services:
       - SECRET_KEY=your_super_secret_key_change_me_in_production # IMPORTANT: Change this!
     volumes:
       - ./project:/code
+      - ./nginx_logs:/code/shared_logs
+      
     #develop:
       #watch:
         #- action: sync

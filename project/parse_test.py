@@ -52,12 +52,37 @@ def parse_modsec_audit_log(file_path):
                 logs.append(log)
     return logs
 
-# Path to the audit log folder
-audit_log_folder = os.path.join(os.path.dirname(__file__), "shared_logs")
 
-# Full path to the log file
-log_file_path = os.path.join(audit_log_folder, "modsec_audit.log")
+def parse_error_log(file_path):
+    """
+    Parses error.log and extracts critical information for specific keywords.
+    Includes logs with 'limiting requests' or 'ModSecurity: Access denied'.
+    """
+    logs = []
+    with open(file_path, 'r') as file:
+        for line in file:
+            # Regular expression to match error log entries
+            match = re.match(
+                r'(?P<date>\d{4}/\d{2}/\d{2}) (?P<time>\d{2}:\d{2}:\d{2}) \[(?P<level>\w+)\] \d+#\d+: \*(?P<connection_id>\d+) (?P<message>.*?), client: (?P<client_ip>\S+)',
+                line
+            )
+            if match:
+                message = match.group('message')
+                # Filter logs based on keywords
+                if 'limiting requests' in message or 'ModSecurity: Access denied' in message:
+                    log = {
+                        'date': match.group('date'),
+                        'time': match.group('time'),
+                        'level': match.group('level'),
+                        'message': message,
+                        'client_ip': match.group('client_ip')  # Removed trailing comma
+                    }
+                    logs.append(log)
+    return logs
 
-# Parse the log file
-parsed_logs = parse_modsec_audit_log(log_file_path)
+
+# Example usage for error logs
+error_log_folder = os.path.join(os.path.dirname(__file__), "shared_logs")
+error_log_file_path = os.path.join(error_log_folder, "error.log")
+parsed_error_logs = parse_error_log(error_log_file_path)
 

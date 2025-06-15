@@ -61,16 +61,3 @@ log_file_path = os.path.join(audit_log_folder, "modsec_audit.log")
 # Parse the log file
 parsed_logs = parse_modsec_audit_log(log_file_path)
 
-# Print the parsed logs for testing
-if parsed_logs:
-    for i, log in enumerate(parsed_logs, start=1):
-        print(f"Log Entry {i}:")
-        print(f"Date: {log['date']}")
-        print(f"Time: {log['time']}")
-        print(f"Source: {log['source']}")
-        print(f"Request: {log['request']}")
-        print(f"Response: {log['response']}")
-        print(f"Attack type: {log['attack_detected']}")
-        print("-" * 80)
-else:
-    print("No relevant log entries found.")

@@ -230,12 +230,13 @@ CREATE TABLE user_logs (
 );
 
 CREATE TABLE ModSecLog (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    log_timestamp DATETIME NOT NULL,        -- Combines date and time into a single DATETIME column for better querying and indexing
-    source_ip VARCHAR(45) NOT NULL,         -- More specific: stores IPv4 (up to 15 chars) or IPv6 (up to 45 chars) addresses
-    request_info TEXT NOT NULL,             -- Renamed for clarity: stores the request method, URI, and other relevant details
-    response_info TEXT NOT NULL,            -- Renamed for clarity: stores the response status, potentially headers, etc.
-    attack_summary VARCHAR(512) NULL        -- Renamed for clarity: stores a summary of the detected attack (e.g., "SQL Injection", "XSS"). Can be NULL if no attack was detected.
+    id INT AUTO_INCREMENT PRIMARY KEY,          -- Unique identifier for each log entry
+    date VARCHAR(20) NOT NULL,                  -- Date of the log (e.g., 12/Jun/2025)
+    time VARCHAR(20) NOT NULL,                  -- Time of the log (e.g., 10:05:24)
+    source VARCHAR(50) NOT NULL,                -- Source IP address (e.g., 172.18.0.1)
+    request TEXT NOT NULL,                      -- Request details (e.g., GET /users_dashboard?search=username)
+    response TEXT NOT NULL,                     -- Response details (e.g., HTTP/2.0 403)
+    attack_detected TEXT NOT NULL               -- Attack type detected (e.g., XSS using libinjection)
 );
 -- Enable foreign key checks again
 SET FOREIGN_KEY_CHECKS = 1;

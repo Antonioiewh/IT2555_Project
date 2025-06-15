@@ -354,6 +354,7 @@ class UserLog(db.Model):
         return f"<UserLog {self.log_type} for User:{self.user_id}>"
 
 class ModSecLog(db.Model): #actually in use
+    __tablename__ = 'ModSecLog'
     id = db.Column(db.Integer, primary_key=True)
     date = db.Column(db.String(20), nullable=False)
     time = db.Column(db.String(20), nullable=False)
@@ -733,6 +734,98 @@ def manage_report(report_id):
         report=report,
         reporter_username=reporter_username,
         reported_username=reported_username
+    )
+
+
+@app.route('/manage_ModSecLogs', methods=['GET'])
+@admin_required
+def admin_modsec_logs():
+    # Automatically refresh logs during a GET request
+    log_file_path = os.path.join(os.path.dirname(__file__), "shared_logs", "modsec_audit.log")
+    parsed_logs = parse_modsec_audit_log(log_file_path)
+
+    for log in parsed_logs:
+        # Check if the log already exists to avoid duplicates
+        existing_log = ModSecLog.query.filter_by(
+            date=log['date'],
+            time=log['time'],
+            source=log['source'],
+            request=log['request'],
+            response=log['response'],
+            attack_detected=log['attack_detected']
+        ).first()
+        if not existing_log:
+            new_log = ModSecLog(
+                date=log['date'],
+                time=log['time'],
+                source=log['source'],
+                request=log['request'],
+                response=log['response'],
+                attack_detected=log['attack_detected']
+            )
+            db.session.add(new_log)
+    db.session.commit()
+
+    # Get query parameters for filtering and sorting
+    search_query = request.args.get('search', '').strip()
+    sort_by = request.args.get('sort_by', 'id')  # Default sort by ID
+    order = request.args.get('order', 'asc')  # Default order is ascending
+
+    # Base query
+    query = ModSecLog.query
+
+    # Apply search filters
+    if search_query:
+        filters = search_query.split(',')
+        for filter_item in filters:
+            filter_item = filter_item.strip()
+            if 'id=' in filter_item:
+                try:
+                    log_id = int(filter_item.split('id=')[1])
+                    query = query.filter(ModSecLog.id == log_id)
+                except ValueError:
+                    flash("Invalid ID format. ID must be a number.", "danger")
+            elif 'date=' in filter_item:
+                date = filter_item.split('date=')[1].strip()
+                query = query.filter(ModSecLog.date.ilike(f"%{date}%"))
+            elif 'source=' in filter_item:
+                source = filter_item.split('source=')[1].strip()
+                query = query.filter(ModSecLog.source.ilike(f"%{source}%"))
+            elif 'attack=' in filter_item:
+                attack = filter_item.split('attack=')[1].strip()
+                query = query.filter(ModSecLog.attack_detected.ilike(f"%{attack}%"))
+            else:
+                flash("Invalid query format. Please use id=, date=, source=, or attack=.", "danger")
+
+    # Apply sorting
+    if sort_by == 'date':
+        query = query.order_by(ModSecLog.date.asc() if order == 'asc' else ModSecLog.date.desc())
+    elif sort_by == 'time':
+        query = query.order_by(ModSecLog.time.asc() if order == 'asc' else ModSecLog.time.desc())
+    elif sort_by == 'source':
+        query = query.order_by(ModSecLog.source.asc() if order == 'asc' else ModSecLog.source.desc())
+    elif sort_by == 'attack_detected':
+        query = query.order_by(ModSecLog.attack_detected.asc() if order == 'asc' else ModSecLog.attack_detected.desc())
+    else:  # Default sort by ID
+        query = query.order_by(ModSecLog.id.asc() if order == 'asc' else ModSecLog.id.desc())
+
+    # Fetch logs
+    logs = query.all()
+
+    # Fetch statistics
+    total_logs = ModSecLog.query.count()
+    critical_attacks = ModSecLog.query.filter(ModSecLog.attack_detected.like('%Critical%')).count()
+    recent_logs = ModSecLog.query.filter(ModSecLog.date >= '2025-06-01').count()
+
+    return render_template(
+        'AdminManageModSecLogs.html',
+        logs=logs,
+        total_logs=total_logs,
+        critical_attacks=critical_attacks,
+        recent_logs=recent_logs,
+        sort_by=sort_by,
+        order=order,
+        search_query=search_query
     )
 
 @app.errorhandler(404)

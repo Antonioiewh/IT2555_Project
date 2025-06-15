@@ -238,6 +238,15 @@ CREATE TABLE ModSecLog (
     response TEXT NOT NULL,                     -- Response details (e.g., HTTP/2.0 403)
     attack_detected TEXT NOT NULL               -- Attack type detected (e.g., XSS using libinjection)
 );
+
+CREATE TABLE ErrorLog (
+    id INT AUTO_INCREMENT PRIMARY KEY,          -- Unique identifier for each log entry
+    date VARCHAR(20) NOT NULL,                  -- Date of the log (e.g., 2025/06/01)
+    time VARCHAR(20) NOT NULL,                  -- Time of the log (e.g., 12:40:46)
+    level ENUM('notice', 'error', 'warning', 'critical') NOT NULL, -- Log level (e.g., notice, error)
+    message TEXT NOT NULL,                      -- Log message (e.g., limiting requests, excess: 3.295 by zone "api_limit")
+    client_ip VARCHAR(50) NOT NULL              -- Client IP address (e.g., 172.18.0.1)
+);
 -- Enable foreign key checks again
 SET FOREIGN_KEY_CHECKS = 1;
 

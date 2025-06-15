@@ -13,7 +13,7 @@ from sqlalchemy.dialects.mysql import ENUM
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 #parsing stufff
-from parse_test import parse_modsec_audit_log
+from parse_test import parse_modsec_audit_log,parse_error_log
 app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config['RECAPTCHA_PUBLIC_KEY'] = '6LdQNVsrAAAAAMp8AX4H_J4CwZ5OXVixltEf4RaC'
@@ -363,6 +363,19 @@ class ModSecLog(db.Model): #actually in use
     response = db.Column(db.Text, nullable=False)
     attack_detected = db.Column(db.Text, nullable=False)
 
+class ErrorLog(db.Model):
+    __tablename__ = 'ErrorLog'
+
+    id = db.Column(db.Integer, primary_key=True)  # Unique identifier for each log entry
+    date = db.Column(db.String(20), nullable=False)  # Date of the log (e.g., 2025/06/01)
+    time = db.Column(db.String(20), nullable=False)  # Time of the log (e.g., 12:40:46)
+    level = db.Column(db.Enum('notice', 'error', 'warning', 'critical'), nullable=False)  # Log level (e.g., notice, error)
+    message = db.Column(db.Text, nullable=False)  # Log message (e.g., limiting requests, excess: 3.295 by zone "api_limit")
+    client_ip = db.Column(db.String(50), nullable=False)  # Client IP address (e.g., 172.18.0.1)
+
+    def __repr__(self):
+        return f"<ErrorLog id={self.id} date={self.date} time={self.time} level={self.level} client_ip={self.client_ip}>"
+    
 # --- Flask-Login User Loader ---
 @login_manager.user_loader
 def load_user(user_id):
@@ -788,24 +801,17 @@ def admin_modsec_logs():
             elif 'date=' in filter_item:
                 date = filter_item.split('date=')[1].strip()
                 query = query.filter(ModSecLog.date.ilike(f"%{date}%"))
-            elif 'source=' in filter_item:
-                source = filter_item.split('source=')[1].strip()
-                query = query.filter(ModSecLog.source.ilike(f"%{source}%"))
-            elif 'attack=' in filter_item:
-                attack = filter_item.split('attack=')[1].strip()
-                query = query.filter(ModSecLog.attack_detected.ilike(f"%{attack}%"))
+            elif 'time=' in filter_item:
+                time = filter_item.split('time=')[1].strip()
+                query = query.filter(ModSecLog.time.ilike(f"%{time}%"))
             else:
-                flash("Invalid query format. Please use id=, date=, source=, or attack=.", "danger")
+                flash("Invalid query format. Please use id=, date=, or time=.", "danger")
 
     # Apply sorting
     if sort_by == 'date':
         query = query.order_by(ModSecLog.date.asc() if order == 'asc' else ModSecLog.date.desc())
     elif sort_by == 'time':
         query = query.order_by(ModSecLog.time.asc() if order == 'asc' else ModSecLog.time.desc())
-    elif sort_by == 'source':
-        query = query.order_by(ModSecLog.source.asc() if order == 'asc' else ModSecLog.source.desc())
-    elif sort_by == 'attack_detected':
-        query = query.order_by(ModSecLog.attack_detected.asc() if order == 'asc' else ModSecLog.attack_detected.desc())
     else:  # Default sort by ID
         query = query.order_by(ModSecLog.id.asc() if order == 'asc' else ModSecLog.id.desc())
 
@@ -828,6 +834,87 @@ def admin_modsec_logs():
         search_query=search_query
     )
 
+@app.route('/manage_ErrorLogs', methods=['GET'])
+@admin_required
+def admin_error_logs():
+    # Automatically refresh logs during a GET request
+    log_file_path = os.path.join(os.path.dirname(__file__), "shared_logs", "error.log")
+    parsed_logs = parse_error_log(log_file_path)
+
+    for log in parsed_logs:
+        # Check if the log already exists to avoid duplicates
+        existing_log = ErrorLog.query.filter_by(
+            date=log['date'],
+            time=log['time'],
+            level=log['level'],
+            message=log['message'],
+            client_ip=log['client_ip']
+        ).first()
+        if not existing_log:
+            new_log = ErrorLog(
+                date=log['date'],
+                time=log['time'],
+                level=log['level'],
+                message=log['message'],
+                client_ip=log['client_ip']
+            )
+            db.session.add(new_log)
+    db.session.commit()
+
+    # Get query parameters for filtering and sorting
+    search_query = request.args.get('search', '').strip()
+    sort_by = request.args.get('sort_by', 'id')  # Default sort by ID
+    order = request.args.get('order', 'asc')  # Default order is ascending
+
+    # Base query
+    query = ErrorLog.query
+
+    # Apply search filters
+    if search_query:
+        filters = search_query.split(',')
+        for filter_item in filters:
+            filter_item = filter_item.strip()
+            if 'id=' in filter_item:
+                try:
+                    log_id = int(filter_item.split('id=')[1])
+                    query = query.filter(ErrorLog.id == log_id)
+                except ValueError:
+                    flash("Invalid ID format. ID must be a number.", "danger")
+            elif 'date=' in filter_item:
+                date = filter_item.split('date=')[1].strip()
+                query = query.filter(ErrorLog.date.ilike(f"%{date}%"))
+            elif 'time=' in filter_item:
+                time = filter_item.split('time=')[1].strip()
+                query = query.filter(ErrorLog.time.ilike(f"%{time}%"))
+            else:
+                flash("Invalid query format. Please use id=, date=, or time=.", "danger")
+
+    # Apply sorting
+    if sort_by == 'date':
+        query = query.order_by(ErrorLog.date.asc() if order == 'asc' else ErrorLog.date.desc())
+    elif sort_by == 'time':
+        query = query.order_by(ErrorLog.time.asc() if order == 'asc' else ErrorLog.time.desc())
+    else:  # Default sort by ID
+        query = query.order_by(ErrorLog.id.asc() if order == 'asc' else ErrorLog.id.desc())
+
+    # Fetch logs
+    logs = query.all()
+
+    # Fetch statistics
+    total_logs = ErrorLog.query.count()
+    error_logs = ErrorLog.query.filter(ErrorLog.level == 'error').count()
+    warning_logs = ErrorLog.query.filter(ErrorLog.level == 'warning').count()
+
+    return render_template(
+        'AdminManageErrorLogs.html',
+        logs=logs,
+        total_logs=total_logs,
+        error_logs=error_logs,
+        warning_logs=warning_logs,
+        sort_by=sort_by,
+        order=order,
+        search_query=search_query
+    )
 @app.errorhandler(404)
 def not_found_error(error):
     return render_template('404_error.html'), 404

@@ -14,6 +14,9 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 #parsing stufff
 from parse_test import parse_modsec_audit_log,parse_error_log
+
+# custom logs
+from user_actions import log_user_login_attempt, log_user_login_success, log_user_login_failure
 app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config['RECAPTCHA_PUBLIC_KEY'] = '6LdQNVsrAAAAAMp8AX4H_J4CwZ5OXVixltEf4RaC'
@@ -347,13 +350,8 @@ class UserLog(db.Model):
     log_id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     log_type = db.Column(db.String(100), nullable=False)
-    ip_address = db.Column(db.String(45), nullable=True)
-    user_agent = db.Column(db.String(255), nullable=True)
     log_timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     details = db.Column(db.Text, nullable=True)
-
-    def __repr__(self):
-        return f"<UserLog {self.log_type} for User:{self.user_id}>"
 
 class ModSecLog(db.Model): #actually in use
     __tablename__ = 'ModSecLog'
@@ -417,6 +415,7 @@ def permission_required(permission_name):
 def home():
     return render_template('UserHome.html')
 
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     form = LoginForm()
@@ -431,7 +430,13 @@ def login():
 
             # --- Lockout check ---
             if user and user.lockout_until and user.lockout_until > datetime.utcnow():
+                # Log the lockout attempt
+                log_user_login_failure(user.user_id, details="Attempted login while locked out.")
                 return render_template('UserLockedOut.html', lockout_until=user.lockout_until.strftime("%Y-%m-%d %H:%M:%S"))
+
+            # Log every login attempt (regardless of outcome)
+            if user:
+                log_user_login_attempt(user.user_id, details="User attempted login.")
 
             if user and user.check_password(password):
                 user.failed_login_attempts = 0
@@ -441,6 +446,8 @@ def login():
                 user.current_status = 'online'
                 user.last_active_at = datetime.utcnow()
                 db.session.commit()
+                # Log successful login
+                log_user_login_success(user.user_id, details="User logged in successfully.")
                 flash('Logged in successfully!', 'success')
                 next_page = request.args.get('next')
                 return redirect(next_page or url_for('home'))
@@ -450,12 +457,18 @@ def login():
                     if user.failed_login_attempts >= 3:
                         user.lockout_until = datetime.utcnow() + timedelta(minutes=10)
                         flash('Account locked due to too many failed login attempts. Try again in 10 minutes.', 'danger')
+                        # Log lockout event
+                        log_user_login_failure(user.user_id, details="User locked out after 3 failed attempts.")
                     else:
                         flash('Invalid username or password.', 'danger')
+                        # Log failed login
+                        log_user_login_failure(user.user_id, details="User failed login attempt.")
                     db.session.commit()
                 else:
+                    # Optionally, log attempts for non-existent users (not recommended for privacy)
                     flash('Invalid username or password.', 'danger')
     return render_template('UserLogin.html', form=form)
+
 
 @app.route('/logout')
 @login_required
@@ -926,6 +939,66 @@ def admin_error_logs():
         order=order,
         search_query=search_query
     )
+
+@app.route('/manage_UserActions', methods=['GET'])
+@admin_required
+def admin_user_actions():
+    search_query = request.args.get('search', '').strip()
+    sort_by = request.args.get('sort_by', 'id')
+    order = request.args.get('order', 'asc')
+
+    query = UserLog.query
+
+    # Filtering
+    if search_query:
+        filters = search_query.split(',')
+        for filter_item in filters:
+            filter_item = filter_item.strip()
+            if 'id=' in filter_item:
+                try:
+                    log_id = int(filter_item.split('id=')[1])
+                    query = query.filter(UserLog.log_id == log_id)
+                except ValueError:
+                    flash("Invalid ID format. ID must be a number.", "danger")
+            elif 'user_id=' in filter_item:
+                try:
+                    user_id = int(filter_item.split('user_id=')[1])
+                    query = query.filter(UserLog.user_id == user_id)
+                except ValueError:
+                    flash("Invalid user ID format.", "danger")
+            elif 'log_type=' in filter_item:
+                log_type = filter_item.split('log_type=')[1].strip()
+                query = query.filter(UserLog.log_type.ilike(f"%{log_type}%"))
+            elif 'date=' in filter_item:
+                date = filter_item.split('date=')[1].strip()
+                query = query.filter(UserLog.log_timestamp.ilike(f"%{date}%"))
+            else:
+                flash("Invalid query format. Please use id=, user_id=, log_type=, or date=.", "danger")
+
+    # Only allow sorting by id or log_timestamp
+    if sort_by == 'log_timestamp':
+        query = query.order_by(UserLog.log_timestamp.asc() if order == 'asc' else UserLog.log_timestamp.desc())
+    else:  # Default sort by ID
+        query = query.order_by(UserLog.log_id.asc() if order == 'asc' else UserLog.log_id.desc())
+
+    logs = query.all()
+    total_logs = UserLog.query.count()
+    login_attempts = UserLog.query.filter(UserLog.log_type == 'login_attempt').count()
+    login_successes = UserLog.query.filter(UserLog.log_type == 'login_success').count()
+    login_failures = UserLog.query.filter(UserLog.log_type == 'login_failure').count()
+
+    return render_template(
+        'AdminManageUserActions.html',
+        logs=logs,
+        total_logs=total_logs,
+        login_attempts=login_attempts,
+        login_successes=login_successes,
+        login_failures=login_failures,
+        sort_by=sort_by,
+        order=order,
+        search_query=search_query
+    )
+
 
 @app.errorhandler(404)
 def not_found_error(error):

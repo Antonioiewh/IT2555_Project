@@ -205,7 +205,7 @@ CREATE TABLE friendships (
 );
 
 -- **************************************
--- 9. Admin Panel
+-- 9. Admin Panel 3/4
 -- **************************************
 CREATE TABLE admin_actions (
     action_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -224,8 +224,6 @@ CREATE TABLE user_logs (
     log_id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
     log_type VARCHAR(100) NOT NULL,
-    ip_address VARCHAR(45) NULL,
-    user_agent VARCHAR(255) NULL,
     log_timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     details TEXT NULL,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE

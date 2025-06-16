@@ -36,6 +36,7 @@ services:
     volumes:
       - ./project:/code
       - ./nginx_logs:/code/shared_logs
+      - ./certs:/code/certs
       
     #develop:
       #watch:

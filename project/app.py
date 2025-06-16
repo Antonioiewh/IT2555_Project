@@ -4,7 +4,7 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import os
-from datetime import datetime # Keep datetime for datetime.utcnow()
+from datetime import datetime, timedelta # Keep datetime for datetime.utcnow()
 import re
 # antonio: forms
 from forms import SignupForm,LoginForm,ReportForm,UpdateUserStatusForm # Assuming you have a SignupForm defined
@@ -91,6 +91,8 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_active_at = db.Column(db.DateTime, nullable=True)
+    failed_login_attempts = db.Column(db.Integer, default=0)
+    lockout_until = db.Column(db.DateTime, nullable=True)
 
     # Relationships
     roles = db.relationship('Role', secondary=user_role_assignments,
@@ -427,18 +429,32 @@ def login():
             password = form.password.data
             user = User.query.filter_by(username=username).first()
 
+            # --- Lockout check ---
+            if user and user.lockout_until and user.lockout_until > datetime.utcnow():
+                return render_template('UserLockedOut.html', lockout_until=user.lockout_until.strftime("%Y-%m-%d %H:%M:%S"))
+
             if user and user.check_password(password):
+                user.failed_login_attempts = 0
+                user.lockout_until = None
+                db.session.commit()
                 login_user(user)
-                # --- NEW: Update user status and last active on login ---
                 user.current_status = 'online'
                 user.last_active_at = datetime.utcnow()
                 db.session.commit()
-                # --- END NEW ---
                 flash('Logged in successfully!', 'success')
                 next_page = request.args.get('next')
                 return redirect(next_page or url_for('home'))
-        else:
-            flash('Invalid username or password.', 'danger')
+            else:
+                if user:
+                    user.failed_login_attempts += 1
+                    if user.failed_login_attempts >= 3:
+                        user.lockout_until = datetime.utcnow() + timedelta(minutes=10)
+                        flash('Account locked due to too many failed login attempts. Try again in 10 minutes.', 'danger')
+                    else:
+                        flash('Invalid username or password.', 'danger')
+                    db.session.commit()
+                else:
+                    flash('Invalid username or password.', 'danger')
     return render_template('UserLogin.html', form=form)
 
 @app.route('/logout')
@@ -549,7 +565,6 @@ def report_confirmation():
     return render_template('UserReportConfirmed.html', reported_username=reported_username)
 
 
-
 # --- Admin Routes ---
 @app.route('/users_dashboard')
 @admin_required # Protect this route with the admin_required decorator
@@ -644,8 +659,6 @@ def manage_user(user_id):
 
     return render_template('AdminChangeUserStatus.html', user=user, form=form)
 
-
-
 @app.route('/reports_dashboard', methods=['GET'])
 @admin_required
 def manage_reports():
@@ -711,7 +724,6 @@ def manage_reports():
         rejected_reports=rejected_reports
     )
 
-
 @app.route('/manage_report/<int:report_id>', methods=['GET', 'POST'])
 @admin_required
 def manage_report(report_id):
@@ -748,7 +760,6 @@ def manage_report(report_id):
         reporter_username=reporter_username,
         reported_username=reported_username
     )
-
 
 @app.route('/manage_ModSecLogs', methods=['GET'])
 @admin_required
@@ -915,6 +926,7 @@ def admin_error_logs():
         order=order,
         search_query=search_query
     )
+
 @app.errorhandler(404)
 def not_found_error(error):
     return render_template('404_error.html'), 404

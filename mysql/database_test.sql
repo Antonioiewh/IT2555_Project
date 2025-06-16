@@ -38,7 +38,9 @@ CREATE TABLE users (
     current_status VARCHAR(50) NOT NULL DEFAULT 'offline',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    last_active_at DATETIME DEFAULT NULL
+    last_active_at DATETIME DEFAULT NULL,
+    failed_login_attempts INT NOT NULL DEFAULT 0,
+    lockout_until DATETIME NULL
 );
 
 -- **************************************

@@ -1,0 +1,7 @@
+<ul class="list-group">
+  {% for notif in event_reminder_notifs %}
+    <!-- event reminder notification display -->
+  {% else %}
+    <li class="list-group-item text-muted text-center">No event reminders.</li>
+  {% endfor %}
+</ul>

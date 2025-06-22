@@ -1,0 +1,7 @@
+<ul class="list-group">
+  {% for notif in admin_override_notifs %}
+    <!-- admin override notification display -->
+  {% else %}
+    <li class="list-group-item text-muted text-center">No admin override notifications.</li>
+  {% endfor %}
+</ul>

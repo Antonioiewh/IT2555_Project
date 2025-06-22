@@ -10,7 +10,7 @@ from datetime import datetime, timedelta # Keep datetime for datetime.utcnow()
 import re
 
 # antonio: forms
-from forms import SignupForm,LoginForm,ReportForm,UpdateUserStatusForm # Assuming you have a SignupForm defined
+from forms import SignupForm,LoginForm,ReportForm,UpdateUserStatusForm,FriendRequestForm # Assuming you have a SignupForm defined
 
 from sqlalchemy.dialects.mysql import ENUM
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -334,8 +334,7 @@ class Friendship(db.Model):
     def __repr__(self):
         return f"<Friendship {self.user_id1} - {self.user_id2} ({self.status})>"
 
-class FriendRequestForm(FlaskForm):
-    submit = SubmitField('Request')
+
 
 # **************************************
 # 9. Admin Panel
@@ -1041,7 +1040,7 @@ def user_friends():
 @login_required
 def discover_friends():
     user = current_user
-    
+
     # Subquery for users who have admin/editor/guest roles
     subq = (
         db.session.query(user_role_assignments.c.user_id)
@@ -1073,7 +1072,7 @@ def discover_friends():
             pending_requests[other_id] = 'sent'
         else:
             pending_requests[other_id] = 'received'
-    
+
     accepted_friendships = Friendship.query.filter(
     ((Friendship.user_id1 == current_user.user_id) | (Friendship.user_id2 == current_user.user_id)),
     Friendship.status == 'accepted'
@@ -1087,7 +1086,6 @@ def discover_friends():
     form = FriendRequestForm()
 
     return render_template('DiscoverFriends.html',all_users=all_users,current_user=user,form=form,pending_requests=pending_requests,accepted_friends=accepted_friends)
-    
 
 @app.route('/search_users')
 @login_required
@@ -1095,19 +1093,17 @@ def search_users():
     query = request.args.get('q', '').strip()
     user = current_user
 
-    # Your existing user filtering logic, plus search
     subq = (
-        db.session.query(user_role_assignments.c.user_id)
-        .join(Role, user_role_assignments.c.role_id == Role.role_id)
-        .filter(Role.role_name.in_(['admin', 'editor', 'guest']))
+    db.session.query(user_role_assignments.c.user_id)
+    .join(Role, user_role_assignments.c.role_id == Role.role_id)
+    .filter(Role.role_name.in_(['admin', 'editor', 'guest']))
     )
     users = (
         db.session.query(User)
         .join(user_role_assignments, User.user_id == user_role_assignments.c.user_id)
         .join(Role, user_role_assignments.c.role_id == Role.role_id)
         .filter(
-            Role.role_name == 'user',
-            ~User.user_id.in_(subq),
+            User.user_id.in_(subq),
             User.user_id != user.user_id,
             User.username.ilike(f'%{query}%')
         )
@@ -1205,7 +1201,7 @@ def send_friend_request(target_user_id):
         else:
             flash('Friend request already exists.', 'info')
     else:
-        flash('Invalid CSRF token.', 'danger')
+        return redirect(url_for('discover_friends'))
     return redirect(url_for('discover_friends'))
                 
 @app.route('/respond_friend_request/<int:friendship_id>/<action>', methods=['POST'])
@@ -1213,7 +1209,8 @@ def send_friend_request(target_user_id):
 def respond_friend_request(friendship_id, action):
     friendship = Friendship.query.get_or_404(friendship_id)
     if friendship.user_id2 != current_user.user_id:
-        abort(403)
+        #whoever thought of aborting 403 here is a genius
+        pass
     if action == 'accept':
         friendship.status = 'accepted'
     elif action == 'decline':

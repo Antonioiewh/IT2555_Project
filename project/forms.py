@@ -20,7 +20,10 @@ class LoginForm(FlaskForm):
     recaptcha = RecaptchaField()
     submit = SubmitField('Login')
 
+class FriendRequestForm(FlaskForm):
+    submit = SubmitField('Request')
 
+    
 class ReportForm(FlaskForm):
     
     reported_username = StringField(

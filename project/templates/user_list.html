@@ -38,8 +38,9 @@
                                 {% endif %}
                             {% else %}
                                 <!-- No pending request, show Request button -->
-                                <form method="post" action="{{ url_for('send_friend_request', target_user_id=user.user_id) }}">
+                                <form method="POST" action="{{ url_for('send_friend_request', target_user_id=user.user_id) }}">
                                     {{ form.hidden_tag() }}
+                                    
                                     {{ form.submit(class="btn btn-primary btn-sm mt-2", value="Request") }}
                                 </form>
                             {% endif %}

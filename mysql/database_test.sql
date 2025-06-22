@@ -313,7 +313,11 @@ WHERE r.role_name = 'user' AND p.permission_name IN (
 INSERT INTO users (username, phone_number, password_hash) VALUES
 ('admin', '12345679', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
 ('editor', '12345671', 'scrypt:32768:8:1$MACB13gQmz07eh4r$70fe403cc30e93c0605e8c1b5ecf64c43698b421268327e7a18cba40a3e5c25093d399ddbf774653715e2decbf3605d917a749a450dc60790d4e12c3e42c588d'),
-('user', '12345678', 'scrypt:32768:8:1$V460O7kVZYEBrWGC$d7a6bd9c8feced05b6d118ec8ef7d2c65c66d41171eb05c9589a49e60a95fda7d830ed98d7eb2e50830034bea978f6db05be620883bacb0bf4c5fc3a0e1d7b38');
+('user', '12345678', 'scrypt:32768:8:1$V460O7kVZYEBrWGC$d7a6bd9c8feced05b6d118ec8ef7d2c65c66d41171eb05c9589a49e60a95fda7d830ed98d7eb2e50830034bea978f6db05be620883bacb0bf4c5fc3a0e1d7b38'),
+('user2', '11145671', 'scrypt:32768:8:1$xdPsxX7EC8sCphaO$f1b46069ede337b2b1f594c10680a3f85ab5906faa04af144994218cfa039e75a9aacf64e19b928be1661a5a1e53c5987f935131c1b8bbaece6b266c1a553160'),
+('user3', '12345656', 'scrypt:32768:8:1$xdPsxX7EC8sCphaO$f1b46069ede337b2b1f594c10680a3f85ab5906faa04af144994218cfa039e75a9aacf64e19b928be1661a5a1e53c5987f935131c1b8bbaece6b266c1a553160'),
+('user4', '11141671', 'scrypt:32768:8:1$xdPsxX7EC8sCphaO$f1b46069ede337b2b1f594c10680a3f85ab5906faa04af144994218cfa039e75a9aacf64e19b928be1661a5a1e53c5987f935131c1b8bbaece6b266c1a553160');
+
 
 -- Assign roles to the newly created users
 INSERT INTO user_role_assignments (user_id, role_id)
@@ -321,4 +325,4 @@ SELECT u.user_id, r.role_id
 FROM users u, roles r
 WHERE (u.username = 'admin' AND r.role_name IN ('user', 'editor', 'admin'))
    OR (u.username = 'editor' AND r.role_name IN ('user', 'editor'))
-   OR (u.username = 'user' AND r.role_name = 'user');
+   OR (u.username IN ('user', 'user2', 'user3', 'user4') AND r.role_name = 'user');

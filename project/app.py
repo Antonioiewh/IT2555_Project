@@ -1209,7 +1209,8 @@ def send_friend_request(target_user_id):
 def respond_friend_request(friendship_id, action):
     friendship = Friendship.query.get_or_404(friendship_id)
     if friendship.user_id2 != current_user.user_id:
-        #whoever thought of aborting 403 here is a genius
+        #whoever thought of aborting 403 here is
+        abort(403)
         pass
     if action == 'accept':
         friendship.status = 'accepted'

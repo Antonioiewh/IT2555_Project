@@ -1,0 +1,25 @@
+<ul class="list-group">
+  {% for notif,sender in friend_request_notifs %}
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+      <img src="{{ sender.profile_pic_url or url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
+           alt="Profile Picture"
+           class="rounded-circle me-3"
+           width="40" height="40">
+      <span>{{ notif.message }}</span>
+      <div>
+        <form method="post" action="{{ url_for('respond_friend_request', friendship_id=notif.source_id, action='accept') }}" class="d-inline">
+          {{ form.hidden_tag() }}
+          {{ form.csrf_token }}
+          <button type="submit" class="btn btn-success btn-sm">Accept</button>
+        </form>
+        <form method="post" action="{{ url_for('respond_friend_request', friendship_id=notif.source_id, action='decline') }}" class="d-inline">
+          {{ form.hidden_tag() }}
+          {{ form.csrf_token }}
+          <button type="submit" class="btn btn-danger btn-sm">Decline</button>
+        </form>
+      </div>
+    </li>
+  {% else %}
+    <li class="list-group-item text-muted text-center">No friend requests.</li>
+  {% endfor %}
+</ul>

@@ -74,10 +74,51 @@
                 <div class="friend-info">
                     <div class="friend-name">{{ friend.username }}</div>
                 </div>
+                
                 <div class="friend-actions">
-                    <button class="btn btn-light" style="border-radius: 12px;">Message</button>
-                    <span style="font-size: 1.5rem; color: #222;"><i class="bi bi-chat-fill"></i></span>
-                    <span class="menu-dots">&#8942;</span>
+                    <button type="button" class="btn btn-outline-primary btn-sm me-2" disabled>
+                    <i class="bi bi-person"></i> Profile
+                    </button>
+                    <button type="button" class="btn btn-outline-primary btn-sm me-2"><i class="bi bi-chat">Message</i></button>
+                    <div class="dropdown">
+                        <button class="btn btn-secondary btn-sm dropdown-toggle" type="button" id="dropdownMenuButton-{{ friend.user_id }}" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-three-dots-vertical"></i>
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton-{{ friend.user_id }}">
+                            <li>
+                                <button class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#unfriendModal-{{ friend.user_id }}">
+                                    Unfriend
+                                </button>
+                            </li>
+                            
+                            <li>
+                                <button class="dropdown-item text-warning" disabled>
+                                    Block
+                                </button>
+                            </li>
+                        </ul>
+                        
+                    </div>
+                    <div class="modal fade" id="unfriendModal-{{ friend.user_id }}" tabindex="-1" aria-labelledby="unfriendModalLabel-{{ friend.user_id }}" aria-hidden="true">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title" id="unfriendModalLabel-{{ friend.user_id }}">Confirm Unfriend</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        Are you sure you want to unfriend <strong>{{ friend.username }}</strong>?
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <form method="post" action="{{ url_for('unfriend', friendship_id=friend.friendship_id) }}" style="display:inline;">
+                                            {{ form.hidden_tag() }}
+                                            <button type="submit" class="btn btn-danger">Unfriend</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                 </div>
                 <div class="status-indicator{% if friend.is_online %} online{% endif %}"></div>
             </div>

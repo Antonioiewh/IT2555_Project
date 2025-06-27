@@ -1018,23 +1018,27 @@ def user_friends():
         Friendship.status == 'accepted'
     ).all()
 
-    # Get friend user IDs
-    friend_ids = [
-        f.user_id2 if f.user_id1 == current_user.user_id else f.user_id1
-        for f in friendships
-    ]
-    friends = User.query.filter(User.user_id.in_(friend_ids)).all()
+    accepted_friends = {}
+    for f in friendships:
+        friend_id = f.user_id2 if f.user_id1 == current_user.user_id else f.user_id1
+        accepted_friends[friend_id] = f.friendship_id
 
-    friends = []
-    for user in User.query.filter(User.user_id.in_(friend_ids)).all():
-        friends.append({
+    
+    friends = User.query.filter(User.user_id.in_(accepted_friends.keys())).all()
+
+    friends_info = []
+    for user in friends:
+        friends_info.append({
+            'user_id': user.user_id,
             'username': user.username,
             'profile_pic_url': user.profile_pic_url,
-            'is_online': user.current_status == 'online',   
-            'bio': user.bio
+            'is_online': user.current_status == 'online',
+            'bio': user.bio,
+            'friendship_id': accepted_friends[user.user_id]
         })
-
-    return render_template('userfriends.html', friends=friends)
+    
+    form = FriendRequestForm()
+    return render_template('userfriends.html', friends=friends_info, accepted_friends=accepted_friends, form=form)
 
 
 @app.route('/DiscoverFriends', methods=['GET'])
@@ -1079,11 +1083,11 @@ def discover_friends():
     Friendship.status == 'accepted'
     ).all()
 
-    accepted_friends = set()
+    accepted_friends = {}
     for f in accepted_friendships:
         other_id = f.user_id2 if f.user_id1 == current_user.user_id else f.user_id1
-        accepted_friends.add(other_id)
-
+        accepted_friends[other_id] = f.friendship_id
+    
     form = FriendRequestForm()
 
     return render_template('DiscoverFriends.html',all_users=all_users,current_user=user,form=form,pending_requests=pending_requests,accepted_friends=accepted_friends)
@@ -1211,8 +1215,12 @@ def send_friend_request(target_user_id):
 @app.route('/respond_friend_request/<int:friendship_id>/<action>', methods=['POST'])
 @login_required
 def respond_friend_request(friendship_id, action):
+
     friendship = Friendship.query.get_or_404(friendship_id)
-    if friendship.user_id2 != current_user.user_id:
+    # Only the receiver can accept/decline
+    if current_user.user_id == friendship.action_user_id:
+        abort(403)
+    if current_user.user_id not in [friendship.user_id1, friendship.user_id2]:
         abort(403)
     if action == 'accept':
         friendship.status = 'accepted'
@@ -1221,12 +1229,13 @@ def respond_friend_request(friendship_id, action):
     friendship.action_user_id = current_user.user_id
     db.session.commit()
     # Optionally, mark notification as read or delete it
+    
     notif = Notification.query.filter_by(user_id=current_user.user_id, source_id=friendship_id, type='friend_request').first()
     if notif:
         notif.is_read = True
         db.session.delete(notif)  # Remove the notification after responding
         db.session.commit()
-
+    
     return redirect(url_for('notifications'))
 
 @app.route('/cancel_friend_request/<int:target_user_id>', methods=['POST'])
@@ -1243,6 +1252,19 @@ def cancel_friend_request(target_user_id):
     else:
         flash('No pending friend request to cancel.', 'warning')
     return redirect(url_for('discover_friends'))
+
+@app.route('/unfriend/<int:friendship_id>', methods=['POST'])
+@login_required
+def unfriend(friendship_id):
+    friendship = Friendship.query.get_or_404(friendship_id)
+    # Only allow if current user is part of the friendship and status is accepted
+    if current_user.user_id not in [friendship.user_id1, friendship.user_id2] or friendship.status != 'accepted':
+        abort(403)
+    db.session.delete(friendship)
+    db.session.commit()
+    flash('You have unfriended this user.', 'info')
+    return redirect(request.referrer or url_for('friends'))
+
 
 @app.errorhandler(404)
 def not_found_error(error):

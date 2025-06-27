@@ -17,6 +17,30 @@
                                 <button type="button" class="btn btn-success btn-sm mt-2" disabled>
                                     <i class="bi bi-check-circle"></i> Accepted
                                 </button>
+                                <button type="button" class="btn btn-danger btn-sm mt-2 ms-2" data-bs-toggle="modal" data-bs-target="#unfriendModal-{{ user.user_id }}">
+                                    Unfriend
+                                </button>
+                                <!-- Modal for Unfriend Confirmation -->
+                                <div class="modal fade" id="unfriendModal-{{ user.user_id }}" tabindex="-1" aria-labelledby="unfriendModalLabel-{{ user.user_id }}" aria-hidden="true">
+                                    <div class="modal-dialog modal-dialog-centered">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title" id="unfriendModalLabel-{{ user.user_id }}">Confirm Unfriend</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                Are you sure you want to unfriend <strong>{{ user.username }}</strong>?
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                <form method="post" action="{{ url_for('unfriend', friendship_id=accepted_friends[user.user_id]) }}" style="display:inline;">
+                                                    {{ form.hidden_tag() }}
+                                                    <button type="submit" class="btn btn-danger">Unfriend</button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             {% elif user.user_id in pending_requests %}
                                 {% if pending_requests[user.user_id] == 'sent' %}
                                     <!-- Sender sees Pending and Cancel -->
@@ -29,7 +53,7 @@
                                             <i class="bi bi-x-circle"></i> Cancel Request
                                         </button>
                                     </form>
-                                {% else %}
+                                    {% else %}
                                     <!-- Receiver sees Request -->
                                     <form method="post" action="{{ url_for('send_friend_request', target_user_id=user.user_id) }}">
                                         {{ form.hidden_tag() }}
@@ -43,10 +67,10 @@
                                     {{ form.submit(class="btn btn-primary btn-sm mt-2", value="Request") }}
                                 </form>
                             {% endif %}
-                        </form>
                     </div>
                 </div>
             </div>
+            
             {% else %}
             <div class="col-12 text-center">
                 <div class="alert alert-info">No users found.</div>
@@ -54,4 +78,5 @@
             {% endfor %}
         </div>
     </div>
+    
 </div>

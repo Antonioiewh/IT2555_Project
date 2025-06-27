@@ -835,7 +835,17 @@ def cancel_friend_request(target_user_id):
         flash('No pending friend request to cancel.', 'warning')
     return redirect(url_for('discover_friends'))
 
-
+@app.route('/unfriend/<int:friendship_id>', methods=['POST'])
+@login_required
+def unfriend(friendship_id):
+    friendship = Friendship.query.get_or_404(friendship_id)
+    # Only allow if current user is part of the friendship and status is accepted
+    if current_user.user_id not in [friendship.user_id1, friendship.user_id2] or friendship.status != 'accepted':
+        abort(403)
+    db.session.delete(friendship)
+    db.session.commit()
+    flash('You have unfriended this user.', 'info')
+    return redirect(request.referrer or url_for('friends'))
 
 # --- Admin Routes ---
 @app.route('/users_dashboard')
@@ -1257,6 +1267,10 @@ def admin_user_actions():
         order=order,
         search_query=search_query
     )
+
+
+
+
 
 
 

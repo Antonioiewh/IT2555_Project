@@ -9,12 +9,12 @@
       <div>
         <form method="post" action="{{ url_for('respond_friend_request', friendship_id=notif.source_id, action='accept') }}" class="d-inline">
           {{ form.hidden_tag() }}
-          {{ form.csrf_token }}
+          
           <button type="submit" class="btn btn-success btn-sm">Accept</button>
         </form>
         <form method="post" action="{{ url_for('respond_friend_request', friendship_id=notif.source_id, action='decline') }}" class="d-inline">
           {{ form.hidden_tag() }}
-          {{ form.csrf_token }}
+          
           <button type="submit" class="btn btn-danger btn-sm">Decline</button>
         </form>
       </div>

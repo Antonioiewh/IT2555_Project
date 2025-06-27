@@ -10,7 +10,7 @@ from datetime import datetime, timedelta # Keep datetime for datetime.utcnow()
 import re
 
 # antonio: forms
-from forms import SignupForm,LoginForm,ReportForm,UpdateUserStatusForm # Assuming you have a SignupForm defined
+from forms import SignupForm,LoginForm,ReportForm,UpdateUserStatusForm,FriendRequestForm # Assuming you have a SignupForm defined
 
 from sqlalchemy.dialects.mysql import ENUM
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -51,7 +51,23 @@ def load_user(user_id):
     """Loads a user from the database given their ID."""
     return db.session.get(User, int(user_id))
 
-
+# --- User Required Decorator ---
+def user_required(f):
+    """
+    Decorator to restrict access to users who have ONLY the 'user' role.
+    Admins and editors (or anyone with more than just 'user' role) are denied.
+    """
+    @wraps(f)
+    @login_required
+    def decorated_function(*args, **kwargs):
+        # Count the number of roles for the current user
+        user_roles = [role.role_name for role in current_user.roles]
+        if user_roles == ['user']:
+            return f(*args, **kwargs)
+        else:
+            flash('Access denied. Only standard users can view this page.', 'danger')
+            abort(403)
+    return decorated_function
 # --- Admin Required Decorator ---
 def admin_required(f):
     """
@@ -240,7 +256,6 @@ class Notification(db.Model):
         return f"<Notification {self.notification_id} for User:{self.user_id}>"
 
 
-
 # **************************************
 # 6. Customer Service
 # **************************************
@@ -273,6 +288,8 @@ class Report(db.Model):
 
     def __repr__(self):
         return f"<Report {self.report_id} - Type: {self.report_type} - Status: {self.status}>"
+
+
 # **************************************
 # 7. Messaging
 # **************************************
@@ -334,8 +351,6 @@ class Friendship(db.Model):
     def __repr__(self):
         return f"<Friendship {self.user_id1} - {self.user_id2} ({self.status})>"
 
-class FriendRequestForm(FlaskForm):
-    submit = SubmitField('Request')
 
 # **************************************
 # 9. Admin Panel
@@ -385,6 +400,8 @@ class ErrorLog(db.Model):
     def __repr__(self):
         return f"<ErrorLog id={self.id} date={self.date} time={self.time} level={self.level} client_ip={self.client_ip}>"
     
+
+
 # --- Flask-Login User Loader ---
 @login_manager.user_loader
 def load_user(user_id):
@@ -536,7 +553,7 @@ def signup():
 # --- User Reporting ---
 
 @app.route('/report_user', methods=['GET', 'POST'])
-@login_required # Ensure only logged-in users can access this page
+@user_required # Ensure only logged-in users can access this page
 def report_user():
     form = ReportForm()
 
@@ -580,12 +597,255 @@ def report_user():
     return render_template('UserReport.html', form=form)
 
 @app.route('/report_confirmation')
-@login_required
+@user_required
 def report_confirmation():
     # You can get the reported_username from the query parameters if passed
     reported_username = request.args.get('reported_username', 'the user')
     return render_template('UserReportConfirmed.html', reported_username=reported_username)
 
+@app.route('/UserFriends', methods=['GET'])
+@user_required
+def user_friends():
+    # Get all accepted friendships involving the current user
+    friendships = Friendship.query.filter(
+        ((Friendship.user_id1 == current_user.user_id) | (Friendship.user_id2 == current_user.user_id)),
+        Friendship.status == 'accepted'
+    ).all()
+
+    # Get friend user IDs
+    friend_ids = [
+        f.user_id2 if f.user_id1 == current_user.user_id else f.user_id1
+        for f in friendships
+    ]
+    friends = User.query.filter(User.user_id.in_(friend_ids)).all()
+
+    friends = []
+    for user in User.query.filter(User.user_id.in_(friend_ids)).all():
+        friends.append({
+            'username': user.username,
+            'profile_pic_url': user.profile_pic_url,
+            'is_online': user.current_status == 'online',   
+            'bio': user.bio
+        })
+
+    return render_template('userfriends.html', friends=friends)
+
+@app.route('/DiscoverFriends', methods=['GET'])
+@user_required
+def discover_friends():
+    user = current_user
+
+    # Subquery for users who have admin/editor/guest roles
+    subq = (
+        db.session.query(user_role_assignments.c.user_id)
+        .join(Role, user_role_assignments.c.role_id == Role.role_id)
+        .filter(Role.role_name.in_(['admin', 'editor', 'guest']))
+    )
+
+    # Main query: users with 'user' role, not in subquery, and not current user
+    all_users = (
+        db.session.query(User)
+        .join(user_role_assignments, User.user_id == user_role_assignments.c.user_id)
+        .join(Role, user_role_assignments.c.role_id == Role.role_id)
+        .filter(
+            Role.role_name == 'user',
+            ~User.user_id.in_(subq),
+            User.user_id != user.user_id
+        )
+        .all()
+    )
+    pending_friendships = Friendship.query.filter(
+    ((Friendship.user_id1 == current_user.user_id) | (Friendship.user_id2 == current_user.user_id)),
+    Friendship.status == 'pending'
+    ).all()
+
+    pending_requests = {}
+    for f in pending_friendships:
+        other_id = f.user_id2 if f.user_id1 == current_user.user_id else f.user_id1
+        if f.action_user_id == current_user.user_id:
+            pending_requests[other_id] = 'sent'
+        else:
+            pending_requests[other_id] = 'received'
+
+    accepted_friendships = Friendship.query.filter(
+    ((Friendship.user_id1 == current_user.user_id) | (Friendship.user_id2 == current_user.user_id)),
+    Friendship.status == 'accepted'
+    ).all()
+
+    accepted_friends = set()
+    for f in accepted_friendships:
+        other_id = f.user_id2 if f.user_id1 == current_user.user_id else f.user_id1
+        accepted_friends.add(other_id)
+
+    form = FriendRequestForm()
+
+    return render_template('DiscoverFriends.html',all_users=all_users,current_user=user,form=form,pending_requests=pending_requests,accepted_friends=accepted_friends)
+
+@app.route('/search_users')
+@user_required
+def search_users():
+    query = request.args.get('q', '').strip()
+    user = current_user
+
+    subq = (
+    db.session.query(user_role_assignments.c.user_id)
+    .join(Role, user_role_assignments.c.role_id == Role.role_id)
+    .filter(Role.role_name.in_(['admin', 'editor', 'guest']))
+    )
+    users = (
+        db.session.query(User)
+        .join(user_role_assignments, User.user_id == user_role_assignments.c.user_id)
+        .join(Role, user_role_assignments.c.role_id == Role.role_id)
+        .filter(
+            User.user_id.in_(subq),
+            User.user_id != user.user_id,
+            User.username.ilike(f'%{query}%')
+        )
+        .all()
+    )
+    pending_friendships = [
+        f.user_id2 if f.user_id1 == user.user_id else f.user_id1
+        for f in Friendship.query.filter(
+            ((Friendship.user_id1 == user.user_id) | (Friendship.user_id2 == user.user_id)),
+            Friendship.status == 'pending'
+        ).all()
+    ]
+    # Return minimal user info as JSON
+    return jsonify([
+        {
+            'user_id': u.user_id,
+            'username': u.username,
+            'profile_pic_url': u.profile_pic_url or url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp'),
+            'pending': u.user_id in pending_friendships  # Add this if you want to show "Pending"
+        }
+        for u in users
+    ])
+
+@app.route('/Notifications')
+@user_required
+def notifications():
+    notifications = Notification.query.filter_by(user_id=current_user.user_id).order_by(Notification.created_at.desc()).all()
+    # Group notifications by type
+    grouped = {
+        'like': [],
+        'comment': [],
+        'friend_request': [],
+        'event_reminder': [],
+        'message': [],
+        'report_status': [],
+        'admin_override': []
+    }
+    for n in notifications:
+        grouped[n.type].append(n)
+
+    friend_request_notifs = (
+        db.session.query(Notification, User)
+        .join(Friendship, Notification.source_id == Friendship.friendship_id)
+        .join(User, User.user_id == Friendship.action_user_id)
+        .filter(
+            Notification.user_id == current_user.user_id,
+            Notification.type == 'friend_request'
+        )
+        .order_by(Notification.created_at.desc())
+        .all()
+    )
+    form = FriendRequestForm()
+    return render_template('notifications.html',
+            form=form,
+            grouped=grouped,
+            friend_request_notifs=friend_request_notifs,
+            message_notifs=grouped['message'],
+            like_notifs=grouped['like'],
+            comment_notifs=grouped['comment'],
+            event_reminder_notifs=grouped['event_reminder'],
+            report_status_notifs=grouped['report_status'],
+            admin_override_notifs=grouped['admin_override']
+        )
+
+@app.route('/send_friend_request/<int:target_user_id>', methods=['POST'])
+@user_required
+def send_friend_request(target_user_id):
+    form = FriendRequestForm()
+    if form.validate_on_submit():
+        # Always store user_id1 < user_id2 to avoid duplicates
+        user1, user2 = sorted([current_user.user_id, target_user_id])
+        # Check if a friendship already exists
+        existing = Friendship.query.filter_by(user_id1=user1, user_id2=user2).first()
+        if not existing:
+            new_friendship = Friendship(
+                user_id1=user1,
+                user_id2=user2,
+                status='pending',
+                action_user_id=current_user.user_id
+            )
+            db.session.add(new_friendship)
+            db.session.commit()
+
+            notification = Notification(
+                user_id=target_user_id,
+                type='friend_request',
+                source_id=new_friendship.friendship_id,
+                message=f"{current_user.username} sent you a friend request."
+
+            )
+            db.session.add(notification)
+            db.session.commit()
+            flash('Friend request sent!', 'success')
+        else:
+            flash('Friend request already exists.', 'info')
+    else:
+        return redirect(url_for('discover_friends'))
+    return redirect(url_for('discover_friends'))
+                
+@app.route('/respond_friend_request/<int:friendship_id>/<action>', methods=['POST'])
+@user_required
+def respond_friend_request(friendship_id, action):
+    friendship = Friendship.query.get_or_404(friendship_id)
+    if friendship.user_id2 != current_user.user_id:
+        #whoever thought of aborting 403 here is
+        abort(403)
+        pass
+    if action == 'accept':
+        friendship.status = 'accepted'
+    elif action == 'decline':
+        friendship.status = 'blocked'
+    friendship.action_user_id = current_user.user_id
+    db.session.commit()
+    # Optionally, mark notification as read or delete it
+    notif = Notification.query.filter_by(user_id=current_user.user_id, source_id=friendship_id, type='friend_request').first()
+    if notif:
+        notif.is_read = True
+        db.session.delete(notif)  # Remove the notification after responding
+        db.session.commit()
+
+    return redirect(url_for('notifications'))
+
+@app.route('/cancel_friend_request/<int:target_user_id>', methods=['POST'])
+@user_required
+def cancel_friend_request(target_user_id):
+    user1, user2 = sorted([current_user.user_id, target_user_id])
+    friendship = Friendship.query.filter_by(user_id1=user1, user_id2=user2, status='pending').first()
+    if friendship and friendship.action_user_id == current_user.user_id:
+        db.session.delete(friendship)
+        # Optionally, delete the notification as well:
+        Notification.query.filter_by(user_id=target_user_id, source_id=friendship.friendship_id, type='friend_request').delete()
+        db.session.commit()
+        flash('Friend request cancelled.', 'info')
+    else:
+        flash('No pending friend request to cancel.', 'warning')
+    return redirect(url_for('discover_friends'))
+
+@app.route('/unfriend/<int:friendship_id>', methods=['POST'])
+@login_required
+def unfriend(friendship_id):
+    friendship = Friendship.query.get_or_404(friendship_id)
+    # Only allow if current user is part of the friendship and status is accepted
+    if current_user.user_id not in [friendship.user_id1, friendship.user_id2] or friendship.status != 'accepted':
+        abort(403)
+    db.session.delete(friendship)
+    db.session.commit()
+    flash('You have unfriended this user.', 'info')
+    return redirect(request.referrer or url_for('friends'))
 
 # --- Admin Routes ---
 @app.route('/users_dashboard')
@@ -1009,261 +1269,9 @@ def admin_user_actions():
     )
 
 
-@app.route('/UserFriends', methods=['GET'])
-@login_required
-def user_friends():
-    # Get all accepted friendships involving the current user
-    friendships = Friendship.query.filter(
-        ((Friendship.user_id1 == current_user.user_id) | (Friendship.user_id2 == current_user.user_id)),
-        Friendship.status == 'accepted'
-    ).all()
-
-    accepted_friends = {}
-    for f in friendships:
-        friend_id = f.user_id2 if f.user_id1 == current_user.user_id else f.user_id1
-        accepted_friends[friend_id] = f.friendship_id
-
-    
-    friends = User.query.filter(User.user_id.in_(accepted_friends.keys())).all()
-
-    friends_info = []
-    for user in friends:
-        friends_info.append({
-            'user_id': user.user_id,
-            'username': user.username,
-            'profile_pic_url': user.profile_pic_url,
-            'is_online': user.current_status == 'online',
-            'bio': user.bio,
-            'friendship_id': accepted_friends[user.user_id]
-        })
-    
-    form = FriendRequestForm()
-    return render_template('userfriends.html', friends=friends_info, accepted_friends=accepted_friends, form=form)
 
 
-@app.route('/DiscoverFriends', methods=['GET'])
-@login_required
-def discover_friends():
-    user = current_user
-    
-    # Subquery for users who have admin/editor/guest roles
-    subq = (
-        db.session.query(user_role_assignments.c.user_id)
-        .join(Role, user_role_assignments.c.role_id == Role.role_id)
-        .filter(Role.role_name.in_(['admin', 'editor', 'guest']))
-    )
 
-    # Main query: users with 'user' role, not in subquery, and not current user
-    all_users = (
-        db.session.query(User)
-        .join(user_role_assignments, User.user_id == user_role_assignments.c.user_id)
-        .join(Role, user_role_assignments.c.role_id == Role.role_id)
-        .filter(
-            Role.role_name == 'user',
-            ~User.user_id.in_(subq),
-            User.user_id != user.user_id
-        )
-        .all()
-    )
-    pending_friendships = Friendship.query.filter(
-    ((Friendship.user_id1 == current_user.user_id) | (Friendship.user_id2 == current_user.user_id)),
-    Friendship.status == 'pending'
-    ).all()
-
-    pending_requests = {}
-    for f in pending_friendships:
-        other_id = f.user_id2 if f.user_id1 == current_user.user_id else f.user_id1
-        if f.action_user_id == current_user.user_id:
-            pending_requests[other_id] = 'sent'
-        else:
-            pending_requests[other_id] = 'received'
-    
-    accepted_friendships = Friendship.query.filter(
-    ((Friendship.user_id1 == current_user.user_id) | (Friendship.user_id2 == current_user.user_id)),
-    Friendship.status == 'accepted'
-    ).all()
-
-    accepted_friends = {}
-    for f in accepted_friendships:
-        other_id = f.user_id2 if f.user_id1 == current_user.user_id else f.user_id1
-        accepted_friends[other_id] = f.friendship_id
-    
-    form = FriendRequestForm()
-
-    return render_template('DiscoverFriends.html',all_users=all_users,current_user=user,form=form,pending_requests=pending_requests,accepted_friends=accepted_friends)
-    
-
-@app.route('/search_users')
-@login_required
-def search_users():
-    query = request.args.get('q', '').strip()
-    user = current_user
-
-    # Your existing user filtering logic, plus search
-    subq = (
-        db.session.query(user_role_assignments.c.user_id)
-        .join(Role, user_role_assignments.c.role_id == Role.role_id)
-        .filter(Role.role_name.in_(['admin', 'editor', 'guest']))
-    )
-    users = (
-        db.session.query(User)
-        .join(user_role_assignments, User.user_id == user_role_assignments.c.user_id)
-        .join(Role, user_role_assignments.c.role_id == Role.role_id)
-        .filter(
-            Role.role_name == 'user',
-            ~User.user_id.in_(subq),
-            User.user_id != user.user_id,
-            User.username.ilike(f'%{query}%')
-        )
-        .all()
-    )
-    pending_friendships = [
-        f.user_id2 if f.user_id1 == user.user_id else f.user_id1
-        for f in Friendship.query.filter(
-            ((Friendship.user_id1 == user.user_id) | (Friendship.user_id2 == user.user_id)),
-            Friendship.status == 'pending'
-        ).all()
-    ]
-    # Return minimal user info as JSON
-    return jsonify([
-        {
-            'user_id': u.user_id,
-            'username': u.username,
-            'profile_pic_url': u.profile_pic_url or url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp'),
-            'pending': u.user_id in pending_friendships  # Add this if you want to show "Pending"
-        }
-        for u in users
-    ])
-
-@app.route('/Notifications')
-@login_required
-def notifications():
-    notifications = Notification.query.filter_by(user_id=current_user.user_id).order_by(Notification.created_at.desc()).all()
-    # Group notifications by type
-    grouped = {
-        'like': [],
-        'comment': [],
-        'friend_request': [],
-        'event_reminder': [],
-        'message': [],
-        'report_status': [],
-        'admin_override': []
-    }
-    for n in notifications:
-        grouped[n.type].append(n)
-
-    friend_request_notifs = (
-        db.session.query(Notification, User)
-        .join(Friendship, Notification.source_id == Friendship.friendship_id)
-        .join(User, User.user_id == Friendship.action_user_id)
-        .filter(
-            Notification.user_id == current_user.user_id,
-            Notification.type == 'friend_request'
-        )
-        .order_by(Notification.created_at.desc())
-        .all()
-    )
-    form = FriendRequestForm()
-    return render_template('notifications.html',
-            form=form,
-            grouped=grouped,
-            friend_request_notifs=friend_request_notifs,
-            message_notifs=grouped['message'],
-            like_notifs=grouped['like'],
-            comment_notifs=grouped['comment'],
-            event_reminder_notifs=grouped['event_reminder'],
-            report_status_notifs=grouped['report_status'],
-            admin_override_notifs=grouped['admin_override']
-        )
-
-
-@app.route('/send_friend_request/<int:target_user_id>', methods=['POST'])
-@login_required
-def send_friend_request(target_user_id):
-    form = FriendRequestForm()
-    if form.validate_on_submit():
-        # Always store user_id1 < user_id2 to avoid duplicates
-        user1, user2 = sorted([current_user.user_id, target_user_id])
-        # Check if a friendship already exists
-        existing = Friendship.query.filter_by(user_id1=user1, user_id2=user2).first()
-        if not existing:
-            new_friendship = Friendship(
-                user_id1=user1,
-                user_id2=user2,
-                status='pending',
-                action_user_id=current_user.user_id
-            )
-            db.session.add(new_friendship)
-            db.session.commit()
-
-            notification = Notification(
-                user_id=target_user_id,
-                type='friend_request',
-                source_id=new_friendship.friendship_id,
-                message=f"{current_user.username} sent you a friend request."
-
-            )
-            db.session.add(notification)
-            db.session.commit()
-            flash('Friend request sent!', 'success')
-        else:
-            flash('Friend request already exists.', 'info')
-    else:
-        flash('Invalid CSRF token.', 'danger')
-    return redirect(url_for('discover_friends'))
-                
-@app.route('/respond_friend_request/<int:friendship_id>/<action>', methods=['POST'])
-@login_required
-def respond_friend_request(friendship_id, action):
-
-    friendship = Friendship.query.get_or_404(friendship_id)
-    # Only the receiver can accept/decline
-    if current_user.user_id == friendship.action_user_id:
-        abort(403)
-    if current_user.user_id not in [friendship.user_id1, friendship.user_id2]:
-        abort(403)
-    if action == 'accept':
-        friendship.status = 'accepted'
-    elif action == 'decline':
-        friendship.status = 'blocked'
-    friendship.action_user_id = current_user.user_id
-    db.session.commit()
-    # Optionally, mark notification as read or delete it
-    
-    notif = Notification.query.filter_by(user_id=current_user.user_id, source_id=friendship_id, type='friend_request').first()
-    if notif:
-        notif.is_read = True
-        db.session.delete(notif)  # Remove the notification after responding
-        db.session.commit()
-    
-    return redirect(url_for('notifications'))
-
-@app.route('/cancel_friend_request/<int:target_user_id>', methods=['POST'])
-@login_required
-def cancel_friend_request(target_user_id):
-    user1, user2 = sorted([current_user.user_id, target_user_id])
-    friendship = Friendship.query.filter_by(user_id1=user1, user_id2=user2, status='pending').first()
-    if friendship and friendship.action_user_id == current_user.user_id:
-        db.session.delete(friendship)
-        # Optionally, delete the notification as well:
-        Notification.query.filter_by(user_id=target_user_id, source_id=friendship.friendship_id, type='friend_request').delete()
-        db.session.commit()
-        flash('Friend request cancelled.', 'info')
-    else:
-        flash('No pending friend request to cancel.', 'warning')
-    return redirect(url_for('discover_friends'))
-
-@app.route('/unfriend/<int:friendship_id>', methods=['POST'])
-@login_required
-def unfriend(friendship_id):
-    friendship = Friendship.query.get_or_404(friendship_id)
-    # Only allow if current user is part of the friendship and status is accepted
-    if current_user.user_id not in [friendship.user_id1, friendship.user_id2] or friendship.status != 'accepted':
-        abort(403)
-    db.session.delete(friendship)
-    db.session.commit()
-    flash('You have unfriended this user.', 'info')
-    return redirect(request.referrer or url_for('friends'))
 
 
 @app.errorhandler(404)

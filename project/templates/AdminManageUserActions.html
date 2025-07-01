@@ -1,0 +1,96 @@
+{% extends "UserBase.html" %}
+{% block title %}Admin - User Actions{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h1 class="text-center mb-4">Admin Dashboard - User Actions</h1>
+
+    <!-- Top Section: Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 rounded">
+                <div class="card-body">
+                    <h6 class="card-title text-uppercase text-muted">Total Logs</h6>
+                    <p class="card-text display-4 text-dark">{{ total_logs }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 rounded">
+                <div class="card-body">
+                    <h6 class="card-title text-uppercase text-muted">Login Attempts</h6>
+                    <p class="card-text display-4 text-secondary">{{ login_attempts }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 rounded">
+                <div class="card-body">
+                    <h6 class="card-title text-uppercase text-muted">Login Successes</h6>
+                    <p class="card-text display-4 text-success">{{ login_successes }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 rounded">
+                <div class="card-body">
+                    <h6 class="card-title text-uppercase text-muted">Login Failures</h6>
+                    <p class="card-text display-4 text-danger">{{ login_failures }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="card shadow-sm border-0 mb-4 rounded">
+        <div class="card-body">
+            <form method="get" action="/manage_UserActions">
+                <div class="input-group">
+                    <input type="text" name="search" class="form-control" placeholder="Search (e.g., user_id=1,log_type=login_attempt,date=2025-06-16)" value="{{ search_query }}">
+                    <button class="btn btn-primary" type="submit">Search</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Logs Table -->
+    {% if logs %}
+    <div class="table-responsive">
+        <table class="table table-hover table-striped align-middle">
+            <thead class="table-dark">
+                    <tr>
+                        <th scope="col">
+                            <a href="?sort_by=id&order={{ 'asc' if sort_by != 'id' or order == 'desc' else 'desc' }}&search={{ search_query }}" class="text-white text-decoration-none">
+                                ID
+                                <i class="bi {% if sort_by == 'id' and order == 'asc' %}bi-caret-up-fill{% elif sort_by == 'id' and order == 'desc' %}bi-caret-down-fill{% else %}bi-caret-down-fill{% endif %}" style="font-size: 0.8rem;"></i>
+                            </a>
+                        </th>
+                        <th scope="col">User ID</th>
+                        <th scope="col">Action Type</th>
+                        <th scope="col">
+                            <a href="?sort_by=log_timestamp&order={{ 'asc' if sort_by != 'log_timestamp' or order == 'desc' else 'desc' }}&search={{ search_query }}" class="text-white text-decoration-none">
+                                Timestamp
+                                <i class="bi {% if sort_by == 'log_timestamp' and order == 'asc' %}bi-caret-up-fill{% elif sort_by == 'log_timestamp' and order == 'desc' %}bi-caret-down-fill{% else %}bi-caret-down-fill{% endif %}" style="font-size: 0.8rem;"></i>
+                            </a>
+                        </th>
+                        <th scope="col">Details</th>
+                    </tr>
+                </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <th scope="row">{{ log.log_id }}</th>
+                    <td>{{ log.user_id }}</td>
+                    <td>{{ log.log_type }}</td>
+                    <td>{{ log.log_timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    <td>{{ log.details }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-center text-muted">No user action logs found in the database.</p>
+    {% endif %}
+</div>
+{% endblock %}

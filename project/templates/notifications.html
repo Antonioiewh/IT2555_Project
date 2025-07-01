@@ -1,0 +1,52 @@
+{% extends "UserBase.html" %}
+{% block title %}Notifications{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+    <!-- Sidebar -->
+        <nav class="col-12 col-md-3 col-lg-2 bg-light min-vh-100 p-0">
+        <div class="nav flex-column nav-pills py-4" id="notif-menu" role="tablist" aria-orientation="vertical">
+            {% for notif_type in grouped.keys() %}
+            <button class="nav-link w-100 text-start py-3 fs-5 {% if loop.first %}active{% endif %}"
+                    id="v-pills-{{ notif_type }}-tab"
+                    data-bs-toggle="pill"
+                    data-bs-target="#v-pills-{{ notif_type }}"
+                    type="button"
+                    role="tab"
+                    aria-controls="v-pills-{{ notif_type }}"
+                    aria-selected="{{ 'true' if loop.first else 'false' }}">
+            {{ notif_type.replace('_', ' ').title() }}
+            </button>
+            {% endfor %}
+        </div>
+        </nav>
+        <!-- Main content -->
+        <main class="col-12 col-md-9 col-lg-10 py-4">
+            <div class="tab-content" id="v-pills-tabContent">
+                <div class="tab-pane fade show active" id="v-pills-friend_request" role="tabpanel" aria-labelledby="v-pills-friend_request-tab">
+                    {% include 'notifications/friend_request.html' ignore missing %}
+                </div>
+                <div class="tab-pane fade" id="v-pills-message" role="tabpanel" aria-labelledby="v-pills-message-tab">
+                    {% include 'notifications/message.html' ignore missing %}
+                </div>
+                <div class="tab-pane fade" id="v-pills-like" role="tabpanel" aria-labelledby="v-pills-like-tab">
+                    {% include 'notifications/like.html' ignore missing %}
+                </div>
+                <div class="tab-pane fade" id="v-pills-comment" role="tabpanel" aria-labelledby="v-pills-comment-tab">
+                    {% include 'notifications/comment.html' ignore missing %}
+                </div>
+                <div class="tab-pane fade" id="v-pills-event_reminder" role="tabpanel" aria-labelledby="v-pills-event_reminder-tab">
+                    {% include 'notifications/event_reminder.html' ignore missing %}
+                </div>
+                <div class="tab-pane fade" id="v-pills-report_status" role="tabpanel" aria-labelledby="v-pills-report_status-tab">
+                    {% include 'notifications/report_status.html' ignore missing %}
+                </div>
+                <div class="tab-pane fade" id="v-pills-admin_override" role="tabpanel" aria-labelledby="v-pills-admin_override-tab">
+                    {% include 'notifications/admin_override.html' ignore missing %}
+                </div>
+            </div>
+    </main>
+  </div>
+</div>
+{% endblock %} 

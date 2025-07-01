@@ -1,0 +1,7 @@
+<ul class="list-group">
+  {% for notif in report_status_notifs %}
+    <!-- report status notification display -->
+  {% else %}
+    <li class="list-group-item text-muted text-center">No report status notifications.</li>
+  {% endfor %}
+</ul>

@@ -1,0 +1,26 @@
+{% extends "UserBase.html" %} {# Ensure this path is correct for your base template #}
+{% block title %}Report Confirmation{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6"> {# Reduced the column width for a more centered look #}
+            <div class="card shadow-lg border-0 rounded-3"> {# Added shadow for depth and removed border for a cleaner look, rounded corners #}
+                <div class="card-header bg-success text-white py-3 rounded-top"> {# More padding, rounded top #}
+                    <h4 class="mb-0 text-center"><i class="fas fa-check-circle me-2"></i> Report Submitted!</h4> {# Centered title with an icon #}
+                </div>
+                <div class="card-body p-4 text-center"> {# More padding and centered text #}
+                    <p class="lead mb-3">Your report concerning **{{ reported_username }}** has been successfully submitted.</p>
+                    <p class="text-muted mb-4">Our moderation team will review it shortly. Thank you for helping us maintain a safe community.</p> {# Muted secondary text with more margin #}
+
+                    <div class="d-grid gap-2"> {# Use d-grid for modern button layout #}
+                        <a href="{{ url_for('home') }}" class="btn btn-primary btn-lg rounded-pill">Go to Homepage</a> {# Larger button with rounded edges #}
+                        
+                        {# You might want to create a page to view all reports submitted by the current user #}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

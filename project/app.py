@@ -619,16 +619,29 @@ def user_friends():
     ]
     friends = User.query.filter(User.user_id.in_(friend_ids)).all()
 
-    friends = []
-    for user in User.query.filter(User.user_id.in_(friend_ids)).all():
-        friends.append({
+    accepted_friends = {}
+    for f in friendships:
+        friend_id = f.user_id2 if f.user_id1 == current_user.user_id else f.user_id1
+        accepted_friends[friend_id] = f.friendship_id
+
+    
+    friends = User.query.filter(User.user_id.in_(accepted_friends.keys())).all()
+
+    friends_info = []
+    for user in friends:
+        friends_info.append({
+            'user_id': user.user_id,
             'username': user.username,
             'profile_pic_url': user.profile_pic_url,
-            'is_online': user.current_status == 'online',   
-            'bio': user.bio
+            'is_online': user.current_status == 'online',
+            'bio': user.bio,
+            'friendship_id': accepted_friends[user.user_id]
         })
 
-    return render_template('userfriends.html', friends=friends)
+    form = FriendRequestForm()
+    return render_template('userfriends.html', friends=friends_info, accepted_friends=accepted_friends, form=form)
+
+
 
 @app.route('/DiscoverFriends', methods=['GET'])
 @user_required
@@ -672,10 +685,10 @@ def discover_friends():
     Friendship.status == 'accepted'
     ).all()
 
-    accepted_friends = set()
+    accepted_friends = {}
     for f in accepted_friendships:
         other_id = f.user_id2 if f.user_id1 == current_user.user_id else f.user_id1
-        accepted_friends.add(other_id)
+        accepted_friends[other_id] = f.friendship_id
 
     form = FriendRequestForm()
 
@@ -801,10 +814,11 @@ def send_friend_request(target_user_id):
 @user_required
 def respond_friend_request(friendship_id, action):
     friendship = Friendship.query.get_or_404(friendship_id)
-    if friendship.user_id2 != current_user.user_id:
-        #whoever thought of aborting 403 here is
+    # Only the receiver can accept/declineMore actions
+    if current_user.user_id == friendship.action_user_id:
         abort(403)
-        pass
+    if current_user.user_id not in [friendship.user_id1, friendship.user_id2]:
+        abort(403)
     if action == 'accept':
         friendship.status = 'accepted'
     elif action == 'decline':
@@ -845,6 +859,8 @@ def unfriend(friendship_id):
     db.session.delete(friendship)
     db.session.commit()
     flash('You have unfriended this user.', 'info')
+
+    
     return redirect(request.referrer or url_for('friends'))
 
 # --- Admin Routes ---
@@ -1301,7 +1317,3 @@ if __name__ == '__main__':
 
     app.run(debug=True, host='0.0.0.0')
     
-
-
-
-

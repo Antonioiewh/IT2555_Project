@@ -10,7 +10,8 @@ from datetime import datetime, timedelta # Keep datetime for datetime.utcnow()
 import re
 
 # antonio: forms
-from forms import SignupForm,LoginForm,ReportForm,UpdateUserStatusForm,FriendRequestForm # Assuming you have a SignupForm defined
+from forms import SignupForm,LoginForm,ReportForm,UpdateUserStatusForm,FriendRequestForm,UpdateReportStatusForm
+ # Assuming you have a SignupForm defined
 
 from sqlalchemy.dialects.mysql import ENUM
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -1029,6 +1030,7 @@ def manage_reports():
 @admin_required
 def manage_report(report_id):
     report = Report.query.get(report_id)
+    form = UpdateReportStatusForm()
     if not report:
         flash("Report not found.", "danger")
         return redirect(url_for('manage_reports'))
@@ -1059,7 +1061,8 @@ def manage_report(report_id):
         'AdminChangeReportStatus.html',
         report=report,
         reporter_username=reporter_username,
-        reported_username=reported_username
+        reported_username=reported_username,
+        form=form
     )
 
 @app.route('/manage_ModSecLogs', methods=['GET'])

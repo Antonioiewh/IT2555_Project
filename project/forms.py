@@ -87,3 +87,19 @@ class UpdateUserStatusForm(FlaskForm):
     
     # Submit button
     submit = SubmitField('Submit', render_kw={"class": "btn btn-primary"})
+
+
+class UpdateReportStatusForm(FlaskForm):
+    status = SelectField(
+        'Update Status',
+        choices=[
+            ('open', 'Open'),
+            ('in_review', 'In Review'),
+            ('action_taken', 'Action Taken'),
+            ('rejected', 'Rejected')
+        ],
+        validators=[DataRequired()],
+        render_kw={"class": "form-select"}
+    )
+    admin_notes = TextAreaField('Admin Notes', render_kw={"class": "form-control"})
+    submit = SubmitField('Submit', render_kw={"class": "btn btn-primary"})

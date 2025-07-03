@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 #parsing stufff
 from parse_test import parse_modsec_audit_log,parse_error_log
-
+import socket
 # custom logs
 from user_actions import log_user_login_attempt, log_user_login_success, log_user_login_failure
 app = Flask(__name__)
@@ -30,7 +30,7 @@ app.config['RECAPTCHA_PRIVATE_KEY'] = '6LdQNVsrAAAAAMOmgh-7Tp-KAwQUQ6iIbi8_pRvM'
 DB_USER = os.getenv('MYSQL_USER', 'flaskuser')
 DB_PASSWORD = os.getenv('MYSQL_PASSWORD', 'password')
 DB_NAME = os.getenv('MYSQL_DATABASE', 'flaskdb')
-DB_HOST = os.getenv('MYSQL_HOST', 'db') # 'db' is the service name in docker-compose
+DB_HOST = os.getenv('MYSQL_HOST', 'mysql')  # 'mysql' is the service name in docker-compose
 
 app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -45,6 +45,9 @@ login_manager = LoginManager(app)
 login_manager.init_app(app)
 login_manager.login_view = 'login' # Redirect to login if user not authenticated
 
+@app.context_processor
+def inject_container_id():
+    return {"container_id": socket.gethostname()}
 # --- Flask-Login User Loader ---
 @login_manager.user_loader
 def load_user(user_id):
@@ -1283,10 +1286,6 @@ def admin_user_actions():
         order=order,
         search_query=search_query
     )
-
-
-
-
 
 
 

@@ -1,5 +1,7 @@
-services:
 
+
+services:
+  
   mysql:
     image: mysql:8.0 # Using MySQL 8.0
     environment:
@@ -20,35 +22,61 @@ services:
       - flask-sql
 
 
-  app:
+  app1:
     build:
       context: project
     ports:
       - "5000"
-    environment:
-      - FLASK_APP=app.py
-      - FLASK_ENV=development
-      - MYSQL_USER=flaskuser
-      - MYSQL_PASSWORD=password
-      - MYSQL_DATABASE=flaskdb
-      - MYSQL_HOST=mysql # This matches the service name of the MySQL container
-      - SECRET_KEY=your_super_secret_key_change_me_in_production # IMPORTANT: Change this!
     volumes:
       - ./project:/code
       - ./nginx_logs:/code/shared_logs
       - ./certs:/code/certs
-      
-    #develop:
-      #watch:
-        #- action: sync
-          #path: ./project/
-          #target: /code
     depends_on:
       mysql:
-         condition: service_healthy
+        condition: service_healthy
     networks:
       - flask-sql
     command: gunicorn --bind 0.0.0.0:5000 --reload app:app
+    env_file:
+      - ./project/.env
+
+
+  app2:
+    build:
+      context: project
+    ports:
+      - "5000"
+    volumes:
+      - ./project:/code
+      - ./nginx_logs:/code/shared_logs
+      - ./certs:/code/certs
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - flask-sql
+    command: gunicorn --bind 0.0.0.0:5000 --reload app:app
+    env_file:
+      - ./project/.env
+
+  app3:
+    build:
+      context: project
+    ports:
+      - "5000"
+    volumes:
+      - ./project:/code
+      - ./nginx_logs:/code/shared_logs
+      - ./certs:/code/certs
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - flask-sql
+    command: gunicorn --bind 0.0.0.0:5000 --reload app:app
+    env_file:
+      - ./project/.env
+    
     
 
   nginx:
@@ -64,7 +92,9 @@ services:
       - ./modsec_logs:/var/log/nginx/modsec_audit_data 
       - ./nginx_logs:/var/log/nginx
     depends_on:
-      - app # Nginx depends on the Flask app being ready
+      - app1
+      - app2
+      - app3 # Nginx depends on the Flask app being ready
     restart: always
     networks:
       - flask-sql

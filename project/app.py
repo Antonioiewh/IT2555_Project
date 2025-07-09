@@ -8,6 +8,8 @@ from functools import wraps
 import os
 from datetime import datetime, timedelta # Keep datetime for datetime.utcnow()
 import re
+import flask_socketio 
+from flask_socketio import SocketIO, emit, join_room, leave_room, send
 
 # antonio: forms
 from forms import SignupForm,LoginForm,ReportForm,UpdateUserStatusForm,FriendRequestForm,UpdateReportStatusForm
@@ -25,6 +27,7 @@ app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config['RECAPTCHA_PUBLIC_KEY'] = '6LdQNVsrAAAAAMp8AX4H_J4CwZ5OXVixltEf4RaC'
 app.config['RECAPTCHA_PRIVATE_KEY'] = '6LdQNVsrAAAAAMOmgh-7Tp-KAwQUQ6iIbi8_pRvM'
+socketio = SocketIO(app, cors_allowed_origins="https://localhost", message_queue='redis://redis:6379', logger=True, engineio_logger=True)   
 
 # --- Configuration ---
 # Use environment variables for database connection
@@ -867,6 +870,110 @@ def unfriend(friendship_id):
     
     return redirect(request.referrer or url_for('friends'))
 
+
+@app.route('/messages', methods=['GET'])
+@login_required
+def messages():
+    # Get all accepted friendships involving the current user
+    friendships = Friendship.query.filter(
+        ((Friendship.user_id1 == current_user.user_id) | (Friendship.user_id2 == current_user.user_id)),
+        Friendship.status == 'accepted'
+    ).all()
+
+    # Get friend user IDs
+    friend_ids = []
+    for f in friendships:
+        if f.user_id1 == current_user.user_id:
+            friend_ids.append(f.user_id2)
+        else:
+            friend_ids.append(f.user_id1)
+
+    # Get friend user objects
+    friends = User.query.filter(User.user_id.in_(friend_ids)).all()
+    my_chat_ids = [c.chat_id for c in ChatParticipant.query.filter_by(user_id=current_user.user_id).all()]
+    # Build a mapping of friend_id -> chat_id
+    friend_chat_ids = {}
+    for friend in friends:
+        chat = (db.session.query(Chat)
+            .join(ChatParticipant, Chat.chat_id == ChatParticipant.chat_id)
+            .filter(ChatParticipant.user_id.in_([current_user.user_id, friend.user_id]))
+            .group_by(Chat.chat_id)
+            .having(db.func.count(Chat.chat_id) == 2)
+            .first())
+        if chat:
+            friend_chat_ids[friend.user_id] = chat.chat_id
+
+    return render_template('messages.html', friends=friends, my_chat_ids=my_chat_ids, friend_chat_ids=friend_chat_ids)
+
+@socketio.on('join_chat')
+def handle_join_chat(data):
+    if not current_user.is_authenticated:
+        print("Anonymous user tried to join chat.")
+        return  # Optionally emit an error event here
+    print(f"User {current_user.user_id} joined chat {data['chat_id']}")
+    chat_id = data['chat_id']
+    join_room(str(chat_id))
+
+@socketio.on('send_message')
+def handle_send_message(data):
+    if not current_user.is_authenticated:
+       print("Anonymous user tried to send a message.")
+       return  # Optionally emit an error event here
+    print(f"User {current_user.user_id} sent message to chat {data['chat_id']}")
+    chat_id = data['chat_id']
+    encrypted_message = data['message']
+    sender_id = current_user.user_id
+
+    msg = Message(chat_id=chat_id, sender_id=sender_id, message_text=encrypted_message)
+    db.session.add(msg)
+    db.session.commit()
+
+    emit('receive_message', {
+        'message_id': msg.message_id,
+        'chat_id': chat_id,
+        'sender_id': sender_id,
+        'message_text': encrypted_message,
+        'sent_at': msg.sent_at.strftime('%Y-%m-%d %H:%M:%S')
+    }, to=chat_id)
+
+@app.route('/get_chat_id/<int:friend_id>')
+@login_required
+def get_chat_id(friend_id):
+    # Try to find existing chat
+    chat = (db.session.query(Chat)
+        .join(ChatParticipant, Chat.chat_id == ChatParticipant.chat_id)
+        .filter(ChatParticipant.user_id.in_([current_user.user_id, friend_id]))
+        .group_by(Chat.chat_id)
+        .having(db.func.count(Chat.chat_id) == 2)
+        .first())
+    if not chat:
+        # Create new chat
+        chat = Chat()
+        db.session.add(chat)
+        db.session.commit()
+        db.session.add_all([
+            ChatParticipant(chat_id=chat.chat_id, user_id=current_user.user_id),
+            ChatParticipant(chat_id=chat.chat_id, user_id=friend_id)
+        ])
+        db.session.commit()
+    return jsonify({'chat_id': chat.chat_id})
+
+@app.route('/chat_history/<int:friend_id>')
+@login_required
+def chat_history(friend_id):
+    # Find the chat_id for these two users
+    chat = Chat.query.join(ChatParticipant).filter(
+        ChatParticipant.user_id.in_([current_user.user_id, friend_id])
+    ).group_by(Chat.chat_id).having(db.func.count(Chat.chat_id) == 2).first()
+    if not chat:
+        return jsonify([])
+    messages = Message.query.filter_by(chat_id=chat.chat_id).order_by(Message.sent_at).all()
+    return jsonify([{
+        'sender_id': m.sender_id,
+        'message_text': m.message_text,
+        'sent_at': m.sent_at.strftime('%Y-%m-%d %H:%M:%S')
+    } for m in messages])
+
 # --- Admin Routes ---
 @app.route('/users_dashboard')
 @admin_required # Protect this route with the admin_required decorator
@@ -1310,12 +1417,14 @@ def internal_server_error(error):
 
 # --- Run the App ---
 if __name__ == '__main__':
+    socketio.run(app, host='0.0.0.0', port=5000)
     # When running directly, ensure context is set up for db operations
-    with app.app_context():
+    #with app.app_context():
         # IMPORTANT: DO NOT run initdb_command() here automatically in production!
         # This command should be run manually once via `flask initdb`
         # after your .sql schema has been applied.
-        pass
+        #pass
 
-    app.run(debug=True, host='0.0.0.0')
+    #app.run(debug=True, host='0.0.0.0')
+
     

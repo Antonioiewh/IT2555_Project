@@ -10,7 +10,8 @@ services:
       MYSQL_USER: flaskuser            # User for Flask app
       MYSQL_PASSWORD: password         # Password for Flask user
     volumes:
-      - ./mysql:/docker-entrypoint-initdb.d  # Mount SQL initialization script
+      - ./mysql:/docker-entrypoint-initdb.d  
+      # Mount SQL initialization script
     ports:
       - "3360:3306" # Expose MySQL port for local access if needed (optional)
     healthcheck:

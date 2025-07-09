@@ -1,0 +1,131 @@
+
+
+services:
+  
+  mysql:
+    image: mysql:8.0 # Using MySQL 8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword # Root password for MySQL
+      MYSQL_DATABASE: flaskdb          # Database for Flask app
+      MYSQL_USER: flaskuser            # User for Flask app
+      MYSQL_PASSWORD: password         # Password for Flask user
+    volumes:
+      - ./mysql:/docker-entrypoint-initdb.d  # Mount SQL initialization script
+    ports:
+      - "3360:3306" # Expose MySQL port for local access if needed (optional)
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
+      interval: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - flask-sql
+
+
+  app1:
+    build:
+      context: project
+    expose:
+      - "5000"
+    volumes:
+      - ./project:/code
+      - ./nginx_logs:/code/shared_logs
+      - ./certs:/code/certs
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - flask-sql
+    command: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 --reload app:app
+    env_file:
+      - ./project/.env
+
+
+  app2:
+    build:
+      context: project
+    expose:
+      - "5000"
+    volumes:
+      - ./project:/code
+      - ./nginx_logs:/code/shared_logs
+      - ./certs:/code/certs
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - flask-sql
+    command: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 --reload app:app
+    env_file:
+      - ./project/.env
+
+  app3:
+    build:
+      context: project
+    expose:
+      - "5000"
+    volumes:
+      - ./project:/code
+      - ./nginx_logs:/code/shared_logs
+      - ./certs:/code/certs
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - flask-sql
+    command: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 --reload app:app
+    env_file:
+      - ./project/.env
+
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "6379:6379"
+    networks:
+      - flask-sql
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    
+    
+
+  nginx:
+    build: ./nginxproxy # Build from the Dockerfile in the nginx-proxy directory
+    ports:
+      - "80:80" # Expose Nginx on port 80
+      - #"443:443" # Expose Nginx on port 443 if you set up SSL
+    volumes:
+      # Optional: Mount a volume for Nginx/ModSecurity logs to persist them
+      - ./project/templates/rate_limit.html:/usr/share/nginx/html/rate_limit.html:ro # Custom error page for rate limiting
+      - ./nginxproxy/custom_modsec_rules:/etc/nginx/modsec/custom_modsec_rules # If you create custom rules
+      - ./certs:/etc/nginx/certs:ro 
+      - ./modsec_logs:/var/log/nginx/modsec_audit_data 
+      - ./nginx_logs:/var/log/nginx
+    depends_on:
+      - app1
+      - app2
+      - app3 # Nginx depends on the Flask app being ready
+    restart: always
+    networks:
+      - flask-sql
+  #nginx:
+    #image: nginx:latest
+    #volumes:
+      #- ./nginx.conf:/etc/nginx/nginx.conf:ro
+      #- ./certs:/etc/nginx/certs:ro 
+    #depends_on:
+      #- app
+    #ports:
+      #- "80:80"
+      #- "443:443"
+    
+    #restart: always
+    #networks:
+      #- flask-sql
+
+
+
+volumes:
+  two-tier:
+networks:
+  flask-sql:
+    driver: bridge

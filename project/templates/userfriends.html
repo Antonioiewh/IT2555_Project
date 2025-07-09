@@ -1,0 +1,139 @@
+{% extends "UserBase.html" %}
+{% block title %}Friends Page{% endblock %}
+
+{% block content %}
+<style>
+.friends-container {
+    max-width: 600px;
+    margin: 80px auto 0 auto; /* Add top margin to avoid navbar overlap */
+}
+.friend-row {
+    background: #ececec;
+    border-radius: 16px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    padding: 12px 0;
+    position: relative;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+.friend-profile {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-left: 24px;
+    margin-right: 16px;
+    border: 2px solid #fff;
+}
+.friend-name {
+    font-size: 1.2rem;
+    font-weight: 500;
+}
+.friend-info {
+    flex: 0 0 auto;
+}
+.friend-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: 24px;
+}
+.status-indicator {
+    width: 12px;
+    height: 48px;
+    border-radius: 8px;
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #bdbdbd;
+}
+.status-indicator.online {
+    background: limegreen;
+}
+.menu-dots {
+    font-size: 1.5rem;
+    margin-left: 12px;
+    cursor: pointer;
+}
+</style>
+<div class="friends-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Friends</h2>
+        <input id="search-bar" type="text" class="form-control form-control-lg w-50" placeholder="Search Friends">
+    </div>
+    <div id="friend-list">
+        {% for friend in friends %}
+            <div class="friend-row">
+                <img src="{{ friend.profile_pic_url or url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
+                    alt="Profile Picture"
+                    class="friend-profile"
+                    width="64" height="64">
+                <div class="friend-info">
+                    <div class="friend-name">{{ friend.username }}</div>
+                </div>
+                
+                <div class="friend-actions">
+                    <button type="button" class="btn btn-outline-primary btn-sm me-2" disabled>
+                    <i class="bi bi-person"></i> Profile
+                    </button>
+                    <button type="button" class="btn btn-outline-primary btn-sm me-2"><i class="bi bi-chat">Message</i></button>
+                    <div class="dropdown">
+                        <button class="btn btn-secondary btn-sm dropdown-toggle" type="button" id="dropdownMenuButton-{{ friend.user_id }}" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-three-dots-vertical"></i>
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton-{{ friend.user_id }}">
+                            <li>
+                                <button class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#unfriendModal-{{ friend.user_id }}">
+                                    Unfriend
+                                </button>
+                            </li>
+                            
+                            <li>
+                                <button class="dropdown-item text-warning" disabled>
+                                    Block
+                                </button>
+                            </li>
+                        </ul>
+                        
+                    </div>
+                    <div class="modal fade" id="unfriendModal-{{ friend.user_id }}" tabindex="-1" aria-labelledby="unfriendModalLabel-{{ friend.user_id }}" aria-hidden="true">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title" id="unfriendModalLabel-{{ friend.user_id }}">Confirm Unfriend</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        Are you sure you want to unfriend <strong>{{ friend.username }}</strong>?
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <form method="post" action="{{ url_for('unfriend', friendship_id=friend.friendship_id) }}" style="display:inline;">
+                                            {{ form.hidden_tag() }}
+                                            <button type="submit" class="btn btn-danger">Unfriend</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                </div>
+                <div class="status-indicator{% if friend.is_online %} online{% endif %}"></div>
+            </div>
+        {% else %}
+            <div class="alert alert-info text-center">No friends found.</div>
+        {% endfor %}
+    </div>
+</div>
+<script>
+document.getElementById('search-bar').addEventListener('input', function() {
+    const query = this.value.toLowerCase();
+    document.querySelectorAll('#friend-list .friend-row').forEach(row => {
+        const name = row.querySelector('.friend-name').textContent.toLowerCase();
+        row.style.display = name.includes(query) ? '' : 'none';
+    });
+});
+</script>
+{% endblock %}

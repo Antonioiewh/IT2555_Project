@@ -1,0 +1,42 @@
+{% extends "UserBase.html" %}
+{% block title %}Manage Report{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0 rounded">
+                <div class="card-header bg-primary text-white rounded-top">
+                    <h4 class="mb-0">Manage Report: {{ report.report_id }}</h4>
+                </div>
+                <div class="card-body rounded-bottom">
+                    <p><strong>Reporter:</strong> {{ reporter_username if reporter_username else 'Anonymous' }}</p>
+                    <p><strong>Reported User:</strong> {{ reported_username }}</p>
+                    <p><strong>Type:</strong> {{ report.report_type }}</p>
+                    <p><strong>Description:</strong> {{ report.description }}</p>
+                    <p><strong>Submitted At:</strong> {{ report.submitted_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                    <form method="post" action="{{ url_for('manage_report', report_id=report.report_id) }}">
+                        {{ form.hidden_tag() }}
+                        <div class="mb-3">
+                            {{ form.status.label(class="form-label") }}
+                            {{ form.status(class="form-select") }}
+                            {% for error in form.status.errors %}
+                                <div class="text-danger">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        <div class="mb-3">
+                            {{ form.admin_notes.label(class="form-label") }}
+                            {{ form.admin_notes(class="form-control") }}
+                            {% for error in form.admin_notes.errors %}
+                                <div class="text-danger">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        {{ form.submit(class="btn btn-primary") }}
+                        <a href="{{ url_for('manage_reports') }}" class="btn btn-secondary">Cancel</a>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,128 @@
+{% extends "UserBase.html" %}
+{% block title %}Admin - Manage Reports{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h1 class="text-center mb-4">Admin Dashboard - Manage Reports</h1>
+
+    <!-- Top Section: Report Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 rounded">
+                <div class="card-body">
+                    <h6 class="card-title text-uppercase text-muted">Open Reports</h6>
+                    <p class="card-text display-4 text-success">{{ open_reports }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 rounded">
+                <div class="card-body">
+                    <h6 class="card-title text-uppercase text-muted">In Review</h6>
+                    <p class="card-text display-4 text-warning">{{ in_review_reports }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 rounded">
+                <div class="card-body">
+                    <h6 class="card-title text-uppercase text-muted">Action Taken</h6>
+                    <p class="card-text display-4 text-primary">{{ action_taken_reports }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 rounded">
+                <div class="card-body">
+                    <h6 class="card-title text-uppercase text-muted">Rejected</h6>
+                    <p class="card-text display-4 text-danger">{{ rejected_reports }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="card shadow-sm border-0 mb-4 rounded">
+        <div class="card-body">
+            <form method="get" action="/reports_dashboard">
+                <div class="input-group">
+                    <input type="text" name="search" class="form-control" placeholder="Search (e.g., report_id=1,status=open,report_type=spam)" value="{{ search_query }}">
+                    <button class="btn btn-primary" type="submit">Search</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Reports Table -->
+    {% if reports %}
+    <div class="table-responsive">
+        <table class="table table-hover table-striped align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th scope="col">
+                        <a href="?sort_by=report_id&order={{ 'asc' if sort_by != 'report_id' or order == 'desc' else 'desc' }}&search={{ search_query }}" class="text-white text-decoration-none">
+                            Report ID
+                            <i class="bi {% if sort_by == 'report_id' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %}" style="font-size: 0.8rem; color: #0d6efd;"></i>
+                        </a>
+                    </th>
+                    <th scope="col">
+                        <a href="?sort_by=reporter_id&order={{ 'asc' if sort_by != 'reporter_id' or order == 'desc' else 'desc' }}&search={{ search_query }}" class="text-white text-decoration-none">
+                            Reporter
+                            <i class="bi {% if sort_by == 'reporter_id' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %}" style="font-size: 0.8rem; color: #0d6efd;"></i>
+                        </a>
+                    </th>
+                    <th scope="col">
+                        <a href="?sort_by=reported_user_id&order={{ 'asc' if sort_by != 'reported_user_id' or order == 'desc' else 'desc' }}&search={{ search_query }}" class="text-white text-decoration-none">
+                            Reported User
+                            <i class="bi {% if sort_by == 'reported_user_id' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %}" style="font-size: 0.8rem; color: #0d6efd;"></i>
+                        </a>
+                    </th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Description</th>
+                    <th scope="col">
+                        <a href="?sort_by=submitted_at&order={{ 'asc' if sort_by != 'submitted_at' or order == 'desc' else 'desc' }}&search={{ search_query }}" class="text-white text-decoration-none">
+                            Submitted At
+                            <i class="bi {% if sort_by == 'submitted_at' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %}" style="font-size: 0.8rem; color: #0d6efd;"></i>
+                        </a>
+                    </th>
+                    <th scope="col">
+                        <a href="?sort_by=status&order={{ 'asc' if sort_by != 'status' or order == 'desc' else 'desc' }}&search={{ search_query }}" class="text-white text-decoration-none">
+                            Status
+                            <i class="bi {% if sort_by == 'status' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %}" style="font-size: 0.8rem; color: #0d6efd;"></i>
+                        </a>
+                    </th>
+                    <th scope="col">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for report in reports %}
+                <tr>
+                    <th scope="row">{{ report.report_id }}</th>
+                    <td>{{ report.reporter_id if report.reporter_id else 'Anonymous' }}</td>
+                    <td>{{ report.reported_user_id }}</td>
+                    <td>{{ report.report_type }}</td>
+                    <td>{{ report.description }}</td>
+                    <td>{{ report.submitted_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>
+                        <span class="badge 
+                            {% if report.status == 'open' %}bg-success
+                            {% elif report.status == 'in_review' %}bg-warning
+                            {% elif report.status == 'action_taken' %}bg-primary
+                            {% elif report.status == 'rejected' %}bg-danger
+                            {% endif %}">
+                            {{ report.status }}
+                        </span>
+                    </td>
+                    <td>
+                        <a href="{{ url_for('manage_report', report_id=report.report_id) }}" class="btn btn-sm btn-primary">Manage</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-center text-muted">No reports found in the database.</p>
+    {% endif %}
+</div>
+{% endblock %}

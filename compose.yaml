@@ -10,8 +10,7 @@ services:
       MYSQL_USER: flaskuser            # User for Flask app
       MYSQL_PASSWORD: password         # Password for Flask user
     volumes:
-      - ./mysql:/docker-entrypoint-initdb.d  
-      # Mount SQL initialization script
+      - ./mysql:/docker-entrypoint-initdb.d  # Mount SQL initialization script
     ports:
       - "3360:3306" # Expose MySQL port for local access if needed (optional)
     healthcheck:
@@ -26,7 +25,7 @@ services:
   app1:
     build:
       context: project
-    ports:
+    expose:
       - "5000"
     volumes:
       - ./project:/code
@@ -37,7 +36,7 @@ services:
         condition: service_healthy
     networks:
       - flask-sql
-    command: gunicorn --bind 0.0.0.0:5000 --reload app:app
+    command: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 --reload app:app
     env_file:
       - ./project/.env
 
@@ -45,7 +44,7 @@ services:
   app2:
     build:
       context: project
-    ports:
+    expose:
       - "5000"
     volumes:
       - ./project:/code
@@ -56,14 +55,14 @@ services:
         condition: service_healthy
     networks:
       - flask-sql
-    command: gunicorn --bind 0.0.0.0:5000 --reload app:app
+    command: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 --reload app:app
     env_file:
       - ./project/.env
 
   app3:
     build:
       context: project
-    ports:
+    expose:
       - "5000"
     volumes:
       - ./project:/code
@@ -74,9 +73,18 @@ services:
         condition: service_healthy
     networks:
       - flask-sql
-    command: gunicorn --bind 0.0.0.0:5000 --reload app:app
+    command: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 --reload app:app
     env_file:
       - ./project/.env
+
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "6379:6379"
+    networks:
+      - flask-sql
+    environment:
+      - REDIS_URL=redis://redis:6379/0
     
     
 
@@ -84,7 +92,7 @@ services:
     build: ./nginxproxy # Build from the Dockerfile in the nginx-proxy directory
     ports:
       - "80:80" # Expose Nginx on port 80
-      - "443:443" # Expose Nginx on port 443 if you set up SSL
+      - "443:443" # Expose Nginx on port 443
     volumes:
       # Optional: Mount a volume for Nginx/ModSecurity logs to persist them
       - ./project/templates/rate_limit.html:/usr/share/nginx/html/rate_limit.html:ro # Custom error page for rate limiting

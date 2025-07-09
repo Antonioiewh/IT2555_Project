@@ -1,66 +1,36 @@
+#where all your form objects are defined
+#Basic signup form - name, password + phone no.
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField, IntegerField, SelectField, TextAreaField, HiddenField
-from wtforms.validators import DataRequired, Length, Email, EqualTo, ValidationError, Regexp, AnyOf
-from flask_wtf.recaptcha import RecaptchaField
+from wtforms import StringField, PasswordField, SubmitField, IntegerField,SelectField,TextAreaField,HiddenField
+from wtforms.validators import DataRequired, Length, Email, EqualTo,ValidationError
+from flask_wtf.recaptcha import RecaptchaField # Import RecaptchaField
+
 from flask_login import current_user
 
 class SignupForm(FlaskForm):
     username = StringField('Name', validators=[DataRequired(), Length(min=2, max=50)])
-    password = PasswordField(
-        'Password',
-        validators=[
-            DataRequired(),
-            Length(min=14, max=50, message="Password must be at least 14 characters."),
-            Regexp(
-                r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};\'\\:"|<,./<>?]).{14,}$',
-                message="Password must contain at least one uppercase letter, one lowercase letter, one number, one special character, and be at least 14 characters long."
-            )
-        ]
-    )
-    phone_no = StringField(
-        'Phone Number',
-        validators=[
-            DataRequired(),
-            Length(min=8, max=8, message="Phone number must be exactly 8 digits."),
-            Regexp(r'^\d{8}$', message="Phone number must contain exactly 8 digits.")
-        ]
-    )
+    password = PasswordField('Password', validators=[DataRequired(), Length(min=6, max=50)])
+    phone_no = StringField('Phone Number', validators=[DataRequired(), Length(min=8, max=15)])
     recaptcha = RecaptchaField() 
     submit = SubmitField('Sign Up')
 
 class LoginForm(FlaskForm):
-    username = StringField(
-        'Name',
-        validators=[
-            DataRequired(message="Username is required."),
-            Length(min=2, max=50, message="Username must be between 2 and 50 characters."),
-            Regexp(r'^[a-zA-Z0-9_]+$', message="Username must be alphanumeric or underscore.")
-        ]
-    )
-    password = PasswordField(
-        'Password',
-        validators=[
-            DataRequired(message="Password is required."),
-            Length(min=14, max=50, message="Password must be at least 14 characters."),
-            Regexp(
-                r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};\'\\:"|<,./<>?]).{14,}$',
-                message="Password must contain at least one uppercase letter, one lowercase letter, one number, one special character, and be at least 14 characters long."
-            )
-        ]
-    )
+    username = StringField('Name', validators=[DataRequired(), Length(min=2, max=50)])
+    password = PasswordField('Password', validators=[DataRequired(), Length(min=6, max=50)])
     recaptcha = RecaptchaField()
     submit = SubmitField('Login')
 
 class FriendRequestForm(FlaskForm):
     submit = SubmitField('Request')
 
+    
 class ReportForm(FlaskForm):
+    
     reported_username = StringField(
         'Username of User to Report',
         validators=[
             DataRequired(message='Please enter the username of the user you wish to report.'),
-            Length(min=3, max=80, message='Username must be between 3 and 80 characters.'),
-            Regexp(r'^[a-zA-Z0-9_]+$', message="Username must be alphanumeric or underscore")
+            Length(min=3, max=80, message='Username must be between 3 and 80 characters.')
         ]
     )
     report_type = SelectField(
@@ -73,44 +43,35 @@ class ReportForm(FlaskForm):
             ('fraud', 'Fraud/Scam'),
             ('other', 'Other (Please specify)')
         ],
-        validators=[
-            DataRequired(message='Please select a report type.'),
-            AnyOf(
-                ['spam', 'harassment', 'impersonation', 'inappropriate_content', 'fraud', 'other'],
-                message="Invalid report type."
-            )
-        ]
+        validators=[DataRequired(message='Please select a report type.')]
     )
     description = TextAreaField(
         'Description (Please be detailed)',
         validators=[
             DataRequired(message='A description is required.'),
-            Length(min=20, max=1000, message='Description must be between 20 and 1000 characters.'),
-            Regexp(r'^[\s\S]*$', message="Description contains invalid characters.")  # Accepts any character, but you can restrict if needed
+            Length(min=20, max=1000, message='Description must be between 20 and 1000 characters.')
         ]
     )
     recaptcha = RecaptchaField()
     submit = SubmitField('Submit Report')
 
+    # Custom validator to find the reported user and prevent self-reporting
+    
     def validate_reported_username(self, field):
         from app import db, User
         user_to_report = User.query.filter_by(username=field.data).first()
         if not user_to_report:
             raise ValidationError('User with this username does not exist.')
+
+        # Prevent self-reporting
         if current_user.is_authenticated and user_to_report.user_id == current_user.user_id:
             raise ValidationError('You cannot report yourself.')
+
+        # Store the found user object on the form instance for easy access in the route
         self.user_to_report_obj = user_to_report
 
-    def validate_description(self, field):
-        # Example: Prevent only-whitespace or repeated spammy content
-        if not field.data.strip():
-            raise ValidationError('Description cannot be empty or only whitespace.')
-        if len(set(field.data.lower().split())) == 1:
-            raise ValidationError('Description appears to be spammy or repetitive.')
-
-
-
 class UpdateUserStatusForm(FlaskForm):
+    # Dropdown to select the action (status)
     status = SelectField(
         'Select Action',
         choices=[
@@ -118,14 +79,15 @@ class UpdateUserStatusForm(FlaskForm):
             ('suspended', 'Suspend User Account'),
             ('terminated', 'Terminate User Account')
         ],
-        validators=[
-            DataRequired(),
-            AnyOf(['offline', 'suspended', 'terminated'], message="Invalid status.")
-        ],
-        render_kw={"class": "form-select"}
+        render_kw={"class": "form-select"}  # Optional: Add Bootstrap class for styling
     )
+    
+    # CAPTCHA field for security
     recaptcha = RecaptchaField()
+    
+    # Submit button
     submit = SubmitField('Submit', render_kw={"class": "btn btn-primary"})
+
 
 class UpdateReportStatusForm(FlaskForm):
     status = SelectField(
@@ -136,17 +98,8 @@ class UpdateReportStatusForm(FlaskForm):
             ('action_taken', 'Action Taken'),
             ('rejected', 'Rejected')
         ],
-        validators=[
-            DataRequired(),
-            AnyOf(['open', 'in_review', 'action_taken', 'rejected'], message="Invalid status.")
-        ],
+        validators=[DataRequired()],
         render_kw={"class": "form-select"}
     )
-    admin_notes = TextAreaField(
-        'Admin Notes',
-        validators=[
-            Length(max=1000, message="Admin notes must be less than 1000 characters.")
-        ],
-        render_kw={"class": "form-control"}
-    )
+    admin_notes = TextAreaField('Admin Notes', render_kw={"class": "form-control"})
     submit = SubmitField('Submit', render_kw={"class": "btn btn-primary"})

@@ -1,0 +1,267 @@
+{% extends "UserBase.html" %}
+{% block title %}Message{% endblock %}
+
+{% block content %}
+<style>
+.friends-sidebar {
+    width: 300px;
+    background: #f8f9fa;
+    border-right: 1px solid #e0e0e0;
+    height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+.friends-header {
+    padding: 1.2rem 1.5rem 0.5rem 1.5rem;
+    font-weight: 600;
+    font-size: 1.2rem;
+    color: #232946;
+    border-bottom: 1px solid #e0e0e0;
+    background: #fff;
+}
+.friend-search {
+    margin: 0.5rem 1.5rem 1rem 1.5rem;
+}
+.friend-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+.friend-list li {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1.5rem;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    transition: background 0.2s;
+    border-radius: 8px;
+}
+.friend-list li:hover, .friend-list li.active {
+    background: #e3e8f0;
+}
+.friend-profile {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-right: 1rem;
+    border: 2px solid #d1d5db;
+}
+.friend-info {
+    flex: 1;
+}
+.friend-name {
+    font-weight: 500;
+    color: #232946;
+}
+.friend-status {
+    font-size: 0.9rem;
+    color: #6c757d;
+}
+.chat-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #f4f6fb;
+    height: 80vh;
+}
+.chat-box {
+    width: 150%;
+    max-width: 600px;
+    height: 60vh;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 2px 16px rgba(44,62,80,0.07);
+    padding: 1.5rem;
+    overflow-y: auto;
+    margin-bottom: 1rem;
+    display: flex;
+    flex-direction: column;
+}
+.message-row {
+    margin-bottom: 1rem;
+    display: flex;
+}
+.message-row.me {
+    justify-content: flex-end;
+}
+.message-bubble {
+    padding: 0.75rem 1.25rem;
+    border-radius: 18px;
+    background: #e3e8f0;
+    color: #232946;
+    max-width: 70%;
+    word-break: break-word;
+}
+.message-row.me .message-bubble {
+    background: #2563eb;
+    color: #fff;
+}
+.chat-input-row {
+    width: 100%;
+    max-width: 600px;
+    display: flex;
+    gap: 0.5rem;
+}
+#chat-input {
+    border-radius: 20px;
+    border: 1px solid #e0e0e0;
+    padding: 0.75rem 1rem;
+    flex: 1;
+}
+#chat-send-btn {
+    border-radius: 20px;
+    padding: 0.75rem 2rem;
+}
+</style>
+<div style="display: flex; height: 80vh;">
+    <!-- Friends sidebar -->
+    <div class="friends-sidebar shadow-sm">
+        <div class="friends-header">
+            <i class="bi bi-people-fill"></i> Your Friends
+        </div>
+        <div class="friend-search">
+            <input type="text" class="form-control" placeholder="Search friends..." id="friend-search-input">
+        </div>
+        <ul class="friend-list" id="friend-list">
+            {% for friend in friends %}
+            <li class="friend-link" data-user-id="{{ friend.user_id }}" data-chat-id="{{ friend_chat_ids[friend.user_id] }}">
+                <img src="{{ friend.profile_pic_url or url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
+                     alt="Profile" class="friend-profile">
+                <div class="friend-info">
+                    <div class="friend-name">{{ friend.username }}</div>
+                    {% if friend.current_status %}
+                    <div class="friend-status">{{ friend.current_status }}</div>
+                    {% endif %}
+                </div>
+            </li>
+            {% else %}
+            <li style="padding: 1.5rem; color: #888;">No friends found.</li>
+            {% endfor %}
+        </ul>
+    </div>
+    <!-- Chat area -->
+    <div class="chat-container" style="flex:1;">
+        <div id="chat-placeholder" class="text-muted" style="margin-top:2rem;">Select a friend to start chatting.</div>
+        <div id="chat-box" class="chat-box" style="display:none;"></div>
+        <form id="chat-form" class="chat-input-row" style="display:none;">
+            <input id="chat-input" type="text" class="form-control" placeholder="Type a message..." autocomplete="off">
+            <button id="chat-send-btn" class="btn btn-primary" type="submit">Send</button>
+        </form>
+    </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+<script>
+
+
+const myChatIds = {{ my_chat_ids|tojson }};
+const socket = io('https://localhost', {
+    withCredentials: true,
+    transports: ['websocket', 'polling']
+});
+
+// Join all chat rooms on page load
+myChatIds.forEach(chatId => {
+    socket.emit('join_chat', {chat_id: chatId});
+});
+
+let currentChatId = null;
+const secretKey = 'YOUR_SHARED_SECRET_KEY'; // Replace with a per-chat key for real E2EE
+const myUserId = {{ current_user.user_id }};
+
+
+function openChat(link) {
+    const friendUserId = link.dataset.userId;
+    const chatId = link.dataset.chatId; // Get chat_id directly from data attribute
+    currentChatId = chatId;              // Set immediately for live updates
+
+    // Remove active class from all, add to this
+    document.querySelectorAll('.friend-link').forEach(l => l.classList.remove('active'));
+    link.classList.add('active');
+    // Remove unread badge
+    link.classList.remove('has-unread');
+
+    socket.emit('join_chat', {chat_id: currentChatId});
+    document.getElementById('chat-placeholder').style.display = 'none';
+    document.getElementById('chat-box').style.display = '';
+    document.getElementById('chat-form').style.display = '';
+
+    // Fetch chat history
+    fetch(`/chat_history/${friendUserId}`)
+        .then(response => response.json())
+        .then(messages => {
+            const chatBox = document.getElementById('chat-box');
+            chatBox.innerHTML = '';
+            messages.forEach(msg => {
+                let plaintext = CryptoJS.AES.decrypt(msg.message_text, secretKey).toString(CryptoJS.enc.Utf8);
+                appendMessage(msg.sender_id == myUserId ? 'me' : 'friend', plaintext);
+            });
+        });
+}
+
+// Friend click handler
+document.querySelectorAll('.friend-link').forEach(link => {
+    link.addEventListener('click', function() {
+        openChat(this);
+    });
+});
+
+// Auto-select the first friend on page load
+window.addEventListener('DOMContentLoaded', function() {
+    const firstFriend = document.querySelector('.friend-link');
+    if (firstFriend) openChat(firstFriend);
+});
+
+// Send message handler
+document.getElementById('chat-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const input = document.getElementById('chat-input');
+    let plaintext = input.value;
+    if (!plaintext || !currentChatId) return;
+    let ciphertext = CryptoJS.AES.encrypt(plaintext, secretKey).toString();
+    socket.emit('send_message', {chat_id: currentChatId, message: ciphertext});
+    input.value = '';
+});
+
+// Receive message handler
+socket.on('receive_message', function(data) {
+    console.log('[receive_message] Got data:', data);
+    if (data.chat_id != currentChatId) {
+        // Optionally, show badge/highlight for this chat in the sidebar
+        let friendLi = document.querySelector(`.friend-link[data-chat-id="${data.chat_id}"]`);
+        if (friendLi) friendLi.classList.add('has-unread');
+        return;
+    }
+    console.log('LIVE MESSAGE:', data);
+    let bytes = CryptoJS.AES.decrypt(data.message_text, secretKey);
+    let plaintext = bytes.toString(CryptoJS.enc.Utf8);
+    appendMessage(data.sender_id == myUserId ? 'me' : 'friend', plaintext);
+});
+
+function appendMessage(who, text) {
+    let chatBox = document.getElementById('chat-box');
+    let row = document.createElement('div');
+    row.className = 'message-row' + (who === 'me' ? ' me' : '');
+    let bubble = document.createElement('div');
+    bubble.className = 'message-bubble';
+    bubble.textContent = text;
+    row.appendChild(bubble);
+    chatBox.appendChild(row);
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+
+document.getElementById('friend-search-input').addEventListener('input', function() {
+    const filter = this.value.toLowerCase();
+    document.querySelectorAll('.friend-list li.friend-link').forEach(function(li) {
+        const name = li.querySelector('.friend-name').textContent.toLowerCase();
+        li.style.display = name.includes(filter) ? '' : 'none';
+    });
+});
+</script>
+{% endblock %}

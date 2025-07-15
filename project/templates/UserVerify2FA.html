@@ -1,0 +1,17 @@
+{% extends "UserBase.html" %}
+{% block title %}Two-Factor Authentication{% endblock %}
+{% from "includes/_formHelper.html" import render_field %}
+{% block content %}
+<div class="container" style="max-width: 400px; margin-top: 2rem;">
+    <h2 class="mb-4">Enter 2FA Code</h2>
+    <form method="POST">
+        {{ form.hidden_tag() }}
+        <div class="mb-3">
+            {{ render_field(form.totp_code, class="form-control", placeholder="6-digit code from Authenticator app") }}
+        </div>
+        <div class="d-grid gap-2 mb-3">
+            {{ render_field(form.submit, class="btn btn-primary") }}
+        </div>
+    </form>
+</div>
+{% endblock %}

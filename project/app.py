@@ -1,4 +1,4 @@
-from flask import Flask, render_template, redirect, url_for, flash, request, current_app, abort, jsonify
+from flask import Flask, render_template, redirect, url_for, flash, request, current_app, abort, jsonify,session
 from flask_wtf import CSRFProtect, FlaskForm
 from wtforms import StringField, PasswordField, SubmitField, TextAreaField, SelectField, ValidationError
 from flask_sqlalchemy import SQLAlchemy
@@ -12,53 +12,78 @@ import flask_socketio
 from flask_socketio import SocketIO, emit, join_room, leave_room, send
 
 # antonio: forms
-from forms import SignupForm,LoginForm,ReportForm,UpdateUserStatusForm,FriendRequestForm,UpdateReportStatusForm
- # Assuming you have a SignupForm defined
+from forms import SignupForm,LoginForm,ReportForm,UpdateUserStatusForm,FriendRequestForm,UpdateReportStatusForm,Enable2FAForm,Disable2FAForm,RemovePassKeyForm
 
+# No clue but seems important
 from sqlalchemy.dialects.mysql import ENUM
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-#parsing stufff
+#parsing stufff for logs
 from parse_test import parse_modsec_audit_log,parse_error_log
 import socket
+
 # custom logs
-from user_actions import log_user_login_attempt, log_user_login_success, log_user_login_failure
+from user_actions import log_user_login_attempt, log_user_login_success, log_user_login_failure, log_user_logout
+
+#security stuff
+import pyotp
+import qrcode
+from io import BytesIO
+import base64
+from base64 import b64encode
+
+#web auth stuff
+from fido2.server import Fido2Server
+from fido2.webauthn import PublicKeyCredentialRpEntity
+import json
+from fido2.client import ClientData
+from fido2.ctap2 import AttestationObject
+
+# --- Configuration ---
+# -- Flask app configuration --
 app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config['RECAPTCHA_PUBLIC_KEY'] = '6LdQNVsrAAAAAMp8AX4H_J4CwZ5OXVixltEf4RaC'
 app.config['RECAPTCHA_PRIVATE_KEY'] = '6LdQNVsrAAAAAMOmgh-7Tp-KAwQUQ6iIbi8_pRvM'
 socketio = SocketIO(app, cors_allowed_origins="https://localhost", message_queue='redis://redis:6379', logger=True, engineio_logger=True)   
 
-# --- Configuration ---
-# Use environment variables for database connection
+# -- Database configuration
 DB_USER = os.getenv('MYSQL_USER', 'flaskuser')
 DB_PASSWORD = os.getenv('MYSQL_PASSWORD', 'password')
 DB_NAME = os.getenv('MYSQL_DATABASE', 'flaskdb')
 DB_HOST = os.getenv('MYSQL_HOST', 'mysql')  # 'mysql' is the service name in docker-compose
-
 app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'a_very_secret_key_for_dev') # Change in production!
+db = SQLAlchemy(app)
 
 # --- Initialize Extensions ---
+# -- CSRF --
 app.config['SECRET_KEY'] = "your-very-secret-key"  # Set a secret key for CSRF protection
 csrf = CSRFProtect(app)  # Initialize CSRF protection
 
-db = SQLAlchemy(app)
+
+# -- Flask-Login --
 login_manager = LoginManager(app)
 login_manager.init_app(app)
 login_manager.login_view = 'login' # Redirect to login if user not authenticated
 
+# -- Return container ID to templates --
 @app.context_processor
 def inject_container_id():
     return {"container_id": socket.gethostname()}
+
+
 # --- Flask-Login User Loader ---
 @login_manager.user_loader
 def load_user(user_id):
     """Loads a user from the database given their ID."""
     return db.session.get(User, int(user_id))
 
+
 # --- User Required Decorator ---
+
+# @login_required is already imported
 def user_required(f):
     """
     Decorator to restrict access to users who have ONLY the 'user' role.
@@ -72,9 +97,9 @@ def user_required(f):
         if user_roles == ['user']:
             return f(*args, **kwargs)
         else:
-            flash('Access denied. Only standard users can view this page.', 'danger')
             abort(403)
     return decorated_function
+
 # --- Admin Required Decorator ---
 def admin_required(f):
     """
@@ -126,7 +151,7 @@ class User(UserMixin, db.Model):
     last_active_at = db.Column(db.DateTime, nullable=True)
     failed_login_attempts = db.Column(db.Integer, default=0)
     lockout_until = db.Column(db.DateTime, nullable=True)
-
+    totp_secret = db.Column(db.String(32), nullable=True)
     # Relationships
     roles = db.relationship('Role', secondary=user_role_assignments,
                             backref=db.backref('users', lazy='dynamic'), lazy='dynamic')
@@ -408,6 +433,17 @@ class ErrorLog(db.Model):
         return f"<ErrorLog id={self.id} date={self.date} time={self.time} level={self.level} client_ip={self.client_ip}>"
     
 
+# -- Webauth credentials -- 
+class WebAuthnCredential(db.Model):
+    __tablename__ = 'webauthn_credentials'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    credential_id = db.Column(db.String(255), nullable=False, unique=True)
+    public_key = db.Column(db.Text, nullable=False)
+    sign_count = db.Column(db.Integer, nullable=False)
+    nickname = db.Column(db.String(100))
+    added_at = db.Column(db.DateTime, default=datetime.utcnow)
+    user = db.relationship('User', backref='webauthn_credentials')
 
 # --- Flask-Login User Loader ---
 @login_manager.user_loader
@@ -440,14 +476,32 @@ def permission_required(permission_name):
     return decorator
 
 
+# -- Fido2 WebAuthn Server Setup --
+def get_fido2_server():
+    from flask import request
+    rp_id = request.host.split(':')[0]
+    rp_name = "SimpleBook"
+    rp = PublicKeyCredentialRpEntity(rp_id, rp_name)
+    return Fido2Server(rp)
+def b64encode_all(obj):
+    import base64
+    if isinstance(obj, dict):
+        return {k: b64encode_all(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [b64encode_all(i) for i in obj]
+    elif isinstance(obj, bytes):
+        return base64.b64encode(obj).decode('utf-8')
+    else:
+        return obj
 # --- Routes ---
 # index = home
 
+
+# --- login,signup,home ---
 @app.route('/')
 @login_required
 def home():
     return render_template('UserHome.html')
-
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -466,34 +520,40 @@ def login():
                 # Log the lockout attempt
                 log_user_login_failure(user.user_id, details="Attempted login while locked out.")
                 return render_template('UserLockedOut.html', lockout_until=user.lockout_until.strftime("%Y-%m-%d %H:%M:%S"))
-
+            
+            
             # Log every login attempt (regardless of outcome)
             if user:
                 log_user_login_attempt(user.user_id, details="User attempted login.")
 
             if user and user.check_password(password):
-                user.failed_login_attempts = 0
-                user.lockout_until = None
-                db.session.commit()
-                login_user(user)
-                user.current_status = 'online'
-                user.last_active_at = datetime.utcnow()
-                db.session.commit()
-                # Log successful login
-                log_user_login_success(user.user_id, details="User logged in successfully.")
-                flash('Logged in successfully!', 'success')
-                next_page = request.args.get('next')
-                return redirect(next_page or url_for('home'))
+                if user.totp_secret:
+                    # Store user ID in session and redirect to 2FA page
+                    session['pending_2fa_user_id'] = user.user_id
+                    return redirect(url_for('verify_2fa'))
+                else:
+
+                    # --- Reset failed login attempts on successful login ---
+                    user.failed_login_attempts = 0
+                    user.lockout_until = None
+                    db.session.commit()
+                    login_user(user)
+                    user.current_status = 'online'
+                    user.last_active_at = datetime.utcnow()
+                    db.session.commit()
+                    # --- Log user login success ---
+                    log_user_login_success(user.user_id, details="User logged in successfully.")
+                    next_page = request.args.get('next')
+                    return redirect(next_page or url_for('home'))
+            
             else:
                 if user:
                     user.failed_login_attempts += 1
                     if user.failed_login_attempts >= 3:
                         user.lockout_until = datetime.utcnow() + timedelta(minutes=10)
-                        flash('Account locked due to too many failed login attempts. Try again in 10 minutes.', 'danger')
                         # Log lockout event
                         log_user_login_failure(user.user_id, details="User locked out after 3 failed attempts.")
                     else:
-                        flash('Invalid username or password.', 'danger')
                         # Log failed login
                         log_user_login_failure(user.user_id, details="User failed login attempt.")
                     db.session.commit()
@@ -502,7 +562,6 @@ def login():
                     flash('Invalid username or password.', 'danger')
     return render_template('UserLogin.html', form=form)
 
-
 @app.route('/logout')
 @login_required
 def logout():
@@ -510,55 +569,212 @@ def logout():
         # --- NEW: Update user status on logout ---
         current_user.current_status = 'offline'
         db.session.commit()
-        # --- END NEW ---
+    # --- NEW: Log user logout action ---
+    log_user_logout(current_user.user_id, details="User logged out.")
+    # --- END NEW ---
     logout_user()
     return redirect(url_for('login'))
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
-    form = SignupForm() # Make sure SignupForm is imported or defined
+    form = SignupForm()
     if form.validate_on_submit():
         username = form.username.data
-        phone_no = form.phone_no.data # Corrected to phone_number
+        phone_no = form.phone_no.data
         password = form.password.data
 
-        # 1. REMOVED EMAIL FROM THE EXISTING USER CHECK
         existing_user = User.query.filter(
             (User.username == username) |
-            (User.phone_number == phone_no) # Check phone_number as well
+            (User.phone_number == phone_no)
         ).first()
 
         if existing_user:
-            # 2. Updated flash message to reflect no email check
             return redirect(url_for('signup'))
-
-        # 3. Ensure 'email' is NOT passed to the User constructor
+                
         new_user = User(
             username=username,
-            phone_number=phone_no, # Pass phone_no here
+            phone_number=phone_no,
             password_hash=generate_password_hash(password),
             created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
+            updated_at=datetime.utcnow(),
+            
         )
         db.session.add(new_user)
         db.session.commit()
 
-        default_role = Role.query.filter_by(role_name='user').first() # Ensure 'user' role exists
+        default_role = Role.query.filter_by(role_name='user').first()
         if default_role:
             new_user.roles.append(default_role)
-            new_user.current_status = 'online' # Set default status to online
-            db.session.commit() # Commit again to save the role assignment
-            flash('Your account has been created successfully!', 'success')
+            new_user.current_status = 'online'
+            db.session.commit()
             login_user(new_user)
-            return redirect(url_for('home')) # Redirect to a dashboard or home page after login
+            return redirect(url_for('home'))
         else:
-            
-            return redirect(url_for('login')) # Redirect to login if role assignment fails
+            return redirect(url_for('login'))
 
     return render_template('UserSignup.html', form=form)
 
-# --- User Reporting ---
+@app.route('/verify_2fa', methods=['GET', 'POST'])
+def verify_2fa():
+    if 'pending_2fa_user_id' not in session:
+        flash('Session expired. Please log in again.', 'danger')
+        return redirect(url_for('login'))
 
+    user = User.query.get(session['pending_2fa_user_id'])
+    if not user or not user.totp_secret:
+        flash('Invalid session or 2FA not enabled.', 'danger')
+        return redirect(url_for('login'))
+
+    form = Enable2FAForm()  # Reuse your 2FA form
+    if form.validate_on_submit():
+        code = form.totp_code.data
+        totp = pyotp.TOTP(user.totp_secret)
+        if totp.verify(code):
+            login_user(user)
+            session.pop('pending_2fa_user_id', None)
+            flash('Logged in successfully!', 'success')
+            return redirect(url_for('home'))
+        else:
+            flash('Invalid 2FA code.', 'danger')
+    return render_template('UserVerify2FA.html', form=form)
+
+
+# -- User security management --
+
+
+@app.route('/account_security', methods=['GET', 'POST'])
+@user_required
+def account_security():
+    has_2fa = bool(current_user.totp_secret)
+    form = Disable2FAForm()
+    form1 = RemovePassKeyForm()
+    return render_template('UserAccountSecurity.html', has_2fa=has_2fa, form=form, form1=form1)
+
+@app.route('/enable_2fa', methods=['GET', 'POST'])
+@user_required
+def enable_2fa():
+    form = Enable2FAForm()
+    if current_user.totp_secret:
+        flash('2FA is already enabled.', 'info')
+        return redirect(url_for('account_security'))
+
+    # Only generate a new secret if not already in session
+    if 'pending_totp_secret' not in session:
+        session['pending_totp_secret'] = pyotp.random_base32()
+    totp_secret = session['pending_totp_secret']
+
+    otp_uri = pyotp.TOTP(totp_secret).provisioning_uri(
+        name=current_user.username, issuer_name="YourApp"
+    )
+    img = qrcode.make(otp_uri)
+    buf = BytesIO()
+    img.save(buf)
+    qr_b64 = b64encode(buf.getvalue()).decode('utf-8')
+
+    if request.method == 'POST':
+        code = request.form.get('totp_code')
+        totp = pyotp.TOTP(totp_secret)
+        if totp.verify(code):
+            current_user.totp_secret = totp_secret
+            db.session.commit()
+            session.pop('pending_totp_secret', None)  # Remove from session
+            flash('2FA enabled successfully!', 'success')
+            return redirect(url_for('account_security'))
+        else:
+            flash('Invalid code. Please try again.', 'danger')
+
+    return render_template('UserEnable2FA.html', qr_b64=qr_b64, secret=totp_secret, form=form)
+
+@app.route('/disable_2fa', methods=['POST'])
+@user_required
+def disable_2fa():
+    form = Disable2FAForm()
+    if form.validate_on_submit():
+        current_user.totp_secret = None
+        db.session.commit()
+        flash('2FA has been disabled.', 'info')
+        return redirect(url_for('account_security'))
+    # If not valid or GET (shouldn't happen for POST-only), re-render the page
+    return render_template('UserDisable2FA.html', form=form)
+
+# -- User passkey management --
+@app.route('/passkey/begin_register', methods=['POST'])
+@csrf.exempt
+@login_required
+def passkey_begin_register(): #stable!
+    try:
+        fido2_server = get_fido2_server()
+        user = {
+            "id": str(current_user.user_id).encode(),
+            "name": current_user.username,
+            "displayName": current_user.username,
+        }
+        exclude_credentials = [
+            {"id": bytes.fromhex(cred.credential_id), "type": "public-key"}
+            for cred in current_user.webauthn_credentials
+        ]
+        registration_data, state = fido2_server.register_begin(
+            user,
+            credentials=exclude_credentials,
+            user_verification="preferred"
+        )
+        session['fido2_state'] = state
+        encoded = b64encode_all(registration_data)
+        # --- FIX: Wrap in 'publicKey' ---
+        return jsonify({"publicKey": encoded})
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 400
+
+@app.route('/passkey/finish_register', methods=['POST'])
+@csrf.exempt
+@user_required
+def passkey_finish_register():
+    fido2_server = get_fido2_server()
+    data = request.get_json()
+    state = session.pop('fido2_state')
+    clientDataJSON_bytes = base64.b64decode(data['response']['clientDataJSON'])
+    attestationObject_bytes = base64.b64decode(data['response']['attestationObject'])
+
+    client_data = ClientData(clientDataJSON_bytes)
+    attestation_object = AttestationObject(attestationObject_bytes)
+
+    # register_complete returns auth_data (AuthenticatorData)
+    auth_data = fido2_server.register_complete(
+        state,
+        client_data,
+        attestation_object
+    )
+
+    # Extract credential_id and public_key from attestation_object.auth_data.credential_data
+    credential_id = attestation_object.auth_data.credential_data.credential_id
+    public_key = attestation_object.auth_data.credential_data.public_key
+    sign_count = 0 #debug
+    new_cred = WebAuthnCredential(
+        user_id=current_user.user_id,
+        credential_id=credential_id.hex(),
+        public_key=public_key,
+        sign_count=sign_count,
+        nickname=data.get('nickname', 'My Passkey')
+    )
+    db.session.add(new_cred)
+    db.session.commit()
+    return jsonify({"success": True})
+
+@app.route('/remove_passkey/<int:cred_id>', methods=['POST'])
+@user_required
+def remove_passkey(cred_id):
+    cred = WebAuthnCredential.query.filter_by(id=cred_id, user_id=current_user.user_id).first()
+    if cred:
+        db.session.delete(cred)
+        db.session.commit()
+
+    else:
+        pass
+    return redirect(url_for('account_security'))
+
+# --- User Reporting ---
 @app.route('/report_user', methods=['GET', 'POST'])
 @user_required # Ensure only logged-in users can access this page
 def report_user():
@@ -610,6 +826,8 @@ def report_confirmation():
     reported_username = request.args.get('reported_username', 'the user')
     return render_template('UserReportConfirmed.html', reported_username=reported_username)
 
+
+# -- User friends management --
 @app.route('/UserFriends', methods=['GET'])
 @user_required
 def user_friends():
@@ -647,8 +865,6 @@ def user_friends():
 
     form = FriendRequestForm()
     return render_template('userfriends.html', friends=friends_info, accepted_friends=accepted_friends, form=form)
-
-
 
 @app.route('/DiscoverFriends', methods=['GET'])
 @user_required
@@ -741,6 +957,8 @@ def search_users():
         for u in users
     ])
 
+
+# --- Notifications ---
 @app.route('/Notifications')
 @user_required
 def notifications():
@@ -782,6 +1000,8 @@ def notifications():
             admin_override_notifs=grouped['admin_override']
         )
 
+
+# -- Friends Management --
 @app.route('/send_friend_request/<int:target_user_id>', methods=['POST'])
 @user_required
 def send_friend_request(target_user_id):
@@ -857,7 +1077,7 @@ def cancel_friend_request(target_user_id):
     return redirect(url_for('discover_friends'))
 
 @app.route('/unfriend/<int:friendship_id>', methods=['POST'])
-@login_required
+@user_required
 def unfriend(friendship_id):
     friendship = Friendship.query.get_or_404(friendship_id)
     # Only allow if current user is part of the friendship and status is accepted
@@ -871,8 +1091,9 @@ def unfriend(friendship_id):
     return redirect(request.referrer or url_for('friends'))
 
 
+# --- Messaging ---
 @app.route('/messages', methods=['GET'])
-@login_required
+@user_required
 def messages():
     # Get all accepted friendships involving the current user
     friendships = Friendship.query.filter(
@@ -937,7 +1158,7 @@ def handle_send_message(data):
     }, to=chat_id)
 
 @app.route('/get_chat_id/<int:friend_id>')
-@login_required
+@user_required
 def get_chat_id(friend_id):
     # Try to find existing chat
     chat = (db.session.query(Chat)
@@ -959,7 +1180,7 @@ def get_chat_id(friend_id):
     return jsonify({'chat_id': chat.chat_id})
 
 @app.route('/chat_history/<int:friend_id>')
-@login_required
+@user_required
 def chat_history(friend_id):
     # Find the chat_id for these two users
     chat = Chat.query.join(ChatParticipant).filter(
@@ -973,6 +1194,7 @@ def chat_history(friend_id):
         'message_text': m.message_text,
         'sent_at': m.sent_at.strftime('%Y-%m-%d %H:%M:%S')
     } for m in messages])
+
 
 # --- Admin Routes ---
 @app.route('/users_dashboard')
@@ -1398,7 +1620,7 @@ def admin_user_actions():
     )
 
 
-
+# --- Error Handlers ---
 @app.errorhandler(404)
 def not_found_error(error):
     return render_template('404_error.html'), 404

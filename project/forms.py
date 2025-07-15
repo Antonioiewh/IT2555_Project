@@ -18,6 +18,7 @@ class LoginForm(FlaskForm):
     username = StringField('Name', validators=[DataRequired(), Length(min=2, max=50)])
     password = PasswordField('Password', validators=[DataRequired(), Length(min=6, max=50)])
     recaptcha = RecaptchaField()
+
     submit = SubmitField('Login')
 
 class FriendRequestForm(FlaskForm):
@@ -103,3 +104,20 @@ class UpdateReportStatusForm(FlaskForm):
     )
     admin_notes = TextAreaField('Admin Notes', render_kw={"class": "form-control"})
     submit = SubmitField('Submit', render_kw={"class": "btn btn-primary"})
+
+class Enable2FAForm(FlaskForm):
+    totp_code = StringField(
+        'Authenticator Code',
+        validators=[
+            DataRequired(message='Please enter the 6-digit code from your Authenticator app.'),
+            Length(min=6, max=6, message='Code must be 6 digits.')
+        ],
+        render_kw={"placeholder": "Enter 6-digit code", "class": "form-control"}
+    )
+    submit = SubmitField('Enable 2FA', render_kw={"class": "btn btn-success"})
+
+class Disable2FAForm(FlaskForm):
+    submit = SubmitField('Disable 2FA', render_kw={"class": "btn btn-danger"})
+
+class RemovePassKeyForm(FlaskForm):
+    submit = SubmitField('Disable Passkey', render_kw={"class": "btn btn-danger"})

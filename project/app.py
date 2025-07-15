@@ -1111,9 +1111,11 @@ def messages():
 
     # Get friend user objects
     friends = User.query.filter(User.user_id.in_(friend_ids)).all()
+
     my_chat_ids = [c.chat_id for c in ChatParticipant.query.filter_by(user_id=current_user.user_id).all()]
     # Build a mapping of friend_id -> chat_id
     friend_chat_ids = {}
+
     for friend in friends:
         chat = (db.session.query(Chat)
             .join(ChatParticipant, Chat.chat_id == ChatParticipant.chat_id)
@@ -1121,8 +1123,20 @@ def messages():
             .group_by(Chat.chat_id)
             .having(db.func.count(Chat.chat_id) == 2)
             .first())
-        if chat:
-            friend_chat_ids[friend.user_id] = chat.chat_id
+        if not chat:
+            #create it once if does not exist
+            chat = Chat()
+            db.session.add(chat)
+            db.session.commit()
+            db.session.add_all([
+                ChatParticipant(chat_id=chat.chat_id, user_id=current_user.user_id),
+                ChatParticipant(chat_id=chat.chat_id, user_id=friend.user_id)
+            ])
+            db.session.commit()
+
+        friend_chat_ids[friend.user_id] = chat.chat_id
+
+    my_chat_ids = list(friend_chat_ids.values())
 
     return render_template('messages.html', friends=friends, my_chat_ids=my_chat_ids, friend_chat_ids=friend_chat_ids)
 
@@ -1137,6 +1151,7 @@ def handle_join_chat(data):
 
 @socketio.on('send_message')
 def handle_send_message(data):
+    print('[SERVER] send_message got data:', data)
     if not current_user.is_authenticated:
        print("Anonymous user tried to send a message.")
        return  # Optionally emit an error event here
@@ -1154,8 +1169,8 @@ def handle_send_message(data):
         'chat_id': chat_id,
         'sender_id': sender_id,
         'message_text': encrypted_message,
-        'sent_at': msg.sent_at.strftime('%Y-%m-%d %H:%M:%S')
-    }, to=chat_id)
+        'sent_at': msg.sent_at.strftime('%H:%M')
+    }, to=str(chat_id))
 
 @app.route('/get_chat_id/<int:friend_id>')
 @user_required
@@ -1192,7 +1207,7 @@ def chat_history(friend_id):
     return jsonify([{
         'sender_id': m.sender_id,
         'message_text': m.message_text,
-        'sent_at': m.sent_at.strftime('%Y-%m-%d %H:%M:%S')
+        'sent_at': m.sent_at.strftime('%H:%M')
     } for m in messages])
 
 

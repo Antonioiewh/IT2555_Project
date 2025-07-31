@@ -1,0 +1,120 @@
+{% extends "UserBase.html" %}
+{% block title %}Admin - Manage Users{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h1 class="text-center mb-4">Admin Dashboard - Manage Users</h1>
+
+    <!-- Top Section: Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0 rounded">
+                <div class="card-body">
+                    <h6 class="card-title text-uppercase text-muted">Total Users</h6>
+                    <p class="card-text display-4 text-dark">{{ total_users }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0 rounded">
+                <div class="card-body">
+                    <h6 class="card-title text-uppercase text-muted">Online Users</h6>
+                    <p class="card-text display-4 text-success">{{ online_users }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0 rounded">
+                <div class="card-body">
+                    <h6 class="card-title text-uppercase text-muted">Offline Users</h6>
+                    <p class="card-text display-4 text-secondary">{{ offline_users }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="card shadow-sm border-0 mb-4 rounded">
+        <div class="card-body">
+            <form method="get" action="/users_dashboard">
+                <div class="input-group">
+                    <input type="text" name="search" class="form-control" placeholder="Search (e.g., id=1,username=admin,status=online)" value="{{ search_query }}">
+                    <button class="btn btn-primary" type="submit">Search</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Bottom Section: User Table -->
+    {% if users %}
+    <div class="table-responsive">
+        <table class="table table-hover table-striped align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th scope="col">
+                        <a href="?sort_by=id&order={{ 'asc' if sort_by != 'id' or order == 'desc' else 'desc' }}&search={{ search_query }}" class="text-white text-decoration-none">
+                            ID 
+                            <i class="bi {% if sort_by == 'id' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %}" style="font-size: 0.8rem; color: #0d6efd;"></i>
+                        </a>
+                    </th>
+                    <th scope="col">
+                        <a href="?sort_by=username&order={{ 'asc' if sort_by != 'username' or order == 'desc' else 'desc' }}&search={{ search_query }}" class="text-white text-decoration-none">
+                            Username 
+                            <i class="bi {% if sort_by == 'username' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %}" style="font-size: 0.8rem; color: #0d6efd;"></i>
+                        </a>
+                    </th>
+                    <th scope="col">Phone</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Roles</th>
+                    <th scope="col">
+                        <a href="?sort_by=registration_date&order={{ 'asc' if sort_by != 'registration_date' or order == 'desc' else 'desc' }}&search={{ search_query }}" class="text-white text-decoration-none">
+                            Registration Date 
+                            <i class="bi {% if sort_by == 'registration_date' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %}" style="font-size: 0.8rem; color: #0d6efd;"></i>
+                        </a>
+                    </th>
+                    <th scope="col">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <th scope="row">{{ user.user_id }}</th>
+                    <td>{{ user.username }}</td>
+                    <td>{{ user.phone_number if user.phone_number else 'N/A' }}</td>
+                    <td>
+                        <span class="badge 
+                            {% if user.current_status == 'online' %}bg-success
+                            {% elif user.current_status == 'offline' %}bg-secondary
+                            {% elif user.current_status == 'suspended' %}bg-warning
+                            {% elif user.current_status == 'terminated' %}bg-danger
+                            {% endif %}">
+                            {{ user.current_status }}
+                        </span>
+                    </td>
+                    <td>
+                        {% for role in user.roles %}
+                            <span class="badge bg-info text-dark me-1">{{ role.role_name }}</span>
+                        {% else %}
+                            <span class="badge bg-warning text-dark">No Roles</span>
+                        {% endfor %}
+                    </td>
+                    <td>{{ user.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>
+                        {% if 'admin' in user.roles|map(attribute='role_name') %}
+                            <button class="btn btn-sm btn-secondary" disabled>Manage User</button>
+                        {% else %}
+                            <a href="{{ url_for('manage_user', user_id=user.user_id) }}" class="btn btn-sm btn-primary">
+                                Manage User
+                            </a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-center text-muted">No users found in the database.</p>
+    {% endif %}
+</div>
+{% endblock %}

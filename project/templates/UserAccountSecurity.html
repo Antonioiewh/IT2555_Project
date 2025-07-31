@@ -1,0 +1,93 @@
+{% extends "UserBase.html" %}
+{% block title %}Account Security{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 500px; margin-top: 2rem;">
+    <h2 class="mb-4">Account Security</h2>
+    <!-- 2FA Section -->
+    {% if has_2fa %}
+        <div class="alert alert-success">2FA is enabled on your account.</div>
+        <form method="POST" action="{{ url_for('disable_2fa') }}">
+            {{ form.hidden_tag() }}
+            <button type="submit" class="btn btn-danger">Disable 2FA</button>
+        </form>
+    {% else %}
+        <div class="alert alert-warning">2FA is not enabled.</div>
+        <a href="{{ url_for('enable_2fa') }}" class="btn btn-primary">Enable 2FA with Authenticator App</a>
+    {% endif %}
+
+    <hr>
+    <!-- Passkey Section -->
+    <h4 class="mt-4">Passkeys (WebAuthn)</h4>
+    {% if current_user.webauthn_credentials %}
+        <ul class="list-group mb-3">
+            {% for cred in current_user.webauthn_credentials %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    {{ cred.nickname or "Unnamed Passkey" }}
+                    <form method="POST" action="{{ url_for('remove_passkey', cred_id=cred.id) }}" style="display:inline;">
+                        {{ form1.hidden_tag() }}
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+                    </form>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <div class="alert alert-info">No passkeys registered.</div>
+    {% endif %}
+    <button id="add-passkey-btn" class="btn btn-secondary">Add Passkey</button>
+</div>
+
+<script>
+document.getElementById('add-passkey-btn').onclick = async function() {
+    const res = await fetch('/passkey/begin_register', {method: 'POST'});
+    const options = await res.json();
+    console.log('options:', options);
+
+    // FIX: Use the correct path
+    const publicKey = options.publicKey.publicKey;
+
+    if (options.error) {
+        alert("Error: " + options.error);
+        return;
+    }
+    console.log('challenge:', publicKey.challenge);
+    console.log('user.id:', publicKey.user.id);
+    if (publicKey.excludeCredentials) {
+        publicKey.excludeCredentials.forEach(cred => console.log('excludeCredential.id:', cred.id));
+    }
+    function b64ToBuf(b64) {
+        return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    }
+    publicKey.challenge = b64ToBuf(publicKey.challenge);
+    publicKey.user.id = b64ToBuf(publicKey.user.id);
+    if (publicKey.excludeCredentials) {
+        publicKey.excludeCredentials = publicKey.excludeCredentials.map(cred => ({
+            ...cred,
+            id: b64ToBuf(cred.id)
+        }));
+    }
+    const cred = await navigator.credentials.create({publicKey});
+    const attestation = {
+        id: cred.id,
+        rawId: btoa(String.fromCharCode(...new Uint8Array(cred.rawId))),
+        type: cred.type,
+        response: {
+            clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(cred.response.clientDataJSON))),
+            attestationObject: btoa(String.fromCharCode(...new Uint8Array(cred.response.attestationObject))),
+        },
+        nickname: prompt("Give a name to this passkey (optional):", "My Passkey")
+    };
+    const finishRes = await fetch('/passkey/finish_register', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(attestation)
+    });
+    const finishData = await finishRes.json();
+    if (finishData.success) {
+        alert('Passkey added!');
+        location.reload();
+    } else {
+        alert('Failed to add passkey.');
+    }
+};
+</script>
+{% endblock %}

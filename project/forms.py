@@ -81,7 +81,15 @@ class UpdateUserStatusForm(FlaskForm):
         ],
         render_kw={"class": "form-select"}  # Optional: Add Bootstrap class for styling
     )
-    
+
+# --- create post form ---
+class CreatePostForm(FlaskForm):
+    title = StringField('Title', validators=[DataRequired()])
+    content = TextAreaField('Content', validators=[DataRequired()])
+    image = FileField('Upload Image', validators=[Optional()])
+    submit = SubmitField('Create Post')
+
+
     # CAPTCHA field for security
     recaptcha = RecaptchaField()
     

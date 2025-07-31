@@ -1288,6 +1288,63 @@ def internal_server_error(error):
     return render_template('500_error.html'), 500
 
 
+# --- create, edit, and delete routes for Creating Posts ---
+class Post(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(100), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    image_path = db.Column(db.String(200), nullable=True)
+
+@app.route('/create_post', methods=['GET', 'POST'])
+def create_post():
+    form = CreatePostForm()
+    if form.validate_on_submit():
+        title = form.title.data
+        content = form.content.data
+        image = form.image.data
+
+        image_path = None
+        if image:
+            image_path = os.path.join(app.config['UPLOAD_FOLDER'], image.filename)
+            image.save(image_path)
+
+        new_post = Post(title=title, content=content, image_path=image_path)
+        db.session.add(new_post)
+        db.session.commit()
+        flash('Post created successfully!', 'success')
+        return redirect(url_for('create_post'))
+
+    return render_template('create_post.html', form=form)
+
+@app.route('/edit_post/<int:post_id>', methods=['GET', 'POST'])
+def edit_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    form = CreatePostForm(obj=post)
+    if form.validate_on_submit():
+        post.title = form.title.data
+        post.content = form.content.data
+        image = form.image.data
+
+        if image:
+            image_path = os.path.join(app.config['UPLOAD_FOLDER'], image.filename)
+            image.save(image_path)
+            post.image_path = image_path
+
+        db.session.commit()
+        flash('Post updated successfully!', 'success')
+        return redirect(url_for('create_post'))
+
+    return render_template('edit_post.html', form=form, post=post)
+
+@app.route('/delete_post/<int:post_id>', methods=['POST'])
+def delete_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    db.session.delete(post)
+    db.session.commit()
+    flash('Post deleted successfully!', 'success')
+    return redirect(url_for('create_post'))
+
+
 
 
 # --- Run the App ---

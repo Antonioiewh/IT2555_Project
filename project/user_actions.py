@@ -26,6 +26,21 @@ def log_user_login_success(user_id, details=None):
     db.session.add(log)
     db.session.commit()
 
+
+
+def log_user_logout(user_id, details=None):
+    """Log a successful user logout."""
+    from app import db, UserLog  # Import inside the function to avoid circular import
+    log = UserLog(
+        user_id=user_id,
+        log_type='logout_success',
+        log_timestamp=datetime.utcnow(),
+        details=details
+    )
+    db.session.add(log)
+    db.session.commit()
+
+
 def log_user_login_failure(user_id, details=None):
     """Log a failed user login."""
     from app import db, UserLog  # Import inside the function to avoid circular import

@@ -16,20 +16,22 @@
                     <p><strong>Description:</strong> {{ report.description }}</p>
                     <p><strong>Submitted At:</strong> {{ report.submitted_at.strftime('%Y-%m-%d %H:%M') }}</p>
                     <form method="post" action="{{ url_for('manage_report', report_id=report.report_id) }}">
+                        {{ form.hidden_tag() }}
                         <div class="mb-3">
-                            <label for="status" class="form-label">Update Status</label>
-                            <select name="status" id="status" class="form-select">
-                                <option value="open" {% if report.status == 'open' %}selected{% endif %}>Open</option>
-                                <option value="in_review" {% if report.status == 'in_review' %}selected{% endif %}>In Review</option>
-                                <option value="action_taken" {% if report.status == 'action_taken' %}selected{% endif %}>Action Taken</option>
-                                <option value="rejected" {% if report.status == 'rejected' %}selected{% endif %}>Rejected</option>
-                            </select>
+                            {{ form.status.label(class="form-label") }}
+                            {{ form.status(class="form-select") }}
+                            {% for error in form.status.errors %}
+                                <div class="text-danger">{{ error }}</div>
+                            {% endfor %}
                         </div>
                         <div class="mb-3">
-                            <label for="admin_notes" class="form-label">Admin Notes</label>
-                            <textarea name="admin_notes" id="admin_notes" class="form-control">{{ report.admin_notes }}</textarea>
+                            {{ form.admin_notes.label(class="form-label") }}
+                            {{ form.admin_notes(class="form-control") }}
+                            {% for error in form.admin_notes.errors %}
+                                <div class="text-danger">{{ error }}</div>
+                            {% endfor %}
                         </div>
-                        <button type="submit" class="btn btn-primary">Submit</button>
+                        {{ form.submit(class="btn btn-primary") }}
                         <a href="{{ url_for('manage_reports') }}" class="btn btn-secondary">Cancel</a>
                     </form>
                 </div>

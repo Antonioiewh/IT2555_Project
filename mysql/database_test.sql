@@ -40,7 +40,8 @@ CREATE TABLE users (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     last_active_at DATETIME DEFAULT NULL,
     failed_login_attempts INT NOT NULL DEFAULT 0,
-    lockout_until DATETIME NULL
+    lockout_until DATETIME NULL,
+    totp_secret VARCHAR(32)
 );
 
 -- **************************************
@@ -247,6 +248,18 @@ CREATE TABLE ErrorLog (
     message TEXT NOT NULL,                      -- Log message (e.g., limiting requests, excess: 3.295 by zone "api_limit")
     client_ip VARCHAR(50) NOT NULL              -- Client IP address (e.g., 172.18.0.1)
 );
+
+CREATE TABLE webauthn_credentials (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    credential_id VARCHAR(255) NOT NULL UNIQUE,
+    public_key TEXT NOT NULL,
+    sign_count INT NOT NULL,
+    nickname VARCHAR(100),
+    added_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
 -- Enable foreign key checks again
 SET FOREIGN_KEY_CHECKS = 1;
 

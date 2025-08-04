@@ -214,7 +214,7 @@ class Role(db.Model):
                                   backref=db.backref('roles', lazy='dynamic'), lazy='dynamic')
 
     def __repr__(self):
-        return f"<Role {self.role_name}>"
+        return f"<Role {self.role_name}"
 
 class Permission(db.Model):
     __tablename__ = 'permissions'
@@ -1677,6 +1677,62 @@ def send_event_reminders():
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=send_event_reminders, trigger="interval", hours=24)
 scheduler.start()
+
+@app.route('/events_dashboard', methods=['GET', 'POST'])
+@user_required
+def events_dashboard():
+    # Events created by the user
+    created_events = Event.query.filter_by(user_id=current_user.user_id).order_by(Event.event_datetime.desc()).all()
+    # Events the user signed up for
+    signedup_event_ids = [signup.event_id for signup in EventSignup.query.filter_by(user_id=current_user.user_id).all()]
+    signedup_events = Event.query.filter(Event.event_id.in_(signedup_event_ids)).order_by(Event.event_datetime.desc()).all()
+    return render_template('events_dashboard.html', created_events=created_events, signedup_events=signedup_events)
+
+@app.route('/delete_event/<int:event_id>', methods=['POST'])
+@user_required
+def delete_event(event_id):
+    event = Event.query.get_or_404(event_id)
+    if event.user_id != current_user.user_id:
+        abort(403)
+    # Notify all users who signed up for this event
+    signups = EventSignup.query.filter_by(event_id=event_id).all()
+    for signup in signups:
+        notif = Notification(
+            user_id=signup.user_id,
+            type='event_cancelled',
+            source_id=event_id,
+            message=f"The event '{event.title}' you signed up for has been cancelled."
+        )
+        db.session.add(notif)
+        db.session.delete(signup)  # Optionally remove their signup record
+    db.session.delete(event)
+    db.session.commit()
+    flash('Event deleted and attendees notified.', 'success')
+    return redirect(url_for('events_dashboard'))
+
+@app.route('/leave_event/<int:event_id>', methods=['POST'])
+@user_required
+def leave_event(event_id):
+    signup = EventSignup.query.filter_by(event_id=event_id, user_id=current_user.user_id).first()
+    if not signup:
+        abort(404)
+    db.session.delete(signup)
+    db.session.commit()
+    flash('You have left the event.', 'success')
+    return redirect(url_for('events_dashboard'))
+
+@app.route('/event_signup/<int:event_id>', methods=['GET', 'POST'])
+@user_required
+def event_signup(event_id):
+    form = EventSignupForm()  # You need to create this form
+    event = Event.query.get_or_404(event_id)
+    if form.validate_on_submit():
+        signup = EventSignup(user_id=current_user.user_id, event_id=event_id)
+        db.session.add(signup)
+        db.session.commit()
+        flash('Signed up for event!', 'success')
+        return redirect(url_for('events_dashboard'))
+    return render_template('event_signup.html', event=event, form=form)
 
 # --- Run the App ---
 if __name__ == '__main__':

@@ -1,9 +1,12 @@
 from flask import Flask, render_template, redirect, url_for, flash, request, current_app, abort, jsonify,session
 from flask_wtf import CSRFProtect, FlaskForm
+from flask_wtf.file import FileAllowed, FileField
 from wtforms import StringField, PasswordField, SubmitField, TextAreaField, SelectField, ValidationError
+from wtforms.validators import DataRequired, Length, Email, EqualTo,ValidationError, Optional
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 from functools import wraps
 import os
 from datetime import datetime, timedelta # Keep datetime for datetime.utcnow()
@@ -12,7 +15,7 @@ import flask_socketio
 from flask_socketio import SocketIO, emit, join_room, leave_room, send
 
 # antonio: forms
-from forms import SignupForm,LoginForm,ReportForm,UpdateUserStatusForm,FriendRequestForm,UpdateReportStatusForm,Enable2FAForm,Disable2FAForm,RemovePassKeyForm
+from forms import SignupForm,LoginForm,ReportForm,UpdateUserStatusForm,FriendRequestForm,UpdateReportStatusForm,Enable2FAForm,Disable2FAForm,RemovePassKeyForm,CreatePostForm,EditProfileForm
 
 # No clue but seems important
 from sqlalchemy.dialects.mysql import ENUM
@@ -270,6 +273,16 @@ class PostImage(db.Model):
     def __repr__(self):
         return f"<PostImage {self.image_url[:20]}...>"
 
+class CreatePostForm(FlaskForm):
+    title = StringField('Title', validators=[DataRequired(), Length(max=300)])
+    post_content = TextAreaField('Content' , validators=[DataRequired(), Length(max=300)])
+    image = FileField('Image', validators=[FileAllowed(['jpg', 'png', 'jpeg'], 'Images only!')])
+    submit = SubmitField('Submit')
+
+class EditProfileForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired(), Length(min=2, max=50)])
+    profile_pic = FileField('Profile Picture', validators=[FileAllowed(['jpg', 'jpeg', 'png'], 'Images only!')])
+    submit = SubmitField('Save Changes')
 
 # **************************************
 # 5. Notifications
@@ -1651,61 +1664,110 @@ def internal_server_error(error):
 
 
 # --- create, edit, and delete routes for Creating Posts ---
-class Post(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(100), nullable=False)
-    content = db.Column(db.Text, nullable=False)
-    image_path = db.Column(db.String(200), nullable=True)
-
 @app.route('/create_post', methods=['GET', 'POST'])
+@login_required
 def create_post():
     form = CreatePostForm()
     if form.validate_on_submit():
-        title = form.title.data
-        content = form.content.data
-        image = form.image.data
-
-        image_path = None
-        if image:
-            image_path = os.path.join(app.config['UPLOAD_FOLDER'], image.filename)
-            image.save(image_path)
-
-        new_post = Post(title=title, content=content, image_path=image_path)
-        db.session.add(new_post)
+        post = Post(
+            user_id=current_user.user_id,
+            post_content=form.post_content.data,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        db.session.add(post)
         db.session.commit()
-        flash('Post created successfully!', 'success')
-        return redirect(url_for('create_post'))
 
-    return render_template('create_post.html', form=form)
+        image = form.image.data
+        if image:
+            filename = f"{post.post_id}_{image.filename}"
+            upload_folder = app.config.get('UPLOAD_FOLDER', 'static/uploads')
+            if not os.path.exists(upload_folder):
+                os.makedirs(upload_folder)
+            upload_path = os.path.join(upload_folder, filename)
+            image.save(upload_path)
+            # Store only the relative path from 'static/' for use with url_for('static', ...)
+            rel_path = os.path.relpath(upload_path, 'static').replace("\\", "/")
+            post_image = PostImage(post_id=post.post_id, image_url=rel_path)
+            db.session.add(post_image)
+            db.session.commit()
+
+
+        flash('Post created successfully!', 'success')
+        return redirect(url_for('account'))
+    #
+
+    # Show all posts by current user for demo
+    posts = Post.query.filter_by(user_id=current_user.user_id).order_by(Post.created_at.desc()).all()
+    return render_template('create_post.html', form=form, posts=posts)
+
 
 @app.route('/edit_post/<int:post_id>', methods=['GET', 'POST'])
 def edit_post(post_id):
     post = Post.query.get_or_404(post_id)
+    if post.user_id != current_user.user_id:
+        abort(403)
     form = CreatePostForm(obj=post)
     if form.validate_on_submit():
-        post.title = form.title.data
-        post.content = form.content.data
-        image = form.image.data
-
-        if image:
-            image_path = os.path.join(app.config['UPLOAD_FOLDER'], image.filename)
-            image.save(image_path)
-            post.image_path = image_path
-
+        post.post_content = form.post_content.data
+        post.updated_at = datetime.utcnow()
         db.session.commit()
         flash('Post updated successfully!', 'success')
         return redirect(url_for('create_post'))
+    return render_template('Edit_post.html', form=form, post=post)
 
-    return render_template('edit_post.html', form=form, post=post)
 
 @app.route('/delete_post/<int:post_id>', methods=['POST'])
 def delete_post(post_id):
     post = Post.query.get_or_404(post_id)
+    if post.user_id != current_user.user_id:
+        abort(403)
+    # Delete images
+    for img in post.images:
+        try:
+            os.remove(os.path.join('static', img.image_url))  # <-- Use full path
+        except Exception:
+            pass
+        db.session.delete(img)
     db.session.delete(post)
     db.session.commit()
     flash('Post deleted successfully!', 'success')
     return redirect(url_for('create_post'))
 
+
+# --- user account/profile page ---
+@app.route('/account', methods=['GET', 'POST'])
+@login_required
+def account():
+    user = current_user
+    posts = Post.query.filter_by(user_id=user.user_id).order_by(Post.created_at.desc()).all()
+    return render_template('UserProfilePage.html', user=user, posts=posts)
+
+@app.route('/edit_profile', methods=['GET', 'POST'])
+@login_required
+def edit_profile():
+    form = EditProfileForm(obj=current_user)
+    if form.validate_on_submit():
+        # Update username
+        if form.username.data and form.username.data != current_user.username:
+            # Optionally, check for username uniqueness here
+            current_user.username = form.username.data
+
+        # Update profile picture
+        if form.profile_pic.data:
+            filename = secure_filename(form.profile_pic.data.filename)
+            upload_folder = app.config.get('UPLOAD_FOLDER', 'static/uploads')
+            if not os.path.exists(upload_folder):
+                os.makedirs(upload_folder)
+            file_path = os.path.join(upload_folder, f"profile_{current_user.user_id}_{filename}")
+            form.profile_pic.data.save(file_path)
+            # Save relative path for use in templates
+            current_user.profile_pic_url = file_path.replace("\\", "/")
+
+        db.session.commit()
+        flash('Profile updated successfully!', 'success')
+        return redirect(url_for('account'))
+    return render_template('EditProfile.html', form=form, user=current_user)
 
 
 

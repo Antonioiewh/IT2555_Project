@@ -238,7 +238,7 @@
 
 
 const myChatIds = {{ my_chat_ids|tojson }};
-const socket = io('https://localhost', {
+const socket = io(window.location.origin, {
     withCredentials: true,
     transports: ['websocket', 'polling']
 });

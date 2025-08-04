@@ -1,0 +1,20 @@
+<!-- templates/create_event.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Create Event/Reminder</title>
+</head>
+<body>
+    <h1>Create Event or Reminder</h1>
+    <form method="POST">
+        {{ form.hidden_tag() }}
+        <p>{{ form.title.label }} {{ form.title(size=40) }}</p>
+        <p>{{ form.description.label }} {{ form.description(rows=3, cols=40) }}</p>
+        <p>{{ form.event_datetime.label }} {{ form.event_datetime() }}</p>
+        <p>{{ form.location.label }} {{ form.location(size=40) }}</p>
+        <p>{{ form.is_reminder() }} {{ form.is_reminder.label }}</p>
+        <p>{{ form.submit() }}</p>
+    </form>
+    <a href="{{ url_for('events_list') }}">Back to Events</a>
+</body>
+</html>

@@ -1,18 +1,31 @@
 {% extends "UserBase.html" %}
 {% block title %}Message{% endblock %}
 
+{% block head %}
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+{% endblock %}
+
 {% block content %}
 <style>
+ .main-messages-wrapper {
+  display: flex;
+  height: calc(100vh - 68.8px); 
+  min-height: 0;
+  max-width: none;
+  margin: 0;
+  box-sizing: border-box;
+ }
+
 .friends-sidebar {
   width: 300px;
-  background: #f8f9fa;
-  border-right: 1px solid #e0e0e0;
-  height: 80vh;
+  min-width: 220px;
+  max-width: 340px;
+  height: 100%;
   display: flex;
   flex-direction: column;
 }
 .friends-header {
-  padding: 1.2rem 1.5rem 0.5rem 1.5rem;
+  padding: 1.2rem 1.5rem 1rem 1.5rem;
   font-weight: 600;
   font-size: 1.2rem;
   color: #232946;
@@ -26,7 +39,7 @@
   flex: 1;
   overflow-y: auto;
   padding: 0;
-  margin: 0;
+  margin: 10px;
   list-style: none;
 }
 .friend-list li {
@@ -67,7 +80,10 @@
   display: flex;
   flex-direction: column;
   background: #f4f6fb;
-  height: 80vh;
+  height: 100%;
+  min-width: 0;
+  margin-left: 10px;
+  
 }
 
 .chat-topbar {
@@ -96,10 +112,16 @@
   padding: 1rem;
 }
 
+.btn-outline-primary {
+    color: #0d6efd;
+    border-color: #0d6efd;
+    border-radius: 20px;
+}
+
 .chat-box {
   width: 100%;
-  max-width: 600px;
-  background: #fff;
+  max-width: none;
+  background: url("{{ url_for('static', filename='imgs/Chat_background_img.png') }}") center center/cover no-repeat #fff;
   border-radius: 16px;
   box-shadow: 0 2px 16px rgba(44,62,80,0.07);
   padding: 1.5rem;
@@ -108,6 +130,7 @@
   flex-grow: 1;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .message-row {
@@ -139,8 +162,8 @@
 
 .chat-input-row {
   width: 100%;
-  max-width: 600px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 3px auto;
   display: flex;
   gap: 0.5rem;
 }
@@ -154,44 +177,133 @@
   border-radius: 20px;
   padding: 0.75rem 2rem;
 }
-</style>
+.message-more {
+  float: right;
+  margin: 0 10px;
+  color: #ebebeb;
+  font-size: large;
+}
 
-<div style="display: flex; height: 80vh;">
+
+.chat-modal {
+  display: none;
+  position: fixed;
+  top: 20%;
+  left: 50%;
+  transform: translate(-50%, 0);
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 32px rgba(44,62,80,0.15);
+  z-index: 1000;
+  min-width: 320px;
+  max-width: 90vw;
+}
+.chat-modal-content {
+  padding: 0;
+}
+.chat-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #eee;
+  background: #f7f7fa;
+  border-radius: 16px 16px 0 0;
+}
+.chat-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+.chat-modal-list {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 0.5rem 1.5rem 1.5rem 1.5rem;
+}
+.chat-modal-list .chat-modal-user {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.chat-modal-list .chat-modal-user:hover {
+  background: #e3e8f0;
+}
+.chat-modal-user-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-right: 1rem;
+  border: 2px solid #d1d5db;
+}
+.chat-modal-user-name {
+  font-weight: 500;
+  color: #232946;
+}
+
+</style>
+<div class="main-messages-wrapper">
   <!-- Friends Sidebar -->
   <div class="friends-sidebar shadow-sm">
     <div class="friends-header">
       <i class="bi bi-people-fill"></i> Your Friends
     </div>
-    <div class="friend-search">
+    <div class="friend-search" style="display: flex; align-items: center;">
       <input type="text" class="form-control" placeholder="Search friends..." id="friend-search-input">
+      <span id="add-chat-btn" style="cursor:pointer; font-size:1.5rem; margin-left:8px;">+</span>
     </div>
+    
+    <div id="create-chat-modal" class="chat-modal">
+      <div class="chat-modal-content">
+        <div class="chat-modal-header">
+          <span style="font-weight:600;">Add Chat</span>
+          <button class="chat-modal-close" onclick="closeChatModal()">×</button>
+        </div>
+        <div class="chat-modal-list" id="friend-picker-list">
+          <!-- Friends will be injected here -->
+        </div>
+      </div>
+    </div>
+    
+    
     <ul class="friend-list" id="friend-list">
       {% for friend in friends %}
-      <li class="friend-link" data-user-id="{{ friend.user_id }}" data-chat-id="{{ friend_chat_ids[friend.user_id] }}">
-        <img src="{{ friend.profile_pic_url or url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
-             alt="Profile" class="friend-profile">
-        <div class="friend-info">
-          <div class="friend-name">{{ friend.username }}</div>
-          {% if friend.current_status %}
-          <div class="friend-status">{{ friend.current_status }}</div>
-          {% endif %}
-        </div>
-      </li>
-      {% else %}
-      <li style="padding: 1.5rem; color: #888;">No friends found.</li>
+        <li class="friend-link"
+            data-user-id="{{ friend.user_id }}"
+            data-chat-id="{{ friend_chat_ids.get(friend.user_id, '') }}">
+          <img src="{{ friend.profile_pic_url or url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
+              alt="Profile" class="friend-profile">
+          <div class="friend-info">
+            <div class="friend-name">{{ friend.username }}</div>
+            {% if friend.is_online %}
+            <div class="friend-status">Online</div>
+            {% else %}
+            <div class="friend-status">Offline</div>
+            {% endif %}
+          </div>
+        </li>
       {% endfor %}
     </ul>
+    <!-- test code-->
+    {% for friend in friends %}
+    <li class="friend-link" data-user-id="{{ friend.user_id }}" data-chat-id="{{ friend_chat_ids[friend.user_id] }}">
+        {{ friend.username }} (chat_id: {{ friend_chat_ids[friend.user_id] }})
+    </li>
+    {% endfor %}
   </div>
 
   <!-- Main Chat Container -->
   <div class="chat-container">
-    <!-- TOP BAR with user profile + options -->
-    <div class="chat-topbar">
+
+    <div class="chat-topbar" id="chat-topbar" style="display:none;">
       <div class="current-chat-info">
-        <!-- Fallback placeholder -->
         <img id="current-friend-pic" src="{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
-             alt="Profile" class="friend-profile">
-        <span id="current-friend-name">Select a friend</span>
+            alt="Profile" class="friend-profile">
+        <span id="current-friend-name"></span>
       </div>
       <button class="btn btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#chatOptions">
         Options ▼
@@ -203,23 +315,23 @@
       <div class="options-inner">
         <div class="d-flex justify-content-between align-items-center mb-2">
           <h5>Chat Options</h5>
-          <button class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#chatOptions">▲ Close</button>
         </div>
         <div class="d-flex gap-3 mb-3">
-          <button class="btn btn-outline-secondary">Images 34</button>
-          <button class="btn btn-outline-secondary">Links 2</button>
+          <button class="btn btn-outline-secondary">Images </button>
+          <button class="btn btn-outline-secondary">Links </button>
           <input type="text" class="form-control w-50" placeholder="Find messages...">
         </div>
         <div class="d-flex gap-2">
           <button class="btn btn-secondary">Block User</button>
           <button class="btn btn-warning">Report User</button>
+          <button class="btn btn-danger">Clear Chat</button>
           <button class="btn btn-danger">Delete Chat</button>
         </div>
       </div>
     </div>
 
     <!-- Chat Placeholder / Box / Form -->
-    <div id="chat-placeholder" class="text-muted flex-grow-1 d-flex align-items-center justify-content-center">
+    <div id="chat-placeholder" style="display: flex; flex: 1; align-items: center; justify-content: center; color: #888;">
       Select a friend to start chatting.
     </div>
     <div id="chat-box" class="chat-box" style="display: none;"></div>
@@ -228,6 +340,13 @@
       <input id="chat-input" type="text" class="form-control" placeholder="Type a message..." autocomplete="off">
       <button id="chat-send-btn" class="btn btn-primary" type="submit">Send</button>
     </form>
+  </div>
+</div>
+<div id="confirm-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.3); z-index:2000; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:12px; padding:2rem; min-width:320px; max-width:90vw; box-shadow:0 4px 32px rgba(44,62,80,0.15); text-align:center;">
+    <div id="confirm-modal-message" style="margin-bottom:1.5rem; font-size:1.1rem;"></div>
+    <button id="confirm-modal-yes" class="btn btn-danger" style="margin-right:1rem;">Continue</button>
+    <button id="confirm-modal-no" class="btn btn-secondary">Cancel</button>
   </div>
 </div>
 
@@ -243,58 +362,19 @@ const socket = io('https://localhost', {
     transports: ['websocket', 'polling']
 });
 
+// CSRF token for fetch requests
+const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
 // Join all chat rooms on page load
 myChatIds.forEach(chatId => {
     socket.emit('join_chat', {chat_id: chatId});
 });
 
+
+
 let currentChatId = null;
 const secretKey = 'YOUR_SHARED_SECRET_KEY'; // Replace with a per-chat key for real E2EE
 const myUserId = {{ current_user.user_id }};
-
-
-function openChat(link) {
-    const friendUserId = link.dataset.userId;
-    const chatId = link.dataset.chatId; // Get chat_id directly from data attribute
-    currentChatId = chatId;              // Set immediately for live updates
-
-    const friendName = link.querySelector('.friend-name').textContent.trim();
-    const friendPic = link.querySelector('.friend-profile').src;
-    document.getElementById('current-friend-name').textContent = friendName;
-    document.getElementById('current-friend-pic').src = friendPic;
-
-    // Remove active class from all, add to this
-    document.querySelectorAll('.friend-link').forEach(l => l.classList.remove('active'));
-    link.classList.add('active');
-    // Remove unread badge
-    link.classList.remove('has-unread');
-
-    document.getElementById('chat-placeholder').style.display = 'none';
-    document.getElementById('chat-box').style.display = '';
-    document.getElementById('chat-form').style.display = '';
-
-    // Fetch chat history
-    fetch(`/chat_history/${friendUserId}`)
-    .then(response => response.json())
-    .then(messages => {
-      const chatBox = document.getElementById('chat-box');
-      chatBox.innerHTML = '';
-      messages.forEach(msg => {
-        let plaintext = CryptoJS.AES.decrypt(msg.message_text, secretKey).toString(CryptoJS.enc.Utf8);
-        appendMessage(msg.sender_id == myUserId ? 'me' : 'friend', plaintext, msg.sent_at);
-      });
-    });
-}
-
-
-// Friend click handler
-document.querySelectorAll('.friend-link').forEach(l => console.log(l.dataset.chatId))
-
-// Auto-select the first friend on page load
-window.addEventListener('DOMContentLoaded', function() {
-    const firstFriend = document.querySelector('.friend-link');
-    if (firstFriend) openChat(firstFriend);
-});
 
 // Send message handler
 document.getElementById('chat-form').addEventListener('submit', function(e) {
@@ -303,19 +383,25 @@ document.getElementById('chat-form').addEventListener('submit', function(e) {
   const input = document.getElementById('chat-input');
   let plaintext = input.value;
   console.log('[SUBMIT] Plaintext:', plaintext);
-  if (!plaintext || !currentChatId) return;
+  if (!currentChatId) return;
+
   let ciphertext = CryptoJS.AES.encrypt(plaintext, secretKey).toString();
   console.log('[SUBMIT] Emitting:', { chat_id: currentChatId, message: ciphertext });
   socket.emit('send_message', { chat_id: currentChatId, message: ciphertext });
+  console.log('Sending to chat:', currentChatId);
+
 
   const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
-  appendMessage('me', plaintext, now);
+  
   input.value = '';
 });
 
 // Receive message handler
 socket.on('receive_message', function(data) {
+    console.log('Sending to chat:', currentChatId);
+    console.log('Received for chat:', data.chat_id, 'Current:', currentChatId);
     console.log('[receive_message] Got data:', data);
+    
     if (data.chat_id != currentChatId) {
         // Optionally, show badge/highlight for this chat in the sidebar
         let friendLi = document.querySelector(`.friend-link[data-chat-id="${data.chat_id}"]`);
@@ -325,21 +411,143 @@ socket.on('receive_message', function(data) {
     console.log('LIVE MESSAGE:', data);
     let bytes = CryptoJS.AES.decrypt(data.message_text, secretKey);
     let plaintext = bytes.toString(CryptoJS.enc.Utf8);
-    appendMessage(data.sender_id == myUserId ? 'me' : 'friend', plaintext, data.sent_at);
+    appendMessage(data.sender_id == myUserId ? 'me' : 'friend', plaintext, data.sent_at, null, false);
 });
 
-function appendMessage(who, text, sentAt) {
+// messsage delete handler 
+socket.on('message_deleted', function(data) {
+  // Find the message bubble by message_id and update its text
+  let bubbles = document.querySelectorAll('.message-bubble');
+  bubbles.forEach(bubble => {
+    if (bubble.dataset.messageId == data.message_id) {
+      // Remove all children except time
+      let time = bubble.querySelector('.message-time');
+      bubble.innerHTML = 'Message deleted';
+      if (time) bubble.appendChild(time);
+    }
+  });
+});
+
+// search messages from options
+document.querySelector('.chat-options input[placeholder="Find messages..."]').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    const searchText = this.value.trim().toLowerCase();
+    const chatBox = document.getElementById('chat-box');
+    const bubbles = chatBox.querySelectorAll('.message-bubble');
+    let found = false;
+    bubbles.forEach(bubble => {
+      if (bubble.textContent.toLowerCase().includes(searchText) && !found) {
+        bubble.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        bubble.style.background = '#ffe066'; // highlight
+        setTimeout(() => bubble.style.background = '', 1500);
+        found = true;
+      }
+    });
+    if (!found) chatBox.scrollTop = chatBox.scrollHeight;
+  }
+});
+
+function showConfirm(message, onConfirm) {
+  const modal = document.getElementById('confirm-modal');
+  document.getElementById('confirm-modal-message').textContent = message;
+  modal.style.display = 'flex';
+
+  // Remove previous listeners
+  const yesBtn = document.getElementById('confirm-modal-yes');
+  const noBtn = document.getElementById('confirm-modal-no');
+  yesBtn.onclick = function() {
+    modal.style.display = 'none';
+    onConfirm();
+  };
+  noBtn.onclick = function() {
+    modal.style.display = 'none';
+  };
+}
+
+function updateBlockButton(isBlocked) {
+  const blockBtn = document.querySelector('.btn.btn-secondary');
+  if (isBlocked) {
+    blockBtn.textContent = 'Unblock User';
+    blockBtn.onclick = function() {
+      fetch(`/unblock_user/${currentChatId}`, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': csrfToken
+        }
+      })
+      .then(() => {
+        alert('User unblocked.');
+        blockBtn.textContent = 'Block User';
+        blockBtn.onclick = blockHandler;
+      });
+    };
+  } else {
+    blockBtn.textContent = 'Block User';
+    blockBtn.onclick = blockHandler;
+  }
+}
+
+function blockHandler() {
+  fetch(`/block_user/${currentChatId}`, {
+    method: 'POST',
+    headers: {
+      'X-CSRFToken': csrfToken
+    }
+  })
+    .then(() => {
+      alert('User blocked. You cannot send or receive messages in this chat.');
+      updateBlockButton(true);
+    });
+}
+
+function appendMessage(who, text, sentAt, messageId = null, isDeleted = false) {
   let chatBox = document.getElementById('chat-box');
   let row = document.createElement('div');
   row.className = 'message-row' + (who === 'me' ? ' me' : '');
+  row.style.position = 'relative';
+
 
   let bubble = document.createElement('div');
   bubble.className = 'message-bubble';
   bubble.textContent = text;
+  bubble.dataset.messageId = messageId;
 
   let time = document.createElement('div');
   time.className = 'message-time';
   time.textContent = sentAt;
+
+  // Add "more" button on hover
+  if (!isDeleted) {
+    let moreBtn = document.createElement('span');
+    moreBtn.textContent = '⋮';
+    moreBtn.className = 'message-more';
+    moreBtn.style.cssText = 'margin-left:8px; cursor:pointer; display:none; font-weight:bold;';
+    bubble.appendChild(moreBtn);
+
+    bubble.addEventListener('mouseenter', () => { moreBtn.style.display = 'inline'; });
+    bubble.addEventListener('mouseleave', () => { moreBtn.style.display = 'none'; });
+
+    moreBtn.onclick = function(e) {
+      e.stopPropagation();
+      let menu = document.createElement('div');
+      menu.className = 'message-menu';
+      menu.style.cssText = 'position:absolute; right:0; top:100%; background:#fff; border:1px solid #ccc; z-index:10; border-radius:20px;';
+      let delBtn = document.createElement('button');
+      delBtn.textContent = 'Delete Message';
+      delBtn.className = 'btn btn-danger btn-sm';
+      delBtn.style.cssText = 'width:100%; border-radius:20px; margin:0; align-items:left; justify-content:center;';
+      delBtn.onclick = function(ev) {
+        ev.stopPropagation();
+        if (messageId) {
+          socket.emit('delete_message', { message_id: messageId });
+        }
+        menu.remove();
+      };
+      menu.appendChild(delBtn);
+      bubble.appendChild(menu);
+      document.addEventListener('click', () => menu.remove(), { once: true });
+    };
+  }
 
   bubble.appendChild(time);
   row.appendChild(bubble);
@@ -354,6 +562,250 @@ document.getElementById('friend-search-input').addEventListener('input', functio
         const name = li.querySelector('.friend-name').textContent.toLowerCase();
         li.style.display = name.includes(filter) ? '' : 'none';
     });
+});
+
+function closeChatModal() {
+  document.getElementById('create-chat-modal').style.display = 'none';
+}
+
+document.getElementById('add-chat-btn').onclick = function() {
+    let friendsToReadd = {{ friends_to_readd|tojson }};
+    let pickerList = document.getElementById('friend-picker-list');
+    pickerList.innerHTML = '';
+    friendsToReadd.forEach(friend => {
+        let userDiv = document.createElement('div');
+        userDiv.className = 'chat-modal-user';
+        userDiv.onclick = function() {
+            fetch(`/create_chat/${friend.user_id}`, {
+              method: 'POST',
+              headers: {
+                  'X-CSRFToken': csrfToken
+              }
+            })
+              .then(res => res.json())
+              .then(data => {
+                  location.reload(); // Or dynamically add to sidebar
+              });
+        };
+        let img = document.createElement('img');
+        img.src = friend.profile_pic_url || '/static/imgs/blank-profile-picture-973460_1280.webp';
+        img.className = 'chat-modal-user-img';
+        let name = document.createElement('span');
+        name.className = 'chat-modal-user-name';
+        name.textContent = friend.username;
+        userDiv.appendChild(img);
+        userDiv.appendChild(name);
+        pickerList.appendChild(userDiv);
+    });
+    document.getElementById('create-chat-modal').style.display = 'block';
+};
+
+function updateFriendsToReaddModal() {
+  fetch('/api/friends_to_readd')
+    .then(res => res.json())
+    .then(friendsToReadd => {
+      let pickerList = document.getElementById('friend-picker-list');
+      pickerList.innerHTML = '';
+      friendsToReadd.forEach(friend => {
+        let userDiv = document.createElement('div');
+        userDiv.className = 'chat-modal-user';
+        userDiv.onclick = function() {
+          fetch(`/create_chat/${friend.user_id}`, {
+            method: 'POST',
+            headers: {
+              'X-CSRFToken': csrfToken
+            }
+          })
+            .then(res => res.json())
+            .then(data => {
+              location.reload();
+            });
+        };
+        let img = document.createElement('img');
+        img.src = friend.profile_pic_url || '/static/imgs/blank-profile-picture-973460_1280.webp';
+        img.className = 'chat-modal-user-img';
+        let name = document.createElement('span');
+        name.className = 'chat-modal-user-name';
+        name.textContent = friend.username;
+        userDiv.appendChild(img);
+        userDiv.appendChild(name);
+        pickerList.appendChild(userDiv);
+      });
+    });
+}
+
+function createChat(friendId) {
+  fetch(`/create_chat/${friendId}`, {
+    method: 'POST',
+    headers: {
+      'X-CSRFToken': csrfToken
+    }
+  })
+    .then(res => res.json())
+    .then(data => {
+      location.reload(); // Or dynamically add to sidebar
+    });
+}
+
+function showChat() {
+    document.getElementById('chat-placeholder').style.display = 'none';
+    document.getElementById('chat-box').style.display = '';
+    document.getElementById('chat-form').style.display = '';
+    const topbar = document.querySelector('.chat-topbar');
+    if (topbar) {
+        topbar.style.display = '';
+    }
+}
+
+function showPlaceholder() {
+    document.getElementById('chat-placeholder').style.display = 'flex';
+    document.getElementById('chat-box').style.display = 'none';
+    document.getElementById('chat-form').style.display = 'none';
+    const topbar = document.querySelector('.chat-topbar');
+    if (topbar) {
+        topbar.style.display = 'none';
+    }
+}
+
+console.log('openChat called');
+function openChat(link) {
+    showChat(); // Always hide placeholder and show chat when opening a chat
+
+    const friendUserId = link.dataset.userId;
+    const chatId = link.dataset.chatId; 
+
+    if (!chatId) {
+        // No chat exists, create one
+        fetch(`/create_chat/${friendUserId}`, {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': csrfToken
+          }
+        })
+          .then(res => res.json())
+          .then(data => {
+              link.dataset.chatId = data.chat_id;
+              currentChatId = data.chat_id;
+              // Optionally reload sidebar or page, or call openChat(link) again
+              openChat(link);
+          });
+        return;
+    }
+
+    currentChatId = chatId;
+    
+    console.log('Switching to chat:', currentChatId);
+
+    const friendName = link.querySelector('.friend-name').textContent.trim();
+    const friendPic = link.querySelector('.friend-profile').src;
+    const nameElem = document.getElementById('current-friend-name');
+    if (nameElem) nameElem.textContent = friendName;
+    const picElem = document.getElementById('current-friend-pic');
+    if (picElem) picElem.src = friendPic;
+
+    // Remove active class from all, add to this
+    document.querySelectorAll('.friend-link').forEach(l => l.classList.remove('active'));
+    link.classList.add('active');
+    link.classList.remove('has-unread');
+
+    // clear chat box before loading new messages
+    const chatBox = document.getElementById('chat-box');
+    chatBox.innerHTML = '';
+
+    
+    
+    // Fetch chat history
+    fetch(`/chat_history/${friendUserId}`)
+    .then(response => response.json())
+    .then(messages => {
+      messages.forEach(msg => {
+        let isDeleted = msg.is_deleted_by_sender || msg.is_deleted_by_receiver;
+        let text = isDeleted ? 'Message deleted' : CryptoJS.AES.decrypt(msg.message_text, secretKey).toString(CryptoJS.enc.Utf8);
+        appendMessage(msg.sender_id == myUserId ? 'me' : 'friend', text, msg.sent_at, msg.message_id, isDeleted);
+      });
+    });
+    
+    // block / unblock user
+    document.querySelector('.btn.btn-secondary').onclick = function() {
+      showConfirm('Are you sure you want to block this user?', function() {
+        fetch(`/block_user/${currentChatId}`, {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': csrfToken
+          }
+        })
+        .then(() => {
+          alert('User blocked. You cannot send or receive messages in this chat.');
+          updateBlockButton(true);
+        });
+      });
+    };
+    // clear chat 
+    document.querySelector('.btn.btn-danger:not(:last-child)').onclick = function() {
+      showConfirm('Are you sure you want to clear this chat? This will remove all messages for you.', function() {
+        fetch(`/clear_chat/${currentChatId}`, {
+           method: 'POST', 
+           headers: {
+            'X-CSRFToken': csrfToken
+           }
+          })
+          .then(() => {
+            document.getElementById('chat-box').innerHTML = '';
+          });
+      });
+    };
+
+
+    // delete chat
+    document.querySelector('.btn.btn-danger:last-child').onclick = function() {
+      showConfirm('Are you sure you want to delete this chat? You can re-add this user later.', function() {
+        fetch(`/delete_chat/${currentChatId}`, { 
+          method: 'POST', 
+          headers: {
+            'X-CSRFToken': csrfToken
+          }
+        })
+          .then(() => {
+            document.querySelector(`.friend-link[data-chat-id="${currentChatId}"]`).remove();
+            showPlaceholder();
+            updateFriendsToReaddModal();
+          });
+      });
+    };
+    // block user 
+    fetch(`/is_blocked/${currentChatId}`)
+      .then(response => response.json())
+      .then(data => {
+        updateBlockButton(data.is_blocked);
+      });
+}
+
+window.addEventListener('DOMContentLoaded', function() {
+    // Attach only one click handler to each friend-link
+    document.querySelectorAll('.friend-link').forEach(link => {
+        link.addEventListener('click', function() {
+            openChat(this);
+        });
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    const friendId = params.get('friend_id');
+    let friendToOpen = null;
+    if (friendId) {
+        friendToOpen = document.querySelector(`.friend-link[data-user-id="${friendId}"]`);
+    }
+    if (friendToOpen) {
+        openChat(friendToOpen);
+    } else {
+      // On page load: show placeholder if no friends, else open first chat
+        const firstFriend = document.querySelector('.friend-link');
+        if (firstFriend) {
+            openChat(firstFriend);
+        } else {
+            showPlaceholder();
+        }
+    }
+    
 });
 </script>
 {% endblock %}

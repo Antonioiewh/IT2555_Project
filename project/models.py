@@ -44,7 +44,11 @@ class User(UserMixin, db.Model):
     # Relationships
     roles = db.relationship('Role', secondary=user_role_assignments,
                             backref=db.backref('users', lazy='dynamic'), lazy='dynamic')
-    events = db.relationship('Event', backref='user', lazy=True)
+    
+    # FIX: Remove the conflicting 'events' relationship and keep only 'created_events'
+    # events = db.relationship('Event', backref='user', lazy=True)  # REMOVE THIS LINE
+    created_events = db.relationship('Event', backref='creator', lazy=True, overlaps="user")
+    
     posts = db.relationship('Post', backref='user', lazy=True)
     notifications = db.relationship('Notification', backref='user', lazy=True)
     submitted_reports = db.relationship(
@@ -61,6 +65,7 @@ class User(UserMixin, db.Model):
     )
     chat_participants = db.relationship('ChatParticipant', backref='user', lazy=True)
     messages_sent = db.relationship('Message', foreign_keys='Message.sender_id', backref='sender', lazy=True)
+    webauthn_credentials = db.relationship('WebAuthnCredential', lazy=True, overlaps="user")
     admin_actions_performed = db.relationship('AdminAction', foreign_keys='AdminAction.admin_user_id', backref='admin_user', lazy=True)
     admin_actions_targeted = db.relationship('AdminAction', foreign_keys='AdminAction.target_user_id', backref='target_user', lazy=True)
     user_logs = db.relationship('UserLog', backref='user', lazy=True)
@@ -113,10 +118,29 @@ class Permission(db.Model):
 # **************************************
 # 3. Events/Reminders
 # **************************************
+
+class EventParticipant(db.Model):
+    __tablename__ = 'event_participants'
+    
+    participation_id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('events.event_id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    joined_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    status = db.Column(ENUM('joined', 'left', 'cancelled', name='participation_status'), nullable=False, default='joined')
+    
+    __table_args__ = (db.UniqueConstraint('event_id', 'user_id', name='_event_user_uc'),)
+    
+    # Relationships
+    event = db.relationship('Event', backref=db.backref('participants', lazy='dynamic'))
+    participant = db.relationship('User', backref=db.backref('event_participations', lazy='dynamic'))
+    
+    def __repr__(self):
+        return f"<EventParticipant Event:{self.event_id} User:{self.user_id}>"
+
 class Event(db.Model):
     __tablename__ = 'events'
     event_id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)  # Event creator
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=True)
     event_datetime = db.Column(db.DateTime, nullable=False)
@@ -125,6 +149,9 @@ class Event(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # FIX: Remove the conflicting 'creator' relationship since it's defined in User model
+    # creator = db.relationship('User', backref=db.backref('created_events', lazy='dynamic'))  # REMOVE THIS LINE
+    
     def __repr__(self):
         return f"<Event {self.title}>"
 
@@ -308,11 +335,17 @@ class ErrorLog(db.Model):
 # **************************************
 class WebAuthnCredential(db.Model):
     __tablename__ = 'webauthn_credentials'
+    
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
-    credential_id = db.Column(db.String(255), nullable=False, unique=True)
-    public_key = db.Column(db.Text, nullable=False)
-    sign_count = db.Column(db.Integer, nullable=False)
-    nickname = db.Column(db.String(100))
-    added_at = db.Column(db.DateTime, default=datetime.utcnow)
-    user = db.relationship('User', backref='webauthn_credentials')
+    credential_id = db.Column(db.String(255), unique=True, nullable=False)
+    public_key = db.Column(db.LargeBinary, nullable=False)
+    sign_count = db.Column(db.Integer, default=0)
+    nickname = db.Column(db.String(100), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    
+    # Define the relationship here (not in User model with backref)
+    user = db.relationship('User', overlaps="webauthn_credentials")
+    
+    def __repr__(self):
+        return f"<WebAuthnCredential {self.credential_id[:10]}...>"

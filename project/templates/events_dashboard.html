@@ -1,85 +1,349 @@
 {% extends "UserBase.html" %}
 {% block title %}My Events Dashboard{% endblock %}
+
 {% block content %}
 <div class="container mt-4">
-    <h2>Events You Created</h2>
-    {% if created_events %}
-        <ul class="list-group mb-4">
-            {% for event in created_events %}
-            <li class="list-group-item d-flex justify-content-between align-items-center">
-                <span>
-                    <strong>{{ event.title }}</strong> - {{ event.event_datetime.strftime('%Y-%m-%d %H:%M') }}
-                </span>
-                <!-- Trigger modal -->
-                <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteEventModal-{{ event.event_id }}">
-                    Delete
-                </button>
-                <!-- Modal -->
-                <div class="modal fade" id="deleteEventModal-{{ event.event_id }}" tabindex="-1" aria-labelledby="deleteEventModalLabel-{{ event.event_id }}" aria-hidden="true">
-                    <div class="modal-dialog modal-dialog-centered">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title" id="deleteEventModalLabel-{{ event.event_id }}">Confirm Delete</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                            </div>
-                            <div class="modal-body">
-                                Are you sure you want to delete <strong>{{ event.title }}</strong>?
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                <form method="POST" action="{{ url_for('delete_event', event_id=event.event_id) }}" style="display:inline;">
-                                    {{ csrf_token() }}
-                                    <button type="submit" class="btn btn-danger">Delete</button>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
-            </li>
             {% endfor %}
-        </ul>
-    {% else %}
-        <p>No events created.</p>
-    {% endif %}
+        {% endif %}
+    {% endwith %}
 
-    <h2>Events You Signed Up For</h2>
-    {% if signedup_events %}
-        <ul class="list-group">
-            {% for event in signedup_events %}
-            <li class="list-group-item d-flex justify-content-between align-items-center">
-                <span>
-                    <strong>{{ event.title }}</strong> - {{ event.event_datetime.strftime('%Y-%m-%d %H:%M') }}
-                </span>
-                <!-- Trigger modal -->
-                <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#leaveEventModal-{{ event.event_id }}">
-                    Leave
-                </button>
-                <!-- Modal -->
-                <div class="modal fade" id="leaveEventModal-{{ event.event_id }}" tabindex="-1" aria-labelledby="leaveEventModalLabel-{{ event.event_id }}" aria-hidden="true">
-                    <div class="modal-dialog modal-dialog-centered">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title" id="leaveEventModalLabel-{{ event.event_id }}">Confirm Leave</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                            </div>
-                            <div class="modal-body">
-                                Are you sure you want to leave <strong>{{ event.title }}</strong>?
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                <form method="POST" action="{{ url_for('leave_event', event_id=event.event_id) }}" style="display:inline;">
-                                    {{ csrf_token() }}
-                                    <button type="submit" class="btn btn-warning">Leave</button>
-                                </form>
+    <!-- Header Section -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-calendar-week"></i> My Events Dashboard</h1>
+        <div>
+            <a href="{{ url_for('discover_events') }}" class="btn btn-outline-primary me-2">
+                <i class="bi bi-search"></i> Discover Events
+            </a>
+            <a href="{{ url_for('create_event') }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Create Event
+            </a>
+        </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card border-primary">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-primary">
+                        <i class="bi bi-calendar-plus"></i> Events Created
+                    </h5>
+                    <h2 class="text-primary">{{ created_events|length }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card border-success">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-success">
+                        <i class="bi bi-calendar-check"></i> Events Attending
+                    </h5>
+                    <h2 class="text-success">{{ participated_events|length }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Events You Created -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0">
+                <i class="bi bi-person-plus"></i> Events You Created
+                <span class="badge bg-light text-primary ms-2">{{ created_events|length }}</span>
+            </h4>
+        </div>
+        <div class="card-body">
+            {% if created_events %}
+                <div class="list-group list-group-flush">
+                    {% for event in created_events %}
+                        {% set participant_count = event.participants.filter_by(status='joined').count() %}
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <h6 class="mb-0">{{ event.title }}</h6>
+                                        {% if event.is_reminder %}
+                                            <span class="badge bg-info">Personal Reminder</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ participant_count }} attendee{{ 's' if participant_count != 1 else '' }}</span>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    {% if event.description %}
+                                        <p class="mb-2 text-muted">
+                                            {{ event.description[:150] }}{% if event.description|length > 150 %}...{% endif %}
+                                        </p>
+                                    {% endif %}
+                                    
+                                    <div class="mb-2">
+                                        <small class="text-muted">
+                                            <i class="bi bi-calendar-date"></i> 
+                                            {{ event.event_datetime.strftime('%A, %B %d, %Y at %I:%M %p') }}
+                                            {% if event.location %}
+                                                <br><i class="bi bi-geo-alt"></i> {{ event.location }}
+                                            {% endif %}
+                                        </small>
+                                    </div>
+                                    
+                                    <div class="mb-2">
+                                        <span class="badge bg-primary">
+                                            <i class="bi bi-calendar-event"></i> Event
+                                        </span>
+                                    </div>
+                                </div>
+                                
+                                <div class="ms-3">
+                                    {% if not event.is_reminder and participant_count > 0 %}
+                                        <button type="button" class="btn btn-outline-info btn-sm me-2" data-bs-toggle="modal" data-bs-target="#viewParticipantsModal{{ event.event_id }}">
+                                            <i class="bi bi-people"></i> View Attendees
+                                        </button>
+                                    {% endif %}
+                                    <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteModal{{ event.event_id }}">
+                                        <i class="bi bi-trash"></i> Delete
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
+
+                        <!-- View Participants Modal -->
+                        {% if not event.is_reminder %}
+                            <div class="modal fade" id="viewParticipantsModal{{ event.event_id }}" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">
+                                                <i class="bi bi-people"></i> Attendees for "{{ event.title|e }}"
+                                            </h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            {% set participants = event.participants.filter_by(status='joined').all() %}
+                                            {% if participants %}
+                                                <div class="list-group">
+                                                    {% for participant in participants %}
+                                                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                                                            <div>
+                                                                <strong>{{ participant.participant.username }}</strong>
+                                                                <br>
+                                                                <small class="text-muted">
+                                                                    Joined {{ participant.joined_at.strftime('%B %d, %Y at %I:%M %p') }}
+                                                                </small>
+                                                            </div>
+                                                            <span class="badge bg-success">
+                                                                <i class="bi bi-check-circle"></i> Confirmed
+                                                            </span>
+                                                        </div>
+                                                    {% endfor %}
+                                                </div>
+                                            {% else %}
+                                                <p class="text-muted text-center">No one has signed up yet.</p>
+                                            {% endif %}
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endif %}
+
+                        <!-- Delete Confirmation Modal - FIXED -->
+                        <div class="modal fade" id="deleteModal{{ event.event_id }}" tabindex="-1" aria-labelledby="deleteModalLabel{{ event.event_id }}" aria-hidden="true">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title" id="deleteModalLabel{{ event.event_id }}">
+                                            <i class="bi bi-exclamation-triangle text-warning"></i> Confirm Deletion
+                                        </h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <p>Are you sure you want to delete "<strong>{{ event.title|e }}</strong>"?</p>
+                                        {% if not event.is_reminder %}
+                                            {% if participant_count > 0 %}
+                                                <div class="alert alert-warning">
+                                                    <i class="bi bi-exclamation-triangle"></i>
+                                                    <strong>Warning:</strong> This will notify all {{ participant_count }} attendee{{ 's' if participant_count != 1 else '' }} that the event has been cancelled.
+                                                </div>
+                                            {% endif %}
+                                        {% endif %}
+                                        <p class="text-muted">This action cannot be undone.</p>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <form method="POST" action="{{ url_for('delete_event', event_id=event.event_id) }}" class="d-inline">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                            <button type="submit" class="btn btn-danger">
+                                                <i class="bi bi-trash"></i> Delete Event
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
                 </div>
-            </li>
-            {% endfor %}
-        </ul>
-    {% else %}
-        <p>No events signed up for.</p>
-    {% endif %}
+            {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-calendar-x" style="font-size: 3rem; color: #6c757d;"></i>
+                    <h5 class="mt-3 text-muted">No Events Created Yet</h5>
+                    <p class="text-muted">Start by creating your first event.</p>
+                    <a href="{{ url_for('create_event') }}" class="btn btn-primary">
+                        <i class="bi bi-plus-circle"></i> Create Your First Event
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Events You're Participating In -->
+    <div class="card">
+        <div class="card-header bg-success text-white">
+            <h4 class="mb-0">
+                <i class="bi bi-calendar-check"></i> Events You're Attending
+                <span class="badge bg-light text-success ms-2">{{ participated_events|length }}</span>
+            </h4>
+        </div>
+        <div class="card-body">
+            {% if participated_events %}
+                <div class="list-group list-group-flush">
+                    {% for event in participated_events %}
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <h6 class="mb-0">{{ event.title }}</h6>
+                                        {% set total_attendees = event.participants.filter_by(status='joined').count() %}
+                                        <span class="badge bg-info">{{ total_attendees }} attendee{{ 's' if total_attendees != 1 else '' }}</span>
+                                    </div>
+                                    
+                                    {% if event.description %}
+                                        <p class="mb-2 text-muted">
+                                            {{ event.description[:150] }}{% if event.description|length > 150 %}...{% endif %}
+                                        </p>
+                                    {% endif %}
+                                    
+                                    <div class="mb-2">
+                                        <small class="text-muted">
+                                            <i class="bi bi-calendar-date"></i> 
+                                            {{ event.event_datetime.strftime('%A, %B %d, %Y at %I:%M %p') }}
+                                            {% if event.location %}
+                                                <br><i class="bi bi-geo-alt"></i> {{ event.location }}
+                                            {% endif %}
+                                            <br><i class="bi bi-person"></i> Created by {{ event.creator.username }}
+                                        </small>
+                                    </div>
+                                    
+                                    <div class="mb-2">
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-calendar-check"></i> Joined
+                                        </span>
+                                    </div>
+                                </div>
+                                
+                                <div class="ms-3">
+                                    <button type="button" class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#leaveModal{{ event.event_id }}">
+                                        <i class="bi bi-box-arrow-right"></i> Leave Event
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Leave Confirmation Modal -->
+                        <div class="modal fade" id="leaveModal{{ event.event_id }}" tabindex="-1" aria-labelledby="leaveModalLabel{{ event.event_id }}" aria-hidden="true">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title" id="leaveModalLabel{{ event.event_id }}">
+                                            <i class="bi bi-question-circle text-warning"></i> Confirm Leave
+                                        </h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <p>Are you sure you want to leave "<strong>{{ event.title|e }}</strong>"?</p>
+                                        <p class="text-muted">You can always sign up again later if the event is still available.</p>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <form method="POST" action="{{ url_for('leave_event', event_id=event.event_id) }}" class="d-inline">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                            <button type="submit" class="btn btn-warning">
+                                                <i class="bi bi-box-arrow-right"></i> Leave Event
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-calendar-x" style="font-size: 3rem; color: #6c757d;"></i>
+                    <h5 class="mt-3 text-muted">No Events Joined Yet</h5>
+                    <p class="text-muted">Discover and join events created by other users.</p>
+                    <a href="{{ url_for('discover_events') }}" class="btn btn-success">
+                        <i class="bi bi-search"></i> Discover Events
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
 </div>
+
+<!-- Custom Styling -->
+<style>
+.card {
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: box-shadow 0.2s ease;
+}
+
+.card:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.list-group-item {
+    border-left: none;
+    border-right: none;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.list-group-item:last-child {
+    border-bottom: none;
+}
+
+.badge {
+    font-size: 0.75em;
+}
+
+.modal-header {
+    border-bottom: 2px solid #f8f9fa;
+}
+
+.btn-outline-info:hover {
+    color: #fff;
+}
+</style>
+
+<script>
+// Auto-dismiss alerts after 5 seconds
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+        var alerts = document.querySelectorAll('.alert');
+        alerts.forEach(function(alert) {
+            var bsAlert = new bootstrap.Alert(alert);
+            bsAlert.close();
+        });
+    }, 5000);
+});
+</script>
 {% endblock %}

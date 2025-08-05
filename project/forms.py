@@ -148,9 +148,11 @@ class EventForm(FlaskForm):
             Length(max=255, message="Location cannot exceed 255 characters.")
         ]
     )
-    is_reminder = BooleanField('Is this a reminder?')
-    recaptcha = RecaptchaField()  # Add CAPTCHA for security
-    submit = SubmitField('Create')
-
+    # REMOVED: is_reminder = BooleanField('Is this a reminder?')
+    
+    # OPTIONAL: Remove CAPTCHA for testing, add back later
+    # recaptcha = RecaptchaField()
+    
+    submit = SubmitField('Create Event')  # Changed from 'Create' to 'Create Event'
 
     #hausas

@@ -1,0 +1,341 @@
+{% extends "UserBase.html" %}
+{% block title %}Discover Events{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- Header Section -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-search"></i> Discover Events</h1>
+        <div>
+            <a href="{{ url_for('events_dashboard') }}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> My Events
+            </a>
+            <a href="{{ url_for('create_event') }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Create Event
+            </a>
+        </div>
+    </div>
+
+    <!-- Search and Filter Section -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-8">
+                    <input type="text" id="search-bar" class="form-control form-control-lg" placeholder="Search events by title, description, or location...">
+                </div>
+                <div class="col-md-4">
+                    <select id="sort-filter" class="form-select form-select-lg">
+                        <option value="date_asc">Date (Earliest First)</option>
+                        <option value="date_desc">Date (Latest First)</option>
+                        <option value="title_asc">Title (A-Z)</option>
+                        <option value="title_desc">Title (Z-A)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Events Grid -->
+    {% if events %}
+        <div id="events-grid" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+            {% for event in events %}
+                <div class="col event-card" data-title="{{ event.title|lower }}" data-description="{{ event.description|lower if event.description else '' }}" data-location="{{ event.location|lower if event.location else '' }}" data-date="{{ event.event_datetime.isoformat() }}">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-calendar-event"></i> {{ event.title }}
+                            </h5>
+                        </div>
+                        <div class="card-body d-flex flex-column">
+                            <!-- Event Details -->
+                            <div class="mb-3">
+                                <small class="text-muted">
+                                    <i class="bi bi-calendar-date"></i> 
+                                    {{ event.event_datetime.strftime('%A, %B %d, %Y') }}
+                                    <br>
+                                    <i class="bi bi-clock"></i> 
+                                    {{ event.event_datetime.strftime('%I:%M %p') }}
+                                    {% if event.location %}
+                                        <br><i class="bi bi-geo-alt"></i> {{ event.location }}
+                                    {% endif %}
+                                    <br><i class="bi bi-person"></i> Created by {{ event.creator.username }}
+                                </small>
+                            </div>
+
+                            <!-- Description -->
+                            {% if event.description %}
+                                <p class="card-text text-muted mb-3">
+                                    {{ event.description[:100] }}{% if event.description|length > 100 %}...{% endif %}
+                                </p>
+                            {% endif %}
+
+                            <!-- Attendees Count -->
+                            {% set attendee_count = event.participants.filter_by(status='joined').count() %}
+                            <div class="mb-3">
+                                <span class="badge bg-info">
+                                    <i class="bi bi-people"></i> {{ attendee_count }} attendee{{ 's' if attendee_count != 1 else '' }}
+                                </span>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="mt-auto">
+                                {% if event.event_id in participated_event_ids %}
+                                    <!-- Already Joined -->
+                                    <button type="button" class="btn btn-success w-100 mb-2" disabled>
+                                        <i class="bi bi-check-circle"></i> Joined
+                                    </button>
+                                    <button type="button" class="btn btn-outline-warning w-100" data-bs-toggle="modal" data-bs-target="#leaveModal{{ event.event_id }}">
+                                        <i class="bi bi-box-arrow-right"></i> Leave Event
+                                    </button>
+                                {% else %}
+                                    <!-- Can Join -->
+                                    <button type="button" class="btn btn-outline-info w-100 mb-2" data-bs-toggle="modal" data-bs-target="#viewDetailsModal{{ event.event_id }}">
+                                        <i class="bi bi-eye"></i> View Details
+                                    </button>
+                                    <form method="POST" action="{{ url_for('join_event', event_id=event.event_id) }}" class="w-100">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn btn-primary w-100">
+                                            <i class="bi bi-calendar-plus"></i> Join Event
+                                        </button>
+                                    </form>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Event Details Modal -->
+                <div class="modal fade" id="viewDetailsModal{{ event.event_id }}" tabindex="-1" aria-labelledby="viewDetailsModalLabel{{ event.event_id }}" aria-hidden="true">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="viewDetailsModalLabel{{ event.event_id }}">
+                                    <i class="bi bi-calendar-event"></i> {{ event.title }}
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6><i class="bi bi-calendar-date"></i> Date & Time</h6>
+                                        <p>{{ event.event_datetime.strftime('%A, %B %d, %Y at %I:%M %p') }}</p>
+                                        
+                                        {% if event.location %}
+                                            <h6><i class="bi bi-geo-alt"></i> Location</h6>
+                                            <p>{{ event.location }}</p>
+                                        {% endif %}
+                                        
+                                        <h6><i class="bi bi-person"></i> Event Creator</h6>
+                                        <p>{{ event.creator.username }}</p>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6><i class="bi bi-people"></i> Attendees ({{ attendee_count }})</h6>
+                                        {% set participants = event.participants.filter_by(status='joined').limit(5).all() %}
+                                        {% if participants %}
+                                            <div class="list-group list-group-flush">
+                                                {% for participant in participants %}
+                                                    <div class="list-group-item d-flex align-items-center">
+                                                        <img src="{{ participant.participant.profile_pic_url or url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
+                                                             alt="Profile Picture"
+                                                             class="rounded-circle me-2"
+                                                             width="30" height="30">
+                                                        <small>{{ participant.participant.username }}</small>
+                                                    </div>
+                                                {% endfor %}
+                                                {% if attendee_count > 5 %}
+                                                    <div class="list-group-item text-muted">
+                                                        <small>+ {{ attendee_count - 5 }} more attendee{{ 's' if (attendee_count - 5) != 1 else '' }}</small>
+                                                    </div>
+                                                {% endif %}
+                                            </div>
+                                        {% else %}
+                                            <p class="text-muted">No one has joined yet. Be the first!</p>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                {% if event.description %}
+                                    <hr>
+                                    <h6><i class="bi bi-file-text"></i> Description</h6>
+                                    <p>{{ event.description }}</p>
+                                {% endif %}
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                <form method="POST" action="{{ url_for('join_event', event_id=event.event_id) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="bi bi-calendar-plus"></i> Join This Event
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Leave Event Modal (if already joined) -->
+                {% if event.event_id in participated_event_ids %}
+                    <div class="modal fade" id="leaveModal{{ event.event_id }}" tabindex="-1" aria-labelledby="leaveModalLabel{{ event.event_id }}" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="leaveModalLabel{{ event.event_id }}">
+                                        <i class="bi bi-question-circle text-warning"></i> Confirm Leave
+                                    </h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p>Are you sure you want to leave "<strong>{{ event.title|e }}</strong>"?</p>
+                                    <p class="text-muted">You can always join again later if you change your mind.</p>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <form method="POST" action="{{ url_for('leave_event', event_id=event.event_id) }}" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn btn-warning">
+                                            <i class="bi bi-box-arrow-right"></i> Leave Event
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+    {% else %}
+        <!-- No Events Found -->
+        <div class="text-center py-5">
+            <i class="bi bi-calendar-x" style="font-size: 4rem; color: #6c757d;"></i>
+            <h3 class="mt-3 text-muted">No Events Available</h3>
+            <p class="text-muted">There are currently no public events to discover.</p>
+            <div class="mt-4">
+                <a href="{{ url_for('create_event') }}" class="btn btn-primary me-2">
+                    <i class="bi bi-plus-circle"></i> Create the First Event
+                </a>
+                <a href="{{ url_for('events_dashboard') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Back to My Events
+                </a>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Custom Styling -->
+<style>
+.card {
+    border: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    transform: translateY(-2px);
+}
+
+.event-card {
+    transition: opacity 0.3s ease;
+}
+
+.event-card.hidden {
+    opacity: 0.3;
+    pointer-events: none;
+}
+
+.badge {
+    font-size: 0.8em;
+}
+
+.modal-header {
+    border-bottom: 2px solid #f8f9fa;
+}
+
+.list-group-item {
+    border: none;
+    padding: 0.5rem 0;
+}
+
+/* Search highlighting */
+.highlight {
+    background-color: yellow;
+    font-weight: bold;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchBar = document.getElementById('search-bar');
+    const sortFilter = document.getElementById('sort-filter');
+    const eventCards = document.querySelectorAll('.event-card');
+
+    // Search functionality
+    searchBar.addEventListener('input', function() {
+        const query = this.value.toLowerCase();
+        
+        eventCards.forEach(card => {
+            const title = card.getAttribute('data-title');
+            const description = card.getAttribute('data-description');
+            const location = card.getAttribute('data-location');
+            
+            const matches = title.includes(query) || 
+                          description.includes(query) || 
+                          location.includes(query);
+            
+            if (matches || query === '') {
+                card.style.display = '';
+                card.classList.remove('hidden');
+            } else {
+                card.classList.add('hidden');
+            }
+        });
+    });
+
+    // Sort functionality
+    sortFilter.addEventListener('change', function() {
+        const sortType = this.value;
+        const eventsGrid = document.getElementById('events-grid');
+        const cards = Array.from(eventCards);
+        
+        cards.sort((a, b) => {
+            switch(sortType) {
+                case 'date_asc':
+                    return new Date(a.getAttribute('data-date')) - new Date(b.getAttribute('data-date'));
+                case 'date_desc':
+                    return new Date(b.getAttribute('data-date')) - new Date(a.getAttribute('data-date'));
+                case 'title_asc':
+                    return a.getAttribute('data-title').localeCompare(b.getAttribute('data-title'));
+                case 'title_desc':
+                    return b.getAttribute('data-title').localeCompare(a.getAttribute('data-title'));
+                default:
+                    return 0;
+            }
+        });
+        
+        // Re-append sorted cards
+        cards.forEach(card => eventsGrid.appendChild(card));
+    });
+
+    // Auto-dismiss alerts after 5 seconds
+    setTimeout(function() {
+        var alerts = document.querySelectorAll('.alert');
+        alerts.forEach(function(alert) {
+            var bsAlert = new bootstrap.Alert(alert);
+            bsAlert.close();
+        });
+    }, 5000);
+});
+</script>
+{% endblock %}

@@ -90,7 +90,7 @@ db.init_app(app)
 socketio = SocketIO(app, cors_allowed_origins=[
     "http://localhost",
     "http://127.0.0.1",
-    "https://502a1f10a795.ngrok-free.app"
+    ""
 ])
 
 # --- Initialize Extensions ---
@@ -1234,6 +1234,7 @@ def internal_server_error(error):
 
 
 # -- Events 
+
 
 @app.context_processor
 def inject_datetime():

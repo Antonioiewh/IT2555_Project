@@ -40,12 +40,13 @@ from fido2.ctap2 import AttestationObject
 # --- Custom Module Imports ---
 # Models
 from models import (
-    db, User, Role, Permission, Event, Post, PostImage, 
+    db, User, Role, Permission, Event, EventParticipant, Post, PostImage, 
     Notification, Report, Chat, ChatParticipant, Message, 
     Friendship, AdminAction, UserLog, ModSecLog, ErrorLog, 
-    WebAuthnCredential, user_role_assignments,Event,FriendChatMap
-)
 
+    WebAuthnCredential, user_role_assignments,Event,FriendChatMap
+
+)
 # Filters
 from filters import (
     apply_user_filters, apply_user_sorting, 
@@ -1499,95 +1500,288 @@ def forbidden_error(error):
 def internal_server_error(error):
     return render_template('500_error.html'), 500
 
-def send_event_reminders():
-    tomorrow = datetime.utcnow().date() + timedelta(days=1)
-    start = datetime.combine(tomorrow, datetime.min.time())
-    end = datetime.combine(tomorrow, datetime.max.time())
-    events = Event.query.filter(Event.event_datetime >= start, Event.event_datetime <= end).all()
-    for event in events:
-        # Check if notification already sent
-        notif_exists = Notification.query.filter_by(
-            user_id=event.user_id,
-            type='event_reminder',
-            source_id=event.event_id,
-            message=f"Reminder: '{event.title}' is happening tomorrow!"
-        ).first()
-        if not notif_exists:
-            notif = Notification(
-                user_id=event.user_id,
-                type='event_reminder',
-                source_id=event.event_id,
-                message=f"Reminder: '{event.title}' is happening tomorrow!"
+
+# -- Events 
+
+@app.context_processor
+def inject_datetime():
+    from datetime import datetime
+    return {
+        'datetime': datetime,
+        'moment': datetime,  # Alias for backward compatibility
+        'utcnow': datetime.utcnow
+    }
+
+# Create Event Route
+@app.route('/create_event', methods=['GET', 'POST'])
+@user_required
+def create_event():
+    form = EventForm()
+    
+    if form.validate_on_submit():
+        try:
+            # Create new event
+            new_event = Event(
+                user_id=current_user.user_id,  # Creator of the event
+                title=form.title.data,
+                description=form.description.data,
+                event_datetime=form.event_datetime.data,
+                location=form.location.data,
+                is_reminder=False,  # Always False since this only creates events
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
             )
-            db.session.add(notif)
-    db.session.commit()
+            
+            db.session.add(new_event)
+            db.session.commit()
+            
+            flash(f"Event '{new_event.title}' created successfully!", 'success')
+            return redirect(url_for('events_dashboard'))
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error creating event: {str(e)}")
+            flash('An error occurred while creating the event. Please try again.', 'danger')
+            
+    else:
+        # Debug form errors
+        if form.errors:
+            print(f"Form validation errors: {form.errors}")
+            for field, errors in form.errors.items():
+                for error in errors:
+                    flash(f"{field}: {error}", 'error')
+            
+    return render_template('create_event.html', form=form)
 
-# Start the scheduler
-scheduler = BackgroundScheduler()
-scheduler.add_job(func=send_event_reminders, trigger="interval", hours=24)
-scheduler.start()
-
+# Events Dashboard Route
 @app.route('/events_dashboard', methods=['GET', 'POST'])
 @user_required
 def events_dashboard():
-    # TO CHANGE:
-    #  - currently it is retrieving Events created by the user ( first query ) however the second query will practically do the same thing.
-    #  - add new table called 'event_participants' to store user_id and event_id
-    #  - add way to access 'create_event.html' 
-    #  - remove flash() 
-    # Events created by the user #Changed EventSignup to Event
+    # Events created by the user (user is the event organizer)
     created_events = Event.query.filter_by(user_id=current_user.user_id).order_by(Event.event_datetime.desc()).all()
-    # Events the user signed up for #Changed EventSignup to Event
-    signedup_event_ids = [signup.event_id for signup in Event.query.filter_by(user_id=current_user.user_id).all()]
-    signedup_events = Event.query.filter(Event.event_id.in_(signedup_event_ids)).order_by(Event.event_datetime.desc()).all()
-    return render_template('events_dashboard.html', created_events=created_events, signedup_events=signedup_events)
-
-@app.route('/delete_event/<int:event_id>', methods=['POST'])
-@user_required
-def delete_event(event_id):
-    event = Event.query.get_or_404(event_id) #Changed EventSignup to Event
-    if event.user_id != current_user.user_id:
-        abort(403)
-    # Notify all users who signed up for this event
-    signups = Event.query.filter_by(event_id=event_id).all()
-    for signup in signups:
-        notif = Notification(
-            user_id=signup.user_id,
-            type='event_cancelled',
-            source_id=event_id,
-            message=f"The event '{event.title}' you signed up for has been cancelled."
+    
+    # Events the user signed up for (user is a participant, but not the creator)
+    participated_events = (
+        db.session.query(Event)
+        .join(EventParticipant, Event.event_id == EventParticipant.event_id)
+        .filter(
+            EventParticipant.user_id == current_user.user_id,
+            EventParticipant.status == 'joined',
+            Event.user_id != current_user.user_id  # Exclude events they created
         )
-        db.session.add(notif)
-        db.session.delete(signup)  # Optionally remove their signup record
-    db.session.delete(event)
-    db.session.commit()
-    flash('Event deleted and attendees notified.', 'success')
-    return redirect(url_for('events_dashboard'))
+        .order_by(Event.event_datetime.desc())
+        .all()
+    )
+    
+    return render_template('events_dashboard.html', 
+                         created_events=created_events, 
+                         participated_events=participated_events)
 
+# Discover Events Route
+@app.route('/discover_events', methods=['GET'])
+@user_required
+def discover_events():
+    # Get all public events that are not reminders and not created by current user
+    public_events = Event.query.filter(
+        Event.user_id != current_user.user_id,
+        Event.is_reminder == False,
+        Event.event_datetime > datetime.utcnow()  # Only future events
+    ).order_by(Event.event_datetime.asc()).all()
+    
+    # Get events the user has already signed up for
+    user_participations = EventParticipant.query.filter(
+        EventParticipant.user_id == current_user.user_id,
+        EventParticipant.status == 'joined'
+    ).all()
+    
+    participated_event_ids = [p.event_id for p in user_participations]
+    
+    return render_template('discover_events.html', 
+                         events=public_events, 
+                         participated_event_ids=participated_event_ids)
+
+# Join Event Route
+@app.route('/join_event/<int:event_id>', methods=['POST'])
+@user_required
+def join_event(event_id):
+    event = Event.query.get_or_404(event_id)
+    
+    # Check if user is trying to join their own event
+    if event.user_id == current_user.user_id:
+        flash("You cannot join your own event.", 'warning')
+        return redirect(url_for('discover_events'))
+    
+    # Check if user is already participating
+    existing_participation = EventParticipant.query.filter_by(
+        user_id=current_user.user_id,
+        event_id=event_id
+    ).first()
+    
+    if existing_participation:
+        flash('You are already participating in this event!', 'warning')
+    else:
+        try:
+            # Create new participation
+            new_participation = EventParticipant(
+                user_id=current_user.user_id,
+                event_id=event_id,
+                status='joined',
+                joined_at=datetime.utcnow()
+            )
+            db.session.add(new_participation)
+            db.session.commit()
+            
+            # Create notification for event creator
+            creator_notification = Notification(
+                user_id=event.user_id,
+                type='event_reminder',
+                source_id=event_id,
+                message=f"{current_user.username} joined your event '{event.title}'"
+            )
+            db.session.add(creator_notification)
+            db.session.commit()
+            
+            flash(f'Successfully joined "{event.title}"!', 'success')
+            
+        except Exception as e:
+            db.session.rollback()
+            flash('An error occurred while joining the event.', 'danger')
+    
+    return redirect(url_for('discover_events'))
+
+# Leave Event Route (KEEP ONLY THIS ONE)
 @app.route('/leave_event/<int:event_id>', methods=['POST'])
 @user_required
 def leave_event(event_id):
-    signup = Event.query.filter_by(event_id=event_id, user_id=current_user.user_id).first() #Changed EventSignup to Event
-    if not signup:
-        abort(404)
-    db.session.delete(signup)
-    db.session.commit()
-    flash('You have left the event.', 'success')
+    participation = EventParticipant.query.filter_by(
+        user_id=current_user.user_id,
+        event_id=event_id
+    ).first()
+    
+    if participation:
+        try:
+            db.session.delete(participation)
+            db.session.commit()
+            
+            event = Event.query.get(event_id)
+            flash(f'You have left "{event.title}".', 'info')
+            
+        except Exception as e:
+            db.session.rollback()
+            flash('An error occurred while leaving the event.', 'danger')
+    else:
+        flash('You were not participating in this event.', 'warning')
+    
+    # Redirect based on referrer
+    referrer = request.referrer
+    if referrer and 'discover_events' in referrer:
+        return redirect(url_for('discover_events'))
+    else:
+        return redirect(url_for('events_dashboard'))
+
+# Delete Event Route
+@app.route('/delete_event/<int:event_id>', methods=['POST'])
+@user_required
+def delete_event(event_id):
+    event = Event.query.get_or_404(event_id)
+    
+    # Check if user owns the event
+    if event.user_id != current_user.user_id:
+        abort(403)
+    
+    try:
+        # Get all participants before deletion
+        participants = EventParticipant.query.filter_by(
+            event_id=event_id, 
+            status='joined'
+        ).all()
+        
+        # Notify all participants that the event was cancelled
+        for participant in participants:
+            notif = Notification(
+                user_id=participant.user_id,
+                type='event_reminder',
+                source_id=event_id,
+                message=f"The event '{event.title}' you joined has been cancelled."
+            )
+            db.session.add(notif)
+        
+        # Delete all participant records first (foreign key constraints)
+        EventParticipant.query.filter_by(event_id=event_id).delete()
+        
+        # Delete the event
+        db.session.delete(event)
+        db.session.commit()
+        
+        flash(f'Event "{event.title}" deleted and attendees notified.', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash('An error occurred while deleting the event.', 'danger')
+        
     return redirect(url_for('events_dashboard'))
 
-@app.route('/event_signup/<int:event_id>', methods=['GET', 'POST'])
-@user_required
-def event_signup(event_id):
-    form = EventForm()  # Changed this to EventForm
-    event = Event.query.get_or_404(event_id) #Changed EventSignup to Event
-    if form.validate_on_submit(): 
-        signup = Event(user_id=current_user.user_id, event_id=event_id) #Changed EventSignup to Event
-        db.session.add(signup)
-        db.session.commit()
-        flash('Signed up for event!', 'success')
-        return redirect(url_for('events_dashboard'))
-    return render_template('event_signup.html', event=event, form=form)
+# Event Reminder Scheduler Function
+def send_event_reminders():
+    """Send notifications for events happening tomorrow"""
+    tomorrow = datetime.utcnow().date() + timedelta(days=1)
+    start = datetime.combine(tomorrow, datetime.min.time())
+    end = datetime.combine(tomorrow, datetime.max.time())
+    
+    # Get events happening tomorrow
+    events = Event.query.filter(
+        Event.event_datetime >= start, 
+        Event.event_datetime <= end,
+        Event.is_reminder == False  # Only actual events, not personal reminders
+    ).all()
+    
+    for event in events:
+        # Notify event creator
+        creator_notif_exists = Notification.query.filter_by(
+            user_id=event.user_id,
+            type='event_reminder',
+            source_id=event.event_id,
+            message=f"Reminder: Your event '{event.title}' is happening tomorrow!"
+        ).first()
+        
+        if not creator_notif_exists:
+            creator_notif = Notification(
+                user_id=event.user_id,
+                type='event_reminder',
+                source_id=event.event_id,
+                message=f"Reminder: Your event '{event.title}' is happening tomorrow!"
+            )
+            db.session.add(creator_notif)
+        
+        # Notify all participants
+        participants = EventParticipant.query.filter_by(
+            event_id=event.event_id,
+            status='joined'
+        ).all()
+        
+        for participant in participants:
+            participant_notif_exists = Notification.query.filter_by(
+                user_id=participant.user_id,
+                type='event_reminder',
+                source_id=event.event_id,
+                message=f"Reminder: '{event.title}' you joined is happening tomorrow!"
+            ).first()
+            
+            if not participant_notif_exists:
+                participant_notif = Notification(
+                    user_id=participant.user_id,
+                    type='event_reminder',
+                    source_id=event.event_id,
+                    message=f"Reminder: '{event.title}' you joined is happening tomorrow!"
+                )
+                db.session.add(participant_notif)
+    
+    db.session.commit()
 
+# Initialize scheduler for event reminders
+scheduler = BackgroundScheduler()
+scheduler.add_job(func=send_event_reminders, trigger="interval", hours=24)
+scheduler.start()
 # --- Run the App ---
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000)

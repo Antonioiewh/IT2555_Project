@@ -93,6 +93,18 @@ CREATE TABLE events (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
+-- Add this to your database_test.sql after the events table
+CREATE TABLE event_participants (
+    participation_id INT AUTO_INCREMENT PRIMARY KEY,
+    event_id INT NOT NULL,
+    user_id INT NOT NULL,
+    joined_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status ENUM('joined', 'left', 'cancelled') NOT NULL DEFAULT 'joined',
+    UNIQUE KEY _event_user_uc (event_id, user_id),
+    FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
 -- **************************************
 -- 4. Posts (Added for completeness, assuming they link to users)
 -- **************************************

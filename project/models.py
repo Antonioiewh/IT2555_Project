@@ -203,6 +203,7 @@ class Chat(db.Model):
     __tablename__ = 'chats'
     chat_id = db.Column(db.Integer, primary_key=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    #chat_secret_key = db.Column(db.String(64), nullable=False, default=lambda: os.urandom(32).hex())
 
     participants = db.relationship('ChatParticipant', backref='chat', lazy=True)
     messages = db.relationship('Message', backref='chat', lazy=True)
@@ -215,11 +216,22 @@ class ChatParticipant(db.Model):
     chat_participant_id = db.Column(db.Integer, primary_key=True)
     chat_id = db.Column(db.Integer, db.ForeignKey('chats.chat_id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
-
+    cleared_at = db.Column(db.DateTime, nullable=True)
     __table_args__ = (db.UniqueConstraint('chat_id', 'user_id', name='_chat_user_uc'),)
 
     def __repr__(self):
         return f"<ChatParticipant Chat:{self.chat_id} User:{self.user_id}>"
+    
+class FriendChatMap(db.Model):
+    __tablename__ = 'friend_chat_map'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    friend_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    chat_id = db.Column(db.Integer, db.ForeignKey('chats.chat_id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<FriendChatMap user_id={self.user_id} friend_id={self.friend_id} chat_id={self.chat_id}>"
 
 class Message(db.Model):
     __tablename__ = 'messages'

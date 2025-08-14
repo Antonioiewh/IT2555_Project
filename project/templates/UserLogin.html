@@ -5,7 +5,7 @@
 {% block content %}
 <div class="d-flex justify-content-center align-items-center" style="min-height: 80vh;">
     <div class="card p-4 shadow-lg" style="width: 100%; max-width: 500px;">
-        <form method="POST" action="" enctype="multipart/form-data">
+        <form method="POST" action="" enctype="multipart/form-data" id="loginForm">
             <h2 class="text-center mb-4">Login!</h2>
             {{ form.hidden_tag() }}
 
@@ -20,14 +20,278 @@
                 {{ render_field(form.recaptcha, class="form-control") }}
             </div>
 
-            <div class="d-grid gap-2 mb-3"> {# d-grid makes button full width, gap-2 adds spacing #}
+            <div class="d-grid gap-2 mb-3">
                 <input type="submit" value="Login" class="btn btn-primary"/>
             </div>
 
-            <div class="text-center mt-3"> {# text-center centers the text, mt-3 adds top margin #}
+            <!-- Passkey option (only show if user has both 2FA and passkeys) -->
+            <div id="passkeyOption" class="d-grid gap-2 mb-3" style="display: none;">
+                <button type="button" id="passkeyLoginBtn" class="btn btn-success">
+                    <i class="bi bi-fingerprint me-2"></i>Use Passkey Instead
+                </button>
+            </div>
+
+            <div class="text-center mt-3">
                 <p>Not a user? <a href="/signup" class="link-primary">Register</a></p>
             </div>
         </form>
     </div>
 </div>
+
+<!-- Alert container -->
+<div id="alertContainer" style="position: fixed; top: 20px; right: 20px; z-index: 9999;"></div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('loginForm');
+    const usernameField = document.querySelector('input[name="username"]');
+    const passkeyOption = document.getElementById('passkeyOption');
+    const passkeyLoginBtn = document.getElementById('passkeyLoginBtn');
+    
+    console.log('Login page loaded');
+    
+    // Show alert function
+    function showAlert(message, type = 'danger') {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+        alertDiv.innerHTML = `
+            <i class="bi bi-${type === 'success' ? 'check-circle-fill' : 'exclamation-triangle-fill'} me-2"></i>
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        const container = document.getElementById('alertContainer');
+        container.appendChild(alertDiv);
+        
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.remove();
+            }
+        }, 5000);
+    }
+
+    // Check if user has passkeys when they enter username
+    if (usernameField) {
+        usernameField.addEventListener('blur', async function() {
+            const username = this.value.trim();
+            console.log('Username blur event, username:', username);
+            
+            if (username) {
+                try {
+                    const response = await fetch('/check_user_auth_methods', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({username: username})
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        console.log('Auth methods response:', data);
+                        
+                        // Show passkey option only if user has both 2FA and passkeys
+                        if (data.has_2fa && data.has_passkeys) {
+                            passkeyOption.style.display = 'block';
+                        } else {
+                            passkeyOption.style.display = 'none';
+                        }
+                    } else {
+                        console.error('Failed to check auth methods:', response.status);
+                        passkeyOption.style.display = 'none';
+                    }
+                } catch (error) {
+                    console.error('Error checking user auth methods:', error);
+                    passkeyOption.style.display = 'none';
+                }
+            } else {
+                passkeyOption.style.display = 'none';
+            }
+        });
+    }
+
+    // Base64 conversion function with better error handling
+    function b64ToBuf(b64) {
+        console.log('Converting base64:', b64, 'type:', typeof b64);
+        
+        if (b64 === null || b64 === undefined) {
+            throw new Error('Base64 string is null or undefined');
+        }
+        
+        if (typeof b64 !== 'string') {
+            console.warn('Converting non-string to string:', b64);
+            b64 = String(b64);
+        }
+        
+        if (!b64 || b64.length === 0) {
+            throw new Error('Base64 string is empty');
+        }
+        
+        // Basic base64 pattern check
+        if (!/^[A-Za-z0-9+/]*={0,2}$/.test(b64)) {
+            throw new Error('Invalid base64 string format: ' + b64.substring(0, 50));
+        }
+        
+        try {
+            const decoded = atob(b64);
+            const result = Uint8Array.from(decoded, c => c.charCodeAt(0));
+            console.log('Base64 conversion successful, result length:', result.length);
+            return result;
+        } catch (error) {
+            console.error('Base64 conversion failed:', error);
+            throw new Error('Failed to decode base64: ' + error.message);
+        }
+    }
+
+    // Passkey login functionality
+    if (passkeyLoginBtn) {
+        passkeyLoginBtn.addEventListener('click', async function() {
+            const username = usernameField.value.trim();
+            if (!username) {
+                showAlert('Please enter your username first');
+                return;
+            }
+
+            try {
+                this.disabled = true;
+                this.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Authenticating...';
+                
+                console.log('=== STARTING PASSKEY LOGIN ===');
+                console.log('Username:', username);
+                
+                // Step 1: Begin passkey authentication
+                const beginResponse = await fetch('/passkey/begin_login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({username: username})
+                });
+                
+                console.log('Begin response status:', beginResponse.status);
+                
+                if (!beginResponse.ok) {
+                    const errorText = await beginResponse.text();
+                    console.error('Begin response error:', errorText);
+                    throw new Error(`Server error: ${beginResponse.status}`);
+                }
+                
+                const serverResponse = await beginResponse.json();
+                console.log('Server response received:', serverResponse);
+                
+                if (serverResponse.error) {
+                    throw new Error(serverResponse.error);
+                }
+                
+                // The server should return WebAuthn options directly
+                const publicKey = serverResponse;
+                console.log('Using server response as publicKey:', publicKey);
+                
+                // Validate the response format
+                if (!publicKey.challenge) {
+                    console.error('Missing challenge in response:', publicKey);
+                    throw new Error('Server response missing challenge - invalid format');
+                }
+                
+                if (!publicKey.allowCredentials || !Array.isArray(publicKey.allowCredentials)) {
+                    console.error('Missing or invalid allowCredentials in response:', publicKey);
+                    throw new Error('Server response missing allowCredentials - invalid format');
+                }
+
+                // Step 2: Convert base64 to buffers
+                console.log('=== CONVERTING BASE64 DATA ===');
+                console.log('Challenge before conversion:', publicKey.challenge);
+                publicKey.challenge = b64ToBuf(publicKey.challenge);
+                console.log('Challenge after conversion, length:', publicKey.challenge.length);
+                
+                console.log('Converting allowCredentials, count:', publicKey.allowCredentials.length);
+                publicKey.allowCredentials = publicKey.allowCredentials.map((cred, index) => {
+                    console.log(`Converting credential ${index}:`, cred.id);
+                    return {
+                        ...cred,
+                        id: b64ToBuf(cred.id)
+                    };
+                });
+                
+                console.log('=== FINAL PUBLICKEY OBJECT ===');
+                console.log('Challenge length:', publicKey.challenge.length);
+                console.log('AllowCredentials count:', publicKey.allowCredentials.length);
+                console.log('RpId:', publicKey.rpId);
+                console.log('UserVerification:', publicKey.userVerification);
+
+                console.log('=== REQUESTING CREDENTIAL FROM AUTHENTICATOR ===');
+                
+                // Step 3: Get credential from authenticator
+                const credential = await navigator.credentials.get({publicKey});
+                console.log('Credential received:', credential);
+
+                // Step 4: Send response to server
+                console.log('=== SENDING RESPONSE TO SERVER ===');
+                const assertion = {
+                    id: credential.id,
+                    type: credential.type,
+                    response: {
+                        clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(credential.response.clientDataJSON))),
+                        authenticatorData: btoa(String.fromCharCode(...new Uint8Array(credential.response.authenticatorData))),
+                        signature: btoa(String.fromCharCode(...new Uint8Array(credential.response.signature))),
+                        userHandle: credential.response.userHandle ? btoa(String.fromCharCode(...new Uint8Array(credential.response.userHandle))) : null
+                    }
+                };
+
+                console.log('Assertion object created:', assertion);
+
+                const finishResponse = await fetch('/passkey/finish_login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(assertion)
+                });
+
+                const finishData = await finishResponse.json();
+                console.log('Server finish response:', finishData);
+
+                if (finishData.success) {
+                    showAlert('Passkey authentication successful!', 'success');
+                    setTimeout(() => {
+                        window.location.href = finishData.redirect;
+                    }, 1000);
+                } else {
+                    throw new Error(finishData.error || 'Passkey authentication failed');
+                }
+
+            } catch (error) {
+                console.error('=== PASSKEY ERROR ===', error);
+                
+                if (error.name === 'NotAllowedError') {
+                    showAlert('Passkey authentication was cancelled. Redirecting to 2FA...', 'warning');
+                } else if (error.name === 'NotSupportedError') {
+                    showAlert('Passkeys not supported. Redirecting to 2FA...', 'warning');
+                } else if (error.message.includes('null or undefined')) {
+                    showAlert('Server error: Invalid passkey data. Please try again or use password.', 'warning');
+                } else if (error.message.includes('invalid format')) {
+                    showAlert('Server configuration error. Please use password login.', 'warning');
+                } else {
+                    showAlert('Passkey failed: ' + error.message + '. Redirecting to 2FA...', 'warning');
+                }
+                
+                // Fallback to 2FA after 2 seconds
+                setTimeout(() => {
+                    const passwordField = document.querySelector('input[name="password"]');
+                    if (passwordField && passwordField.value.trim()) {
+                        form.submit();
+                    } else {
+                        showAlert('Please enter your password to continue with 2FA');
+                        if (passwordField) passwordField.focus();
+                    }
+                }, 2000);
+                
+            } finally {
+                this.disabled = false;
+                this.innerHTML = '<i class="bi bi-fingerprint me-2"></i>Use Passkey Instead';
+            }
+        });
+    }
+});
+</script>
 {% endblock %}

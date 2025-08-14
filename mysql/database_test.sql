@@ -366,3 +366,5 @@ FROM users u, roles r
 WHERE (u.username = 'admin' AND r.role_name IN ('user', 'editor', 'admin'))
    OR (u.username = 'editor' AND r.role_name IN ('user', 'editor'))
    OR (u.username IN ('user', 'user2', 'user3', 'user4') AND r.role_name = 'user');
+
+ALTER TABLE webauthn_credentials MODIFY COLUMN public_key LONGBLOB;

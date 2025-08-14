@@ -354,7 +354,7 @@ class WebAuthnCredential(db.Model):
     public_key = db.Column(db.LargeBinary, nullable=False)
     sign_count = db.Column(db.Integer, default=0)
     nickname = db.Column(db.String(100), nullable=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    added_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     
     # Define the relationship here (not in User model with backref)
     user = db.relationship('User', overlaps="webauthn_credentials")

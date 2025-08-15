@@ -1,28 +1,421 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    
     <meta charset="UTF-8">
     <title>{% block title %}{% endblock %}</title>
-     <!-- Bootstrap 5.1.3 CSS -->
+    <!-- Bootstrap 5.1.3 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
     <!--Bootstrap 5 icons-->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <!--favicon-->
-        <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='imgs/favicon.ico') }}">
-
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='imgs/favicon.ico') }}">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    
     {%block stylesheet%}
     {% endblock %}
     {% block head %}{% endblock %}
 </head>
 <body>
-    <style>
-    .offcanvas-body .nav-link:hover {
-        background: #3a3f58 !important;
-        color: #fff !important;
+<style>
+    /* Google-style sidebar styling */
+    .google-sidebar {
+        background: #f8f9fa;
+        border-right: 1px solid #dadce0;
+        width: 280px;
+        height: 100vh;
+        position: fixed;
+        right: -280px;
+        top: 0;
+        transition: right 0.3s ease-in-out;
+        z-index: 1050;
+        font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        box-shadow: -2px 0 8px rgba(0,0,0,0.1);
+        display: flex;
+        flex-direction: column;
+        isolation: isolate; /* Create new stacking context */
     }
-    
+
+    .google-sidebar.show {
+        right: 0;
+    }
+
+    .sidebar-header {
+        padding: 16px 24px;
+        border-bottom: 1px solid #dadce0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #fff;
+        flex-shrink: 0;
+    }
+
+    .sidebar-header h5 {
+        color: #3c4043;
+        font-size: 16px;
+        font-weight: 500;
+        margin: 0;
+    }
+
+    .sidebar-close {
+        background: none;
+        border: none;
+        padding: 8px;
+        border-radius: 4px;
+        color: #5f6368;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+
+    .sidebar-close:hover {
+        background-color: #f1f3f4;
+    }
+
+    .sidebar-nav {
+        padding: 12px 0 20px;
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        position: relative;
+    }
+
+    /* Custom scrollbar for webkit browsers */
+    .sidebar-nav::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .sidebar-nav::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .sidebar-nav::-webkit-scrollbar-thumb {
+        background: #dadce0;
+        border-radius: 3px;
+    }
+
+    .sidebar-nav::-webkit-scrollbar-thumb:hover {
+        background: #bdc1c6;
+    }
+
+    .nav-item {
+        margin: 0 12px 4px 12px;
+        position: relative;
+        z-index: 1;
+        /* CRITICAL: Ensure nav items don't extend outside their bounds */
+        overflow: hidden;
+    }
+
+    .nav-link-google {
+        display: flex;
+        align-items: center;
+        padding: 12px 16px;
+        color: #3c4043;
+        text-decoration: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 400;
+        transition: background-color 0.2s;
+        min-height: 48px;
+        position: relative;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        /* CRITICAL: Prevent any visual overflow */
+        overflow: hidden;
+        contain: layout style;
+    }
+
+    .nav-link-google:hover {
+        background-color: #f1f3f4;
+        color: #3c4043;
+    }
+
+    .nav-link-google.active {
+        background-color: #e8f0fe;
+        color: #1a73e8;
+        /* CRITICAL: Ensure active state doesn't cause visual artifacts */
+        border: none !important;
+        box-shadow: none !important;
+        outline: none !important;
+    }
+
+    /* CRITICAL: Remove all pseudo-elements that might cause the green bar */
+    .nav-link-google::before,
+    .nav-link-google::after {
+        display: none !important;
+        content: none !important;
+    }
+
+    /* SPECIFIC FIX: Completely isolate the active Friends link */
+    .nav-link-google.active[href="/UserFriends"] {
+        background-color: #e8f0fe !important;
+        border: none !important;
+        border-left: none !important;
+        border-right: none !important;
+        box-shadow: none !important;
+        outline: none !important;
+        position: relative !important;
+        z-index: 1 !important;
+        overflow: hidden !important;
+        contain: layout style paint !important;
+    }
+
+    .nav-link-google.active[href="/UserFriends"]::before,
+    .nav-link-google.active[href="/UserFriends"]::after {
+        display: none !important;
+        content: none !important;
+        background: none !important;
+        border: none !important;
+        position: static !important;
+    }
+
+    .nav-icon {
+        width: 20px;
+        height: 20px;
+        margin-right: 12px;
+        color: #5f6368;
+        font-size: 18px;
+        flex-shrink: 0;
+    }
+
+    .nav-link-google:hover .nav-icon,
+    .nav-link-google.active .nav-icon {
+        color: #1a73e8;
+    }
+
+    .nav-divider {
+        height: 1px;
+        background-color: #dadce0;
+        margin: 8px 24px;
+        position: relative;
+        z-index: 1;
+    }
+
+    .nav-section-title {
+        padding: 16px 24px 8px;
+        color: #5f6368;
+        font-size: 12px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        position: relative;
+        z-index: 1;
+    }
+
+    .collapsible-nav {
+        margin: 0 12px;
+        position: relative;
+        z-index: 1;
+    }
+
+    .collapse-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        color: #3c4043;
+        text-decoration: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 400;
+        transition: background-color 0.2s;
+        cursor: pointer;
+        border: none;
+        background: none;
+        width: 100%;
+    }
+
+    .collapse-toggle:hover {
+        background-color: #f1f3f4;
+    }
+
+    .collapse-icon {
+        transition: transform 0.3s ease;
+        color: #5f6368;
+    }
+
+    .collapse-toggle[aria-expanded="true"] .collapse-icon {
+        transform: rotate(180deg);
+    }
+
+    .nested-nav {
+        margin-left: 32px;
+        margin-top: 4px;
+    }
+
+    .nested-nav .nav-link-google {
+        padding-left: 12px;
+        font-size: 13px;
+        min-height: 40px;
+    }
+
+    .user-info {
+        padding: 16px 24px;
+        border-top: 1px solid #dadce0;
+        background: #fff;
+        flex-shrink: 0;
+        margin-top: auto;
+        position: relative;
+        z-index: 10; /* Higher z-index to completely separate from nav */
+        /* CRITICAL: Completely isolate user info section */
+        isolation: isolate;
+        contain: layout style;
+    }
+
+    .user-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #1a73e8;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 14px;
+        font-weight: 500;
+        margin-right: 12px;
+        flex-shrink: 0;
+    }
+
+    .user-details {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .user-name {
+        font-size: 14px;
+        font-weight: 500;
+        color: #3c4043;
+        margin: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .user-status {
+        font-size: 12px;
+        color: #5f6368;
+        margin: 2px 0 0 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        display: flex;
+        align-items: center;
+        /* CRITICAL: Prevent status from affecting nav items */
+        position: relative;
+        z-index: 1;
+        isolation: isolate;
+    }
+
+    .sidebar-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 1040;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease-in-out;
+    }
+
+    .sidebar-backdrop.show {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    /* COMPLETELY REWRITTEN: Status indicator to prevent ANY visual bleeding */
+    .status-indicator {
+        width: 8px !important;
+        height: 8px !important;
+        border-radius: 50% !important;
+        background: #34a853 !important;
+        display: inline-block !important;
+        margin-right: 8px !important;
+        flex-shrink: 0 !important;
+        /* Remove problematic properties that cause shape issues */
+        position: static !important;
+        z-index: auto !important;
+        vertical-align: baseline !important;
+        border: none !important;
+        box-shadow: none !important;
+        outline: none !important;
+        /* REMOVED: contain property that was causing shape issues */
+        /* contain: size layout style; */
+        /* REMOVED: isolation that might interfere */
+        /* isolation: isolate; */
+        transform: none !important;
+        overflow: visible !important;
+        /* Ensure it stays circular */
+        min-width: 8px !important;
+        min-height: 8px !important;
+        max-width: 8px !important;
+        max-height: 8px !important;
+    }
+
+    .status-indicator.offline {
+        background: #ea4335 !important;
+    }
+
+    /* Ensure status indicator container doesn't interfere */
+    .user-status {
+        font-size: 12px;
+        color: #5f6368;
+        margin: 2px 0 0 0;
+        overflow: visible !important; /* Changed from hidden to visible */
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        display: flex;
+        align-items: center;
+        position: relative;
+        z-index: 1;
+        /* REMOVED: isolation that might cause issues */
+        /* isolation: isolate; */
+    }
+
+    /* CRITICAL: Ensure status indicator never affects anything outside its container */
+    .status-indicator::before,
+    .status-indicator::after {
+        display: none !important;
+        content: none !important;
+    }
+
+    /* Badge styling */
+    .google-badge {
+        background: #ea4335;
+        color: white;
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 12px;
+        margin-left: auto;
+        min-width: 18px;
+        text-align: center;
+        flex-shrink: 0;
+    }
+
+    .sidebar-content {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+    }
+
+    /* CRITICAL: Emergency override to prevent any green elements in nav area */
+    .sidebar-nav * {
+        border-left: none !important;
+        border-right: none !important;
+    }
+
+    .sidebar-nav *::before,
+    .sidebar-nav *::after {
+        border-left: none !important;
+        border-right: none !important;
+        background: transparent !important;
+    }
     </style>
+    
     {% block navbar %}
         {% include 'includes/_navbar.html' %}
     {% endblock %}
@@ -31,124 +424,280 @@
         {% block content %}
 
         {% endblock %}
-    <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasRight" aria-labelledby="offcanvasRightLabel">
-        <div class="offcanvas-header">
-            <h5 id="offcanvasRightLabel">Menu</h5>
-            <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-        </div>
-    <div class="offcanvas-body p-0" style="height: 100%; display: flex; flex-direction: column; padding: 0;">
-        <nav style="flex: 1; display: flex; flex-direction: column; justify-content: flex-start;">
-            {% if current_user.is_authenticated %}                     
-                
-                <!--nothing here -->
-            {% else %} 
-            <!--if unauth =  users can login-->
-            <a class="nav-link" href="/login" style="color:#232946;border-radius:0.5rem;margin:0.5rem 1rem;display:flex;align-items:center;font-size:1.1rem;">
-                <i class="bi bi-door-closed-fill" style="margin-right:1rem;font-size:1.3rem;"></i> Login
-            </a>
-            {% endif %}
-
-
-
-            {% if current_user.is_authenticated and current_user.has_role('admin') %}
-                <a class="nav-link" href="/users_dashboard" style="color:#232946;border-radius:0.5rem;margin:0.5rem 1rem;display:flex;align-items:center;font-size:1.1rem;">
-                        <i class="bi bi-person-fill" style="margin-right:1rem;font-size:1.3rem;"></i> Manage users
-                </a>
-                <!-- View Logs Collapsible -->
-                <a class="nav-link" data-bs-toggle="collapse" href="#logsCollapse" role="button" aria-expanded="false" aria-controls="logsCollapse"
-                    style="color:#232946;border-radius:0.5rem;margin:0.5rem 1rem;display:flex;align-items:center;font-size:1.1rem;cursor:pointer;">
-                        <i class="bi bi-file-earmark-text-fill" style="margin-right:1rem;font-size:1.3rem;"></i> View Logs
-                </a>
-                <div class="collapse" id="logsCollapse" style="margin-left:2.5rem;">
-                        <a class="nav-link" href="/manage_ModSecLogs" style="color:#232946;font-size:1rem;">
-                            <i class="bi bi-shield-lock-fill" style="margin-right:0.5rem;"></i> ModSec Logs
+    </div>
+    
+    <!-- Google-style Sidebar Backdrop -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    
+    <!-- Google-style Sidebar -->
+    <div class="google-sidebar" id="googleSidebar">
+        <div class="sidebar-content">
+            <div class="sidebar-header">
+                <h5>Menu</h5>
+                <button class="sidebar-close" id="sidebarClose">
+                    <i class="bi bi-x" style="font-size: 20px;"></i>
+                </button>
+            </div>
+            
+            <div class="sidebar-nav">
+                {% if not current_user.is_authenticated %}
+                    <!-- Unauthenticated Users -->
+                    <div class="nav-item">
+                        <a href="/login" class="nav-link-google">
+                            <i class="bi bi-box-arrow-in-right nav-icon"></i>
+                            Sign in
                         </a>
-                        <a class="nav-link" href="/manage_ErrorLogs" style="color:#232946;font-size:1rem;">
-                            <i class="bi bi-exclamation-circle-fill" style="margin-right:0.5rem;"></i> Error Logs
+                    </div>
+                {% endif %}
+
+                {% if current_user.is_authenticated and current_user.has_role('admin') %}
+                    <!-- Admin Menu -->
+                    <div class="nav-section-title">Administration</div>
+                    
+                    <div class="nav-item">
+                        <a href="/users_dashboard" class="nav-link-google">
+                            <i class="bi bi-people nav-icon"></i>
+                            Manage users
                         </a>
-                        <a class="nav-link" href="/manage_UserActions" style="color:#232946;font-size:1rem;">
-                            <i class="bi bi-person-lines-fill" style="margin-right:0.5rem;"></i> User Logs
+                    </div>
+                    
+                    <!-- Logs Collapsible -->
+                    <div class="collapsible-nav">
+                        <button class="collapse-toggle" data-bs-toggle="collapse" data-bs-target="#logsCollapse" aria-expanded="false">
+                            <div style="display: flex; align-items: center;">
+                                <i class="bi bi-file-earmark-text nav-icon"></i>
+                                View Logs
+                            </div>
+                            <i class="bi bi-chevron-down collapse-icon"></i>
+                        </button>
+                        <div class="collapse" id="logsCollapse">
+                            <div class="nested-nav">
+                                <a href="/manage_ModSecLogs" class="nav-link-google">
+                                    <i class="bi bi-shield-lock nav-icon"></i>
+                                    ModSec Logs
+                                </a>
+                                <a href="/manage_ErrorLogs" class="nav-link-google">
+                                    <i class="bi bi-exclamation-circle nav-icon"></i>
+                                    Error Logs
+                                </a>
+                                <a href="/manage_UserActions" class="nav-link-google">
+                                    <i class="bi bi-person-lines-fill nav-icon"></i>
+                                    User Logs
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="nav-item">
+                        <a href="/reports_dashboard" class="nav-link-google">
+                            <i class="bi bi-flag nav-icon"></i>
+                            Manage reports
                         </a>
-                </div>
-                <a class="nav-link" href="/reports_dashboard" style="color:#232946;border-radius:0.5rem;margin:0.5rem 1rem;display:flex;align-items:center;font-size:1.1rem;">
-                    <i class="bi bi-flag-fill" style="margin-right:1rem;font-size:1.3rem;"></i> Manage reports
-                </a>
-                <a class="nav-link" href="#" style="color:#232946;border-radius:0.5rem;margin:0.5rem 1rem;display:flex;align-items:center;font-size:1.1rem;">
-                    <i class="bi bi-flag-fill" style="margin-right:1rem;font-size:1.3rem;"></i> View raw audit logs
-                </a>
-                <a href="{{ url_for('test_upload') }}" class="nav-link">
-                    <i class="fas fa-shield-alt"></i> Security Test
-                </a>
-                <a class="nav-link" href="/logout" style="color:#232946;border-radius:0.5rem;margin:0.5rem 1rem;display:flex;align-items:center;font-size:1.1rem;">
-                    <i class="bi bi-door-closed-fill" style="margin-right:1rem;font-size:1.3rem;"></i> Logout
-                </a>
-            {% elif current_user.is_authenticated and current_user.has_role('user') %} 
-                <a class="nav-link" href="#" style="color:#232946;border-radius:0.5rem;margin:0.5rem 1rem;display:flex;align-items:center;font-size:1.1rem;">
-                    <i class="bi bi-person-fill" style="margin-right:1rem;font-size:1.3rem;"></i> Profile <!--displays profile when signed in and login when not. when not, login shld be the only thing shown-->
-                </a>
-                <a class="nav-link" href="{{ url_for('account_security') }}" style="color:#232946;border-radius:0.5rem;margin:0.5rem 1rem;display:flex;align-items:center;font-size:1.1rem;">
-                    <i class="bi bi-shield-lock-fill" style="margin-right:1rem;font-size:1.3rem;"></i> Security
-                </a>
-                <a class="nav-link" href="/messages" style="color:#232946;border-radius:0.5rem;margin:0.5rem 1rem;display:flex;align-items:center;font-size:1.1rem;">
-                    <i class="bi bi-chat-fill" style="margin-right:1rem;font-size:1.3rem;"></i> Messages
-                </a>
-                <a class="nav-link" href="/UserFriends" style="color:#232946;border-radius:0.5rem;margin:0.5rem 1rem;display:flex;align-items:center;font-size:1.1rem;">
-                    <i class="bi bi-people-fill" style="margin-right:1rem;font-size:1.3rem;"></i> Friends
-                </a>
-                <a class="nav-link" href="/DiscoverFriends" style="color:#232946;border-radius:0.5rem;margin:0.5rem 1rem;display:flex;align-items:center;font-size:1.1rem;">
-                    <i class="bi bi-globe" style="margin-right:1rem;font-size:1.3rem;"></i> Discover People
-                </a>
-                <a class="nav-link" href="/Notifications" style="color:#232946;border-radius:0.5rem;margin:0.5rem 1rem;display:flex;align-items:center;font-size:1.1rem;">
-                        <i class="bi bi-bell-fill" style="margin-right:1rem;font-size:1.3rem;"></i>
+                    </div>
+                    
+                    <div class="nav-item">
+                        <a href="#" class="nav-link-google">
+                            <i class="bi bi-journal-text nav-icon"></i>
+                            View audit logs
+                        </a>
+                    </div>
+                    
+                    <div class="nav-divider"></div>
+                    
+                    <div class="nav-section-title">Security</div>
+                    <div class="nav-item">
+                        <a href="{{ url_for('test_upload') }}" class="nav-link-google">
+                            <i class="bi bi-shield-check nav-icon"></i>
+                            Security Test
+                        </a>
+                    </div>
+                    
+                    <div class="nav-divider"></div>
+                    
+                    <div class="nav-item">
+                        <a href="/logout" class="nav-link-google">
+                            <i class="bi bi-box-arrow-right nav-icon"></i>
+                            Sign out
+                        </a>
+                    </div>
+                    
+                {% elif current_user.is_authenticated and current_user.has_role('user') %}
+                    <!-- User Menu -->
+                    <div class="nav-section-title">Account</div>
+                    
+                    <div class="nav-item">
+                        <a href="#" class="nav-link-google">
+                            <i class="bi bi-person nav-icon"></i>
+                            Profile
+                        </a>
+                    </div>
+                    
+                    <div class="nav-item">
+                        <a href="{{ url_for('account_security') }}" class="nav-link-google">
+                            <i class="bi bi-shield-lock nav-icon"></i>
+                            Security
+                        </a>
+                    </div>
+                    
+                    <div class="nav-divider"></div>
+                    
+                    <div class="nav-section-title">Social</div>
+                    
+                    <div class="nav-item">
+                        <a href="/messages" class="nav-link-google">
+                            <i class="bi bi-chat nav-icon"></i>
+                            Messages
+                        </a>
+                    </div>
+                    
+                    <div class="nav-item">
+                        <a href="/UserFriends" class="nav-link-google">
+                            <i class="bi bi-people nav-icon"></i>
+                            Friends
+                        </a>
+                    </div>
+                    
+                    <div class="nav-item">
+                        <a href="/DiscoverFriends" class="nav-link-google">
+                            <i class="bi bi-globe nav-icon"></i>
+                            Discover People
+                        </a>
+                    </div>
+                    
+                    <div class="nav-item">
+                        <a href="/Notifications" class="nav-link-google">
+                            <i class="bi bi-bell nav-icon"></i>
                             Notifications
-                        <span class="badge bg-danger" style="margin-left:0.5rem;"></span> <!--will be replaced with notifs variable--> 
-                </a>
-                <a class="nav-link" href="/report_user" style="color:#232946;border-radius:0.5rem;margin:0.5rem 1rem;display:flex;align-items:center;font-size:1.1rem;">
-                        <i class="bi bi-flag-fill" style="margin-right:1rem;font-size:1.3rem;"></i>
+                            <span class="google-badge" style="display: none;" id="notifBadge"></span>
+                        </a>
+                    </div>
+                    
+                    <div class="nav-divider"></div>
+                    <div class="nav-section-title">Events</div>
+                    
+                    <div class="nav-item">
+                        <a href="/events_dashboard" class="nav-link-google">
+                            <i class="bi bi-calendar-event nav-icon"></i>
+                            My Events
+                        </a>
+                    </div>
+                    
+                    <div class="nav-item">
+                        <a href="/create_event" class="nav-link-google">
+                            <i class="bi bi-calendar-plus nav-icon"></i>
+                            Create Event
+                        </a>
+                    </div>
+                    
+                    <div class="nav-item">
+                        <a href="/discover_events" class="nav-link-google">
+                            <i class="bi bi-search nav-icon"></i>
+                            Discover Events
+                        </a>
+                    </div>
+                    <div class="nav-divider"></div>
+                    <div class="nav-section-title">Support</div>
+                    
+                    <div class="nav-item">
+                        <a href="/report_user" class="nav-link-google">
+                            <i class="bi bi-flag nav-icon"></i>
                             Report someone
-                </a>
-                
-                <a class="nav-link" href="/logout" style="color:#232946;border-radius:0.5rem;margin:0.5rem 1rem;display:flex;align-items:center;font-size:1.1rem;">
-                    <i class="bi bi-door-closed-fill" style="margin-right:1rem;font-size:1.3rem;"></i> Logout
-                </a>
-            {% else%}
-
-            {% endif %}
+                        </a>
+                    </div>
+                    
+                    <div class="nav-divider"></div>
+                    
+                    <div class="nav-item">
+                        <a href="/logout" class="nav-link-google">
+                            <i class="bi bi-box-arrow-right nav-icon"></i>
+                            Sign out
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
             
-        </nav>
-        <div style="padding:1rem 1.5rem;border-top:1px solid #e5e5e5;display:flex;flex-direction:column;align-items:flex-start;cursor:pointer;background:#f8f9fa;color:#232946;font-size:1.1rem;">
+            <!-- User Info Section - Now always visible at bottom -->
             {% if current_user.is_authenticated %}
-            <div style="display:flex;align-items:center;">
-                <i class="bi bi-person-circle" style="margin-right:0.75rem;font-size:1.3rem;"></i> 
-                <span>{{ current_user.username }}</span>
+            <div class="user-info">
+                <div style="display: flex; align-items: center;">
+                    <div class="user-avatar">
+                        {{ current_user.username[0].upper() }}
+                    </div>
+                    <div class="user-details">
+                        <div class="user-name">{{ current_user.username }}</div>
+                        <div class="user-status">
+                            <span class="status-indicator {{ 'online' if current_user.current_status == 'online' else 'offline' }}"></span>
+                            Status: {{ current_user.current_status }}
+                        </div>
+                        <div class="user-status">
+                            Role: {% for role in current_user.roles %}{{ role.role_name }}{% if not loop.last %}, {% endif %}{% endfor %}
+                        </div>
+                        <div class="user-status">
+                            Container: {{ container_id[:8] }}...
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div style="margin-left:1.8rem;font-size:0.9rem;color:gray;">
-                Status: {{ current_user.current_status }}
-            </div>
-            <div style="margin-left:1.8rem;font-size:0.9rem;color:gray;">
-                Role:
-                {% for role in current_user.roles %}
-                    {{ role.role_name }}{% if not loop.last %}, {% endif %}
-                {% endfor %}
-            </div>
-            <div style="margin-left:1.8rem;font-size:0.9rem;color:gray;">
-                Container ID : {{ container_id }}
-            </div>
-            
-            
-            {% else %}
             {% endif %}
-
         </div>
     </div>
-</div>
-        
-     
 
     {% block scripts %}
-<!-- Popper 2.10.2, Bootstrap 5.1.3 JavaScript -->
-<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.10.2/dist/umd/popper.min.js" integrity="sha384-7+zCNj/IqJ95wo16oMtfsKbZ9ccEh31eOz1HGyDuCQ6wgnyJNSYdrPa03rtR1zdB" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.min.js" integrity="sha384-QJHtvGhmr9XOIpI6YVutG+2QOK9T+ZnN4kzFN1RtK3zEFEIsxhlmWl5/YESvpZ13" crossorigin="anonymous"></script>
+    <!-- Popper 2.10.2, Bootstrap 5.1.3 JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.10.2/dist/umd/popper.min.js" integrity="sha384-7+zCNj/IqJ95wo16oMtfsKbZ9ccEh31eOz1HGyDuCQ6wgnyJNSYdrPa03rtR1zdB" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.min.js" integrity="sha384-QJHtvGhmr9XOIpI6YVutG+2QOK9T+ZnN4kzFN1RtK3zEFEIsxhlmWl5/YESvpZ13" crossorigin="anonymous"></script>
+    
+    <script>
+    // Google-style sidebar functionality
+    document.addEventListener('DOMContentLoaded', function() {
+        const sidebar = document.getElementById('googleSidebar');
+        const backdrop = document.getElementById('sidebarBackdrop');
+        const closeBtn = document.getElementById('sidebarClose');
+        
+        // Function to open sidebar
+        function openSidebar() {
+            sidebar.classList.add('show');
+            backdrop.classList.add('show');
+            document.body.style.overflow = 'hidden';
+        }
+        
+        // Function to close sidebar
+        function closeSidebar() {
+            sidebar.classList.remove('show');
+            backdrop.classList.remove('show');
+            document.body.style.overflow = '';
+        }
+        
+        // Listen for the original offcanvas trigger (from navbar)
+        document.addEventListener('click', function(e) {
+            if (e.target.matches('[data-bs-toggle="offcanvas"][data-bs-target="#offcanvasRight"]') ||
+                e.target.closest('[data-bs-toggle="offcanvas"][data-bs-target="#offcanvasRight"]')) {
+                e.preventDefault();
+                openSidebar();
+            }
+        });
+        
+        // Close sidebar events
+        closeBtn.addEventListener('click', closeSidebar);
+        backdrop.addEventListener('click', closeSidebar);
+        
+        // Close on escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && sidebar.classList.contains('show')) {
+                closeSidebar();
+            }
+        });
+        
+        // Active link highlighting
+        const currentPath = window.location.pathname;
+        const navLinks = document.querySelectorAll('.nav-link-google');
+        navLinks.forEach(link => {
+            if (link.getAttribute('href') === currentPath) {
+                link.classList.add('active');
+            }
+        });
+    });
+    </script>
     {% endblock %}
 </body>
 </html>

@@ -2,197 +2,200 @@
 {% block title %}Create Event{% endblock %}
 {% from "includes/_formHelper.html" import render_field %}
 
+{% block head %}
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-center align-items-center" style="min-height: 80vh;">
-    <div class="card p-4 shadow-lg" style="width: 100%; max-width: 600px;">
-        <form method="POST" action="" enctype="multipart/form-data">
-            <h2 class="text-center mb-4">
-                <i class="bi bi-calendar-plus-fill me-2"></i>
-                Create Event
-            </h2>
-            
-            <!-- Flash Messages -->
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
-                            {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
-
-            {{ form.hidden_tag() }}
-
-            <!-- Title Field -->
-            <div class="mb-3">
-                {{ render_field(form.title, class="form-control") }}
-            </div>
-
-            <!-- Description Field -->
-            <div class="mb-3">
-                {{ render_field(form.description, class="form-control", rows="4") }}
-            </div>
-
-            <!-- Event Date and Time -->
-            <div class="mb-3">
-                {{ render_field(form.event_datetime, class="form-control datetime-input") }}
-                <div class="form-text">
-                    <i class="bi bi-info-circle"></i> Select when your event will take place
-                </div>
-            </div>
-
-            <!-- Location Field -->
-            <div class="mb-3">
-                {{ render_field(form.location, class="form-control") }}
-            </div>
-
-            <!-- Submit Button -->
-            <div class="d-grid gap-2 mb-3">
-                {{ form.submit(class="btn btn-primary btn-lg") }}
-            </div>
-
-            <!-- Back Link -->
-            <div class="text-center">
-                <a href="{{ url_for('events_dashboard') }}" class="btn btn-outline-secondary">
-                    <i class="bi bi-arrow-left"></i> Back to Events Dashboard
-                </a>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- FIXED CSS for datetime picker -->
 <style>
-/* Basic datetime input styling */
-.datetime-input {
-    position: relative;
-    z-index: 1;
+.google-container {
+    font-family: 'Google Sans', Arial, sans-serif;
+    background: #ffffff;
+    min-height: 80vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 40px 20px;
 }
-
-/* Control the datetime picker calendar size and position */
-input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+.google-card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(60,64,67,.08);
+    border: 1px solid #dadce0;
+    padding: 40px;
+    width: 100%;
+    max-width: 500px;
+}
+.google-header {
+    text-align: center;
+    margin-bottom: 32px;
+}
+.google-icon {
+    width: 48px;
+    height: 48px;
+    background: #4285f4;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+    color: white;
+    font-size: 24px;
+}
+.google-title {
+    font-size: 24px;
+    font-weight: 400;
+    color: #202124;
+    margin: 0 0 8px 0;
+}
+.google-form-group {
+    margin-bottom: 24px;
+}
+.google-label {
+    display: block;
+    font-size: 14px;
+    color: #3c4043;
+    font-weight: 500;
+    margin-bottom: 8px;
+}
+.google-input, .google-textarea {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    font-size: 16px;
+    color: #3c4043;
+    background: #fff;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+.google-input:focus, .google-textarea:focus {
+    outline: none;
+    border-color: #4285f4;
+    box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.2);
+}
+.google-textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+.google-btn {
+    width: 100%;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
     cursor: pointer;
-    filter: invert(0.5);
-    opacity: 0.8;
-    position: relative;
-    z-index: 2;
+    transition: all 0.2s;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    gap: 8px;
 }
-
-/* Hide spinner buttons to prevent scroll issues */
-input[type="datetime-local"]::-webkit-inner-spin-button,
-input[type="datetime-local"]::-webkit-outer-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
+.google-btn-primary {
+    background: #4285f4;
+    color: #fff;
 }
-
-/* Firefox support */
-input[type="datetime-local"] {
-    -moz-appearance: textfield;
+.google-btn-primary:hover {
+    background: #3367d6;
+    box-shadow: 0 1px 3px rgba(66,133,244,.3);
 }
-
-/* FIXED: Control calendar popup size and positioning */
-input[type="datetime-local"]::-webkit-datetime-edit-fields-wrapper {
-    padding: 8px 12px;
+.google-link-section {
+    text-align: center;
+    margin-top: 24px;
 }
-
-/* Ensure calendar doesn't overflow viewport */
-@media screen and (max-width: 768px) {
-    input[type="datetime-local"] {
-        font-size: 16px; /* Prevents zoom on iOS */
+.google-link {
+    color: #4285f4;
+    text-decoration: none;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.google-link:hover {
+    text-decoration: underline;
+    color: #3367d6;
+}
+.google-error {
+    color: #d93025;
+    font-size: 12px;
+    margin-top: 4px;
+}
+@media (max-width: 768px) {
+    .google-card {
+        padding: 32px 16px;
+        margin: 0 8px;
     }
-}
-
-/* FIXED: Prevent calendar from being too large */
-input[type="datetime-local"]:focus {
-    outline: 2px solid #0d6efd;
-    outline-offset: 2px;
-    z-index: 1050; /* High z-index but not too high */
-}
-
-/* FIXED: Better control over calendar popup */
-.datetime-input:focus-within {
-    z-index: 1050;
-}
-
-/* Ensure form container has proper stacking context */
-.card {
-    position: relative;
-    z-index: 1;
-}
-
-/* Override any conflicting Bootstrap z-index */
-.form-control:focus {
-    z-index: auto;
 }
 </style>
 
-<script>
-// IMPROVED: Better datetime input handling
-document.addEventListener('DOMContentLoaded', function() {
-    const datetimeInput = document.getElementById('event_datetime');
-    if (datetimeInput) {
-        // Set minimum date to current time
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const day = String(now.getDate()).padStart(2, '0');
-        const hours = String(now.getHours()).padStart(2, '0');
-        const minutes = String(now.getMinutes()).padStart(2, '0');
+<div class="google-container">
+    <div class="google-card">
+        <div class="google-header">
+            <div class="google-icon">
+                <i class="bi bi-calendar-plus"></i>
+            </div>
+            <h1 class="google-title">Create Event</h1>
+        </div>
         
-        const minDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
-        datetimeInput.min = minDateTime;
+        <form method="POST" action="" enctype="multipart/form-data">
+            {{ form.hidden_tag() }}
+            
+            <div class="google-form-group">
+                <label for="title" class="google-label">Event Title</label>
+                {{ form.title(class="google-input", id="title", placeholder="Enter event title") }}
+                {% if form.title.errors %}
+                    {% for error in form.title.errors %}
+                        <div class="google-error">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            
+            <div class="google-form-group">
+                <label for="description" class="google-label">Description</label>
+                {{ form.description(class="google-textarea", id="description", placeholder="Describe your event") }}
+                {% if form.description.errors %}
+                    {% for error in form.description.errors %}
+                        <div class="google-error">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            
+            <div class="google-form-group">
+                <label for="event_datetime" class="google-label">Date & Time</label>
+                {{ form.event_datetime(class="google-input", id="event_datetime", type="datetime-local") }}
+                {% if form.event_datetime.errors %}
+                    {% for error in form.event_datetime.errors %}
+                        <div class="google-error">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            
+            <div class="google-form-group">
+                <label for="location" class="google-label">Location</label>
+                {{ form.location(class="google-input", id="location", placeholder="Event location") }}
+                {% if form.location.errors %}
+                    {% for error in form.location.errors %}
+                        <div class="google-error">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            
+            <button type="submit" class="google-btn google-btn-primary">
+                <i class="bi bi-calendar-plus"></i>
+                Create Event
+            </button>
+        </form>
         
-        // FIXED: Better scroll prevention without breaking functionality
-        datetimeInput.addEventListener('wheel', function(e) {
-            // Only prevent wheel if the input is focused
-            if (document.activeElement === datetimeInput) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-        }, { passive: false });
-        
-        // FIXED: Close calendar when clicking outside
-        document.addEventListener('click', function(e) {
-            if (!datetimeInput.contains(e.target) && e.target !== datetimeInput) {
-                datetimeInput.blur();
-            }
-        });
-        
-        // FIXED: Close calendar on escape key
-        datetimeInput.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                datetimeInput.blur();
-            }
-        });
-        
-        // FIXED: Prevent accidental value changes with arrow keys
-        datetimeInput.addEventListener('keydown', function(e) {
-            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                // Allow arrow keys only if actively selecting text
-                if (this.selectionStart === this.selectionEnd) {
-                    e.preventDefault();
-                }
-            }
-        });
-        
-        // FIXED: Auto-close calendar after selection
-        datetimeInput.addEventListener('change', function() {
-            // Small delay to allow value to be set
-            setTimeout(() => {
-                datetimeInput.blur();
-            }, 100);
-        });
-    }
-});
-
-// FIXED: Additional viewport protection
-window.addEventListener('resize', function() {
-    const datetimeInput = document.getElementById('event_datetime');
-    if (datetimeInput && document.activeElement === datetimeInput) {
-        datetimeInput.blur();
-    }
-});
-</script>
+        <div class="google-link-section">
+            <a href="{{ url_for('events_dashboard') }}" class="google-link">
+                <i class="bi bi-arrow-left"></i>
+                Back to Events Dashboard
+            </a>
+        </div>
+    </div>
+</div>
 {% endblock %}

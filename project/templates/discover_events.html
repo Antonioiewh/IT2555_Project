@@ -1,279 +1,692 @@
 {% extends "UserBase.html" %}
 {% block title %}Discover Events{% endblock %}
 
+{% block head %}
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
+<style>
+.google-container {
+    font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #ffffff;
+    min-height: 100vh;
+    padding: 0;
+}
+
+.google-header {
+    background: #fff;
+    border-bottom: 1px solid #e8eaed;
+    padding: 24px 40px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.google-header-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.google-title {
+    font-size: 28px;
+    font-weight: 400;
+    color: #202124;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 0;
+}
+
+.google-title-icon {
+    color: #4285f4;
+    font-size: 28px;
+}
+
+.google-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.google-btn {
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: all 0.15s cubic-bezier(0.4,0.0,0.2,1);
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    text-decoration: none;
+    position: relative;
+    overflow: hidden;
+}
+
+.google-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: currentColor;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.google-btn:hover::before {
+    opacity: 0.04;
+}
+
+.google-btn:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(66,133,244,0.4);
+}
+
+.google-btn-primary {
+    background: #4285f4;
+    color: #fff;
+    box-shadow: 0 1px 2px 0 rgba(66,133,244,0.3);
+}
+
+.google-btn-primary:hover {
+    background: #3367d6;
+    box-shadow: 0 1px 3px 0 rgba(66,133,244,0.5);
+}
+
+.google-btn-secondary {
+    background: #fff;
+    color: #3c4043;
+    border: 1px solid #dadce0;
+}
+
+.google-btn-secondary:hover {
+    background: #f8f9fa;
+    box-shadow: 0 1px 1px 0 rgba(65,69,73,0.3), 0 1px 3px 1px rgba(65,69,73,0.15);
+}
+
+.google-main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 32px 40px;
+}
+
+.google-search-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 6px rgba(32,33,36,0.28);
+    border: 1px solid #dadce0;
+    margin-bottom: 32px;
+    padding: 24px;
+    transition: box-shadow 0.15s;
+}
+
+.google-search-card:hover {
+    box-shadow: 0 2px 10px rgba(32,33,36,0.32);
+}
+
+.google-search-row {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+
+.google-search-wrapper {
+    flex: 1;
+    position: relative;
+}
+
+.google-search-input {
+    width: 100%;
+    font-size: 16px;
+    border-radius: 24px;
+    border: 1px solid #dadce0;
+    padding: 12px 16px 12px 48px;
+    background: #f8f9fa;
+    transition: all 0.15s;
+    font-family: inherit;
+}
+
+.google-search-input:focus {
+    outline: none;
+    background: #fff;
+    border-color: #4285f4;
+    box-shadow: 0 0 0 2px rgba(66,133,244,0.2);
+}
+
+.google-search-icon {
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #9aa0a6;
+    font-size: 20px;
+}
+
+.google-select {
+    font-size: 14px;
+    border-radius: 4px;
+    border: 1px solid #dadce0;
+    padding: 12px 16px;
+    background: #fff;
+    min-width: 200px;
+    transition: all 0.15s;
+    font-family: inherit;
+}
+
+.google-select:focus {
+    border-color: #4285f4;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(66,133,244,0.2);
+}
+
+.google-events-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 24px;
+}
+
+.google-event-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 6px rgba(32,33,36,0.28);
+    border: 1px solid #dadce0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: all 0.15s cubic-bezier(0.4,0.0,0.2,1);
+    transform: translateY(0);
+}
+
+.google-event-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(32,33,36,0.32);
+}
+
+.google-event-header {
+    background: linear-gradient(135deg, #4285f4 0%, #34a853 100%);
+    color: #fff;
+    padding: 20px 24px;
+    font-size: 18px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.google-event-body {
+    padding: 20px 24px 24px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.google-event-details {
+    font-size: 14px;
+    color: #5f6368;
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+.google-event-details > div {
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.google-event-details i {
+    width: 16px;
+    color: #9aa0a6;
+}
+
+.google-event-description {
+    font-size: 14px;
+    color: #3c4043;
+    margin-bottom: 16px;
+    line-height: 1.6;
+}
+
+.google-badge {
+    display: inline-flex;
+    align-items: center;
+    background: linear-gradient(135deg, #e8f0fe 0%, #e6f4ea 100%);
+    color: #1967d2;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 12px;
+    margin-bottom: 20px;
+    width: fit-content;
+    gap: 6px;
+    border: 1px solid rgba(26,115,232,0.2);
+}
+
+.google-event-actions {
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.google-btn-block {
+    width: 100%;
+    justify-content: center;
+}
+
+.google-btn-outline {
+    background: #fff;
+    color: #4285f4;
+    border: 1px solid #dadce0;
+}
+
+.google-btn-outline:hover {
+    background: #f8f9fa;
+    border-color: #4285f4;
+}
+
+.google-btn-success {
+    background: #34a853;
+    color: #fff;
+    box-shadow: 0 1px 2px 0 rgba(52,168,83,0.3);
+}
+
+.google-btn-success:disabled {
+    background: #94a3b8;
+    color: #fff;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.google-btn-warning {
+    background: #fbbc04;
+    color: #1f2937;
+    box-shadow: 0 1px 2px 0 rgba(251,188,4,0.3);
+}
+
+.google-btn-warning:hover {
+    background: #f9ab00;
+}
+
+.event-card.hidden {
+    display: none;
+}
+
+.google-empty-state {
+    text-align: center;
+    padding: 80px 20px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 6px rgba(32,33,36,0.28);
+    border: 1px solid #dadce0;
+}
+
+.google-empty-icon {
+    font-size: 64px;
+    color: #dadce0;
+    margin-bottom: 24px;
+}
+
+.google-empty-title {
+    font-size: 24px;
+    font-weight: 400;
+    color: #3c4043;
+    margin-bottom: 12px;
+}
+
+.google-empty-subtitle {
+    font-size: 16px;
+    color: #5f6368;
+    margin-bottom: 32px;
+}
+
+.google-empty-actions {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+/* Loading Animation */
+.google-loading {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Enhanced Modals */
+.modal-content {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(32,33,36,0.28);
+}
+
+.modal-header {
+    border-bottom: 1px solid #e8eaed;
+    padding: 24px;
+}
+
+.modal-body {
+    padding: 24px;
+}
+
+.modal-footer {
+    border-top: 1px solid #e8eaed;
+    padding: 20px 24px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .google-header {
+        padding: 16px 20px;
+    }
+    
+    .google-main {
+        padding: 20px 16px;
+    }
+    
+    .google-header-content {
+        flex-direction: column;
+        gap: 16px;
+        align-items: stretch;
+    }
+    
+    .google-title {
+        font-size: 24px;
+        justify-content: center;
+    }
+    
+    .google-search-row {
+        flex-direction: column;
+    }
+    
+    .google-events-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    
+    .google-empty-actions {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .google-empty-actions .google-btn {
+        min-width: 200px;
+    }
+}
+</style>
+
+<div class="google-container">
     <!-- Flash Messages -->
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-            {% for category, message in messages %}
-                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            {% endfor %}
+            <div style="max-width: 1200px; margin: 0 auto; padding: 16px 40px 0;">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            </div>
         {% endif %}
     {% endwith %}
 
-    <!-- Header Section -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1><i class="bi bi-search"></i> Discover Events</h1>
-        <div>
-            <a href="{{ url_for('events_dashboard') }}" class="btn btn-outline-secondary me-2">
-                <i class="bi bi-arrow-left"></i> My Events
-            </a>
-            <a href="{{ url_for('create_event') }}" class="btn btn-primary">
-                <i class="bi bi-plus-circle"></i> Create Event
-            </a>
-        </div>
-    </div>
-
-    <!-- Search and Filter Section -->
-    <div class="card mb-4">
-        <div class="card-body">
-            <div class="row">
-                <div class="col-md-8">
-                    <input type="text" id="search-bar" class="form-control form-control-lg" placeholder="Search events by title, description, or location...">
-                </div>
-                <div class="col-md-4">
-                    <select id="sort-filter" class="form-select form-select-lg">
-                        <option value="date_asc">Date (Earliest First)</option>
-                        <option value="date_desc">Date (Latest First)</option>
-                        <option value="title_asc">Title (A-Z)</option>
-                        <option value="title_desc">Title (Z-A)</option>
-                    </select>
-                </div>
+    <!-- Header -->
+    <div class="google-header">
+        <div class="google-header-content">
+            <h1 class="google-title">
+                <span class="material-icons google-title-icon">search</span>
+                Discover Events
+            </h1>
+            <div class="google-actions">
+                <a href="{{ url_for('events_dashboard') }}" class="google-btn google-btn-secondary">
+                    <span class="material-icons" style="font-size: 18px;">arrow_back</span>
+                    My Events
+                </a>
+                <a href="{{ url_for('create_event') }}" class="google-btn google-btn-primary">
+                    <span class="material-icons" style="font-size: 18px;">add</span>
+                    Create Event
+                </a>
             </div>
         </div>
     </div>
 
-    <!-- Events Grid -->
-    {% if events %}
-        <div id="events-grid" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-            {% for event in events %}
-                <div class="col event-card" data-title="{{ event.title|lower }}" data-description="{{ event.description|lower if event.description else '' }}" data-location="{{ event.location|lower if event.location else '' }}" data-date="{{ event.event_datetime.isoformat() }}">
-                    <div class="card h-100 shadow-sm">
-                        <div class="card-header bg-primary text-white">
-                            <h5 class="card-title mb-0">
-                                <i class="bi bi-calendar-event"></i> {{ event.title }}
-                            </h5>
+    <div class="google-main">
+        <!-- Search and Filter -->
+        <div class="google-search-card">
+            <div class="google-search-row">
+                <div class="google-search-wrapper">
+                    <span class="material-icons google-search-icon">search</span>
+                    <input type="text" 
+                           id="search-bar" 
+                           class="google-search-input" 
+                           placeholder="Search events by title, description, or location...">
+                </div>
+                <select id="sort-filter" class="google-select">
+                    <option value="date_asc">Date (Earliest First)</option>
+                    <option value="date_desc">Date (Latest First)</option>
+                    <option value="title_asc">Title (A-Z)</option>
+                    <option value="title_desc">Title (Z-A)</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Events Grid -->
+        {% if events %}
+            <div id="events-grid" class="google-events-grid">
+                {% for event in events %}
+                    <div class="google-event-card event-card" 
+                         data-title="{{ event.title|lower }}" 
+                         data-description="{{ event.description|lower if event.description else '' }}" 
+                         data-location="{{ event.location|lower if event.location else '' }}" 
+                         data-date="{{ event.event_datetime.isoformat() }}">
+                        
+                        <div class="google-event-header">
+                            <span class="material-icons">event</span>
+                            {{ event.title }}
                         </div>
-                        <div class="card-body d-flex flex-column">
-                            <!-- Event Details -->
-                            <div class="mb-3">
-                                <small class="text-muted">
-                                    <i class="bi bi-calendar-date"></i> 
+                        
+                        <div class="google-event-body">
+                            <div class="google-event-details">
+                                <div>
+                                    <span class="material-icons">calendar_today</span>
                                     {{ event.event_datetime.strftime('%A, %B %d, %Y') }}
-                                    <br>
-                                    <i class="bi bi-clock"></i> 
+                                </div>
+                                <div>
+                                    <span class="material-icons">schedule</span>
                                     {{ event.event_datetime.strftime('%I:%M %p') }}
-                                    {% if event.location %}
-                                        <br><i class="bi bi-geo-alt"></i> {{ event.location }}
-                                    {% endif %}
-                                    <br><i class="bi bi-person"></i> Created by {{ event.creator.username }}
-                                </small>
+                                </div>
+                                {% if event.location %}
+                                    <div>
+                                        <span class="material-icons">location_on</span>
+                                        {{ event.location }}
+                                    </div>
+                                {% endif %}
+                                <div>
+                                    <span class="material-icons">person</span>
+                                    Created by {{ event.creator.username }}
+                                </div>
                             </div>
-
-                            <!-- Description -->
+                            
                             {% if event.description %}
-                                <p class="card-text text-muted mb-3">
+                                <div class="google-event-description">
                                     {{ event.description[:100] }}{% if event.description|length > 100 %}...{% endif %}
-                                </p>
+                                </div>
                             {% endif %}
-
-                            <!-- Attendees Count -->
+                            
                             {% set attendee_count = event.participants.filter_by(status='joined').count() %}
-                            <div class="mb-3">
-                                <span class="badge bg-info">
-                                    <i class="bi bi-people"></i> {{ attendee_count }} attendee{{ 's' if attendee_count != 1 else '' }}
-                                </span>
+                            <div class="google-badge">
+                                <span class="material-icons" style="font-size: 14px;">group</span>
+                                {{ attendee_count }} attendee{{ 's' if attendee_count != 1 else '' }}
                             </div>
-
-                            <!-- Action Buttons -->
-                            <div class="mt-auto">
+                            
+                            <div class="google-event-actions">
                                 {% if event.event_id in participated_event_ids %}
-                                    <!-- Already Joined -->
-                                    <button type="button" class="btn btn-success w-100 mb-2" disabled>
-                                        <i class="bi bi-check-circle"></i> Joined
+                                    <button type="button" class="google-btn google-btn-success google-btn-block" disabled>
+                                        <span class="material-icons" style="font-size: 16px;">check_circle</span>
+                                        Joined
                                     </button>
-                                    <button type="button" class="btn btn-outline-warning w-100" data-bs-toggle="modal" data-bs-target="#leaveModal{{ event.event_id }}">
-                                        <i class="bi bi-box-arrow-right"></i> Leave Event
+                                    <button type="button" 
+                                            class="google-btn google-btn-warning google-btn-block" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#leaveModal{{ event.event_id }}">
+                                        <span class="material-icons" style="font-size: 16px;">exit_to_app</span>
+                                        Leave Event
                                     </button>
                                 {% else %}
-                                    <!-- Can Join -->
-                                    <button type="button" class="btn btn-outline-info w-100 mb-2" data-bs-toggle="modal" data-bs-target="#viewDetailsModal{{ event.event_id }}">
-                                        <i class="bi bi-eye"></i> View Details
+                                    <button type="button" 
+                                            class="google-btn google-btn-outline google-btn-block" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#viewDetailsModal{{ event.event_id }}">
+                                        <span class="material-icons" style="font-size: 16px;">visibility</span>
+                                        View Details
                                     </button>
-                                    <form method="POST" action="{{ url_for('join_event', event_id=event.event_id) }}" class="w-100">
+                                    <form method="POST" action="{{ url_for('join_event', event_id=event.event_id) }}">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                        <button type="submit" class="btn btn-primary w-100">
-                                            <i class="bi bi-calendar-plus"></i> Join Event
+                                        <button type="submit" class="google-btn google-btn-primary google-btn-block">
+                                            <span class="material-icons" style="font-size: 16px;">add_circle</span>
+                                            Join Event
                                         </button>
                                     </form>
                                 {% endif %}
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- Event Details Modal -->
-                <div class="modal fade" id="viewDetailsModal{{ event.event_id }}" tabindex="-1" aria-labelledby="viewDetailsModalLabel{{ event.event_id }}" aria-hidden="true">
-                    <div class="modal-dialog modal-lg">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title" id="viewDetailsModalLabel{{ event.event_id }}">
-                                    <i class="bi bi-calendar-event"></i> {{ event.title }}
-                                </h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                            </div>
-                            <div class="modal-body">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <h6><i class="bi bi-calendar-date"></i> Date & Time</h6>
-                                        <p>{{ event.event_datetime.strftime('%A, %B %d, %Y at %I:%M %p') }}</p>
-                                        
-                                        {% if event.location %}
-                                            <h6><i class="bi bi-geo-alt"></i> Location</h6>
-                                            <p>{{ event.location }}</p>
-                                        {% endif %}
-                                        
-                                        <h6><i class="bi bi-person"></i> Event Creator</h6>
-                                        <p>{{ event.creator.username }}</p>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <h6><i class="bi bi-people"></i> Attendees ({{ attendee_count }})</h6>
-                                        {% set participants = event.participants.filter_by(status='joined').limit(5).all() %}
-                                        {% if participants %}
-                                            <div class="list-group list-group-flush">
-                                                {% for participant in participants %}
-                                                    <div class="list-group-item d-flex align-items-center">
-                                                        <img src="{{ participant.participant.profile_pic_url or url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
-                                                             alt="Profile Picture"
-                                                             class="rounded-circle me-2"
-                                                             width="30" height="30">
-                                                        <small>{{ participant.participant.username }}</small>
-                                                    </div>
-                                                {% endfor %}
-                                                {% if attendee_count > 5 %}
-                                                    <div class="list-group-item text-muted">
-                                                        <small>+ {{ attendee_count - 5 }} more attendee{{ 's' if (attendee_count - 5) != 1 else '' }}</small>
-                                                    </div>
-                                                {% endif %}
-                                            </div>
-                                        {% else %}
-                                            <p class="text-muted">No one has joined yet. Be the first!</p>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                                
-                                {% if event.description %}
-                                    <hr>
-                                    <h6><i class="bi bi-file-text"></i> Description</h6>
-                                    <p>{{ event.description }}</p>
-                                {% endif %}
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                <form method="POST" action="{{ url_for('join_event', event_id=event.event_id) }}" class="d-inline">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                    <button type="submit" class="btn btn-primary">
-                                        <i class="bi bi-calendar-plus"></i> Join This Event
-                                    </button>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Leave Event Modal (if already joined) -->
-                {% if event.event_id in participated_event_ids %}
-                    <div class="modal fade" id="leaveModal{{ event.event_id }}" tabindex="-1" aria-labelledby="leaveModalLabel{{ event.event_id }}" aria-hidden="true">
-                        <div class="modal-dialog">
+                    <!-- Event Details Modal -->
+                    <div class="modal fade" id="viewDetailsModal{{ event.event_id }}" tabindex="-1" aria-labelledby="viewDetailsModalLabel{{ event.event_id }}" aria-hidden="true">
+                        <div class="modal-dialog modal-lg">
                             <div class="modal-content">
                                 <div class="modal-header">
-                                    <h5 class="modal-title" id="leaveModalLabel{{ event.event_id }}">
-                                        <i class="bi bi-question-circle text-warning"></i> Confirm Leave
+                                    <h5 class="modal-title" id="viewDetailsModalLabel{{ event.event_id }}">
+                                        <span class="material-icons" style="margin-right: 8px;">event</span>{{ event.title }}
                                     </h5>
                                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                 </div>
                                 <div class="modal-body">
-                                    <p>Are you sure you want to leave "<strong>{{ event.title|e }}</strong>"?</p>
-                                    <p class="text-muted">You can always join again later if you change your mind.</p>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h6><span class="material-icons" style="font-size: 18px; vertical-align: middle; margin-right: 8px;">schedule</span>Date & Time</h6>
+                                            <p>{{ event.event_datetime.strftime('%A, %B %d, %Y at %I:%M %p') }}</p>
+                                            {% if event.location %}
+                                                <h6><span class="material-icons" style="font-size: 18px; vertical-align: middle; margin-right: 8px;">location_on</span>Location</h6>
+                                                <p>{{ event.location }}</p>
+                                            {% endif %}
+                                            <h6><span class="material-icons" style="font-size: 18px; vertical-align: middle; margin-right: 8px;">person</span>Event Creator</h6>
+                                            <p>{{ event.creator.username }}</p>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <h6><span class="material-icons" style="font-size: 18px; vertical-align: middle; margin-right: 8px;">group</span>Attendees ({{ attendee_count }})</h6>
+                                            {% set participants = event.participants.filter_by(status='joined').limit(5).all() %}
+                                            {% if participants %}
+                                                <div class="list-group list-group-flush">
+                                                    {% for participant in participants %}
+                                                        <div class="list-group-item d-flex align-items-center">
+                                                            <img src="{{ participant.participant.profile_pic_url or url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
+                                                                 alt="Profile Picture"
+                                                                 class="rounded-circle me-2"
+                                                                 width="30" height="30">
+                                                            <small>{{ participant.participant.username }}</small>
+                                                        </div>
+                                                    {% endfor %}
+                                                    {% if attendee_count > 5 %}
+                                                        <div class="list-group-item text-muted">
+                                                            <small>+ {{ attendee_count - 5 }} more attendee{{ 's' if (attendee_count - 5) != 1 else '' }}</small>
+                                                        </div>
+                                                    {% endif %}
+                                                </div>
+                                            {% else %}
+                                                <p class="text-muted">No one has joined yet. Be the first!</p>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {% if event.description %}
+                                        <hr>
+                                        <h6><span class="material-icons" style="font-size: 18px; vertical-align: middle; margin-right: 8px;">description</span>Description</h6>
+                                        <p>{{ event.description }}</p>
+                                    {% endif %}
                                 </div>
                                 <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                    <form method="POST" action="{{ url_for('leave_event', event_id=event.event_id) }}" class="d-inline">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                    <form method="POST" action="{{ url_for('join_event', event_id=event.event_id) }}" class="d-inline">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                        <button type="submit" class="btn btn-warning">
-                                            <i class="bi bi-box-arrow-right"></i> Leave Event
+                                        <button type="submit" class="btn btn-primary">
+                                            <span class="material-icons" style="font-size: 16px; margin-right: 4px;">add_circle</span>Join This Event
                                         </button>
                                     </form>
                                 </div>
                             </div>
                         </div>
                     </div>
-                {% endif %}
-            {% endfor %}
-        </div>
-    {% else %}
-        <!-- No Events Found -->
-        <div class="text-center py-5">
-            <i class="bi bi-calendar-x" style="font-size: 4rem; color: #6c757d;"></i>
-            <h3 class="mt-3 text-muted">No Events Available</h3>
-            <p class="text-muted">There are currently no public events to discover.</p>
-            <div class="mt-4">
-                <a href="{{ url_for('create_event') }}" class="btn btn-primary me-2">
-                    <i class="bi bi-plus-circle"></i> Create the First Event
-                </a>
-                <a href="{{ url_for('events_dashboard') }}" class="btn btn-outline-secondary">
-                    <i class="bi bi-arrow-left"></i> Back to My Events
-                </a>
+
+                    <!-- Leave Event Modal -->
+                    {% if event.event_id in participated_event_ids %}
+                        <div class="modal fade" id="leaveModal{{ event.event_id }}" tabindex="-1" aria-labelledby="leaveModalLabel{{ event.event_id }}" aria-hidden="true">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title" id="leaveModalLabel{{ event.event_id }}">
+                                            <span class="material-icons text-warning" style="margin-right: 8px;">help</span>Confirm Leave
+                                        </h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <p>Are you sure you want to leave "<strong>{{ event.title|e }}</strong>"?</p>
+                                        <p class="text-muted">You can always join again later if you change your mind.</p>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <form method="POST" action="{{ url_for('leave_event', event_id=event.event_id) }}" class="d-inline">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                            <button type="submit" class="btn btn-warning">
+                                                <span class="material-icons" style="font-size: 16px; margin-right: 4px;">exit_to_app</span>Leave Event
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+                {% endfor %}
             </div>
-        </div>
-    {% endif %}
+        {% else %}
+            <!-- Enhanced Empty State -->
+            <div class="google-empty-state">
+                <div class="google-empty-icon">
+                    <span class="material-icons" style="font-size: inherit;">event_busy</span>
+                </div>
+                <h3 class="google-empty-title">No Events Available</h3>
+                <p class="google-empty-subtitle">There are currently no public events to discover.</p>
+                <div class="google-empty-actions">
+                    <a href="{{ url_for('create_event') }}" class="google-btn google-btn-primary">
+                        <span class="material-icons" style="font-size: 16px;">add_circle</span>
+                        Create the First Event
+                    </a>
+                    <a href="{{ url_for('events_dashboard') }}" class="google-btn google-btn-secondary">
+                        <span class="material-icons" style="font-size: 16px;">arrow_back</span>
+                        Back to My Events
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
 </div>
-
-<!-- Custom Styling -->
-<style>
-.card {
-    border: none;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    transition: all 0.3s ease;
-}
-
-.card:hover {
-    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-    transform: translateY(-2px);
-}
-
-.event-card {
-    transition: opacity 0.3s ease;
-}
-
-.event-card.hidden {
-    opacity: 0.3;
-    pointer-events: none;
-}
-
-.badge {
-    font-size: 0.8em;
-}
-
-.modal-header {
-    border-bottom: 2px solid #f8f9fa;
-}
-
-.list-group-item {
-    border: none;
-    padding: 0.5rem 0;
-}
-
-/* Search highlighting */
-.highlight {
-    background-color: yellow;
-    font-weight: bold;
-}
-</style>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -281,61 +694,80 @@ document.addEventListener('DOMContentLoaded', function() {
     const sortFilter = document.getElementById('sort-filter');
     const eventCards = document.querySelectorAll('.event-card');
 
-    // Search functionality
+    // Enhanced search with debouncing
+    let searchTimeout;
     searchBar.addEventListener('input', function() {
-        const query = this.value.toLowerCase();
-        
-        eventCards.forEach(card => {
-            const title = card.getAttribute('data-title');
-            const description = card.getAttribute('data-description');
-            const location = card.getAttribute('data-location');
-            
-            const matches = title.includes(query) || 
-                          description.includes(query) || 
-                          location.includes(query);
-            
-            if (matches || query === '') {
-                card.style.display = '';
-                card.classList.remove('hidden');
-            } else {
-                card.classList.add('hidden');
-            }
-        });
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            const query = this.value.toLowerCase();
+            eventCards.forEach(card => {
+                const title = card.getAttribute('data-title');
+                const description = card.getAttribute('data-description');
+                const location = card.getAttribute('data-location');
+                const matches = title.includes(query) || description.includes(query) || location.includes(query);
+                
+                if (matches || query === '') {
+                    card.style.display = '';
+                    card.classList.remove('hidden');
+                } else {
+                    card.classList.add('hidden');
+                }
+            });
+        }, 300);
     });
 
-    // Sort functionality
+    // Enhanced sort with animation
     sortFilter.addEventListener('change', function() {
         const sortType = this.value;
         const eventsGrid = document.getElementById('events-grid');
         const cards = Array.from(eventCards);
         
-        cards.sort((a, b) => {
-            switch(sortType) {
-                case 'date_asc':
-                    return new Date(a.getAttribute('data-date')) - new Date(b.getAttribute('data-date'));
-                case 'date_desc':
-                    return new Date(b.getAttribute('data-date')) - new Date(a.getAttribute('data-date'));
-                case 'title_asc':
-                    return a.getAttribute('data-title').localeCompare(b.getAttribute('data-title'));
-                case 'title_desc':
-                    return b.getAttribute('data-title').localeCompare(a.getAttribute('data-title'));
-                default:
-                    return 0;
-            }
-        });
+        // Add loading state
+        eventsGrid.style.opacity = '0.6';
         
-        // Re-append sorted cards
-        cards.forEach(card => eventsGrid.appendChild(card));
+        setTimeout(() => {
+            cards.sort((a, b) => {
+                switch(sortType) {
+                    case 'date_asc':
+                        return new Date(a.getAttribute('data-date')) - new Date(b.getAttribute('data-date'));
+                    case 'date_desc':
+                        return new Date(b.getAttribute('data-date')) - new Date(a.getAttribute('data-date'));
+                    case 'title_asc':
+                        return a.getAttribute('data-title').localeCompare(b.getAttribute('data-title'));
+                    case 'title_desc':
+                        return b.getAttribute('data-title').localeCompare(a.getAttribute('data-title'));
+                    default:
+                        return 0;
+                }
+            });
+            
+            cards.forEach(card => eventsGrid.appendChild(card));
+            eventsGrid.style.opacity = '1';
+        }, 150);
     });
 
-    // Auto-dismiss alerts after 5 seconds
+    // Auto-dismiss alerts with animation
     setTimeout(function() {
         var alerts = document.querySelectorAll('.alert');
         alerts.forEach(function(alert) {
-            var bsAlert = new bootstrap.Alert(alert);
-            bsAlert.close();
+            if (bootstrap && bootstrap.Alert) {
+                var bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            }
         });
     }, 5000);
+
+    // Add stagger animation to cards on load
+    const cards = document.querySelectorAll('.google-event-card');
+    cards.forEach((card, index) => {
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(20px)';
+        setTimeout(() => {
+            card.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+            card.style.opacity = '1';
+            card.style.transform = 'translateY(0)';
+        }, index * 50);
+    });
 });
 </script>
 {% endblock %}

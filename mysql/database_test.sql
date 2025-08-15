@@ -14,6 +14,7 @@ DROP TABLE IF EXISTS notifications; -- Assuming notifications exists
 DROP TABLE IF EXISTS reports;       -- Assuming reports exists
 DROP TABLE IF EXISTS messages;      -- Assuming messages exists
 DROP TABLE IF EXISTS chat_participants; -- Assuming chat_participants exists
+DROP TABLE IF EXISTS friend_chat_map; -- Assuming friend_chat_map exists
 DROP TABLE IF EXISTS chats;         -- Assuming chats exists
 DROP TABLE IF EXISTS friendships;   -- Assuming friendships exists
 DROP TABLE IF EXISTS admin_actions; -- Assuming admin_actions exists
@@ -86,9 +87,23 @@ CREATE TABLE events (
     description TEXT NULL,
     event_datetime DATETIME NOT NULL,
     location VARCHAR(255) NULL,
+    latitude FLOAT NULL,
+    longitude FLOAT NULL,
     is_reminder BOOLEAN NOT NULL DEFAULT FALSE,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- Add this to your database_test.sql after the events table
+CREATE TABLE event_participants (
+    participation_id INT AUTO_INCREMENT PRIMARY KEY,
+    event_id INT NOT NULL,
+    user_id INT NOT NULL,
+    joined_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status ENUM('joined', 'left', 'cancelled') NOT NULL DEFAULT 'joined',
+    UNIQUE KEY _event_user_uc (event_id, user_id),
+    FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
@@ -165,15 +180,29 @@ CREATE TABLE reports (
 CREATE TABLE chats (
     chat_id INT AUTO_INCREMENT PRIMARY KEY,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    -- chat_secret_key VARCHAR(64) NOT NULL
 );
 
 CREATE TABLE chat_participants (
     chat_participant_id INT AUTO_INCREMENT PRIMARY KEY,
     chat_id INT NOT NULL,
     user_id INT NOT NULL,
+    cleared_at DATETIME NULL,
     UNIQUE (chat_id, user_id),
     FOREIGN KEY (chat_id) REFERENCES chats(chat_id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+CREATE TABLE friend_chat_map (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    friend_id INT NOT NULL,
+    chat_id INT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id, friend_id),
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (friend_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (chat_id) REFERENCES chats(chat_id) ON DELETE CASCADE
 );
 
 CREATE TABLE messages (
@@ -339,3 +368,5 @@ FROM users u, roles r
 WHERE (u.username = 'admin' AND r.role_name IN ('user', 'editor', 'admin'))
    OR (u.username = 'editor' AND r.role_name IN ('user', 'editor'))
    OR (u.username IN ('user', 'user2', 'user3', 'user4') AND r.role_name = 'user');
+
+ALTER TABLE webauthn_credentials MODIFY COLUMN public_key LONGBLOB;

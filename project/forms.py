@@ -5,6 +5,7 @@ from wtforms import StringField, PasswordField, SubmitField, IntegerField,Select
 from wtforms.validators import DataRequired, Length, Email, EqualTo,ValidationError, Optional
 from flask_wtf.file import FileField, FileAllowed, FileRequired
 from flask_wtf.recaptcha import RecaptchaField # Import RecaptchaField
+from wtforms.fields import DateTimeLocalField, BooleanField
 
 from flask_login import current_user
 
@@ -137,3 +138,37 @@ class Disable2FAForm(FlaskForm):
 
 class RemovePassKeyForm(FlaskForm):
     submit = SubmitField('Disable Passkey', render_kw={"class": "btn btn-danger"})
+
+class EventForm(FlaskForm):
+    title = StringField(
+        'Title',
+        validators=[
+            DataRequired(),
+            Length(min=3, max=100, message="Title must be between 3 and 100 characters.")
+        ]
+    )
+    description = TextAreaField(
+        'Description',
+        validators=[
+            Length(max=1000, message="Description cannot exceed 1000 characters.")
+        ]
+    )
+    event_datetime = DateTimeLocalField(
+        'Date & Time',
+        format='%Y-%m-%dT%H:%M',
+        validators=[DataRequired()]
+    )
+    location = StringField(
+        'Location',
+        validators=[
+            Length(max=255, message="Location cannot exceed 255 characters.")
+        ]
+    )
+    # REMOVED: is_reminder = BooleanField('Is this a reminder?')
+    
+    # OPTIONAL: Remove CAPTCHA for testing, add back later
+    # recaptcha = RecaptchaField()
+    
+    submit = SubmitField('Create Event')  # Changed from 'Create' to 'Create Event'
+
+    #hausas

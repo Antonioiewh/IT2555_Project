@@ -12,7 +12,7 @@ services:
     volumes:
       - ./mysql:/docker-entrypoint-initdb.d  # Mount SQL initialization script
     ports:
-      - "33060:3306" # Expose MySQL port for local access if needed (optional)
+      - "33600:3306" # Expose MySQL port for local access if needed (optional)
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
       interval: 5s

@@ -123,7 +123,7 @@ class EventParticipant(db.Model):
     __tablename__ = 'event_participants'
     
     participation_id = db.Column(db.Integer, primary_key=True)
-    event_id = db.Column(db.Integer, db.ForeignKey('events.event_id'), nullable=False)
+    event_id = db.Column(db.Integer, db.ForeignKey('events.event_id'), nullable=False)  # This is correct
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     joined_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     status = db.Column(ENUM('joined', 'left', 'cancelled', name='participation_status'), nullable=False, default='joined')
@@ -138,20 +138,21 @@ class EventParticipant(db.Model):
         return f"<EventParticipant Event:{self.event_id} User:{self.user_id}>"
 
 class Event(db.Model):
-    __tablename__ = 'events'
+    __tablename__ = 'events'  # Change from 'event' to 'events'
+    
     event_id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)  # Event creator
-    title = db.Column(db.String(255), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)  # Change from 'user.user_id' to 'users.user_id'
+    title = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text, nullable=True)
     event_datetime = db.Column(db.DateTime, nullable=False)
-    location = db.Column(db.String(255), nullable=True)
-    is_reminder = db.Column(db.Boolean, nullable=False, default=False)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    location = db.Column(db.String(200), nullable=True)
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
+    is_reminder = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # FIX: Remove the conflicting 'creator' relationship since it's defined in User model
-    # creator = db.relationship('User', backref=db.backref('created_events', lazy='dynamic'))  # REMOVE THIS LINE
-    
+    # Relationships - this will now work correctly
     def __repr__(self):
         return f"<Event {self.title}>"
 

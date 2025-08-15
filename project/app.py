@@ -86,7 +86,7 @@ app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config['RECAPTCHA_PUBLIC_KEY'] = '6LefCKcrAAAAAK-REXMG_5i6aqTW_ewYwRbEecB6'
 app.config['RECAPTCHA_PRIVATE_KEY'] = '6LefCKcrAAAAAGaO2Rac8zgqVqhjsy9oxp31fThl' #this in .env!
-
+app.config['GOOGLE_MAPS_API_KEY'] = os.getenv('GOOGLE_MAPS_API_KEY')
 # Database configuration
 DB_USER = os.getenv('MYSQL_USER', 'flaskuser')
 DB_PASSWORD = os.getenv('MYSQL_PASSWORD', 'password')
@@ -127,8 +127,10 @@ def load_user(user_id):
     """Loads a user from the database given their ID."""
     return db.session.get(User, int(user_id))
 
-
-# --- User Required Decorator ---
+# Add a template global to make it available in templates
+@app.template_global()
+def google_maps_api_key():
+    return app.config.get('GOOGLE_MAPS_API_KEY')
 
 
 
@@ -2045,14 +2047,24 @@ def create_event():
     
     if form.validate_on_submit():
         try:
+            # Get coordinates from form data
+            latitude = request.form.get('latitude')
+            longitude = request.form.get('longitude')
+            
+            # Convert to float if provided
+            lat = float(latitude) if latitude else None
+            lng = float(longitude) if longitude else None
+            
             # Create new event
             new_event = Event(
-                user_id=current_user.user_id,  # Creator of the event
+                user_id=current_user.user_id,
                 title=form.title.data,
                 description=form.description.data,
                 event_datetime=form.event_datetime.data,
                 location=form.location.data,
-                is_reminder=False,  # Always False since this only creates events
+                latitude=lat,
+                longitude=lng,
+                is_reminder=False,
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow()
             )
@@ -2067,15 +2079,7 @@ def create_event():
             db.session.rollback()
             print(f"Error creating event: {str(e)}")
             flash('An error occurred while creating the event. Please try again.', 'danger')
-            
-    else:
-        # Debug form errors
-        if form.errors:
-            print(f"Form validation errors: {form.errors}")
-            for field, errors in form.errors.items():
-                for error in errors:
-                    flash(f"{field}: {error}", 'error')
-            
+    
     return render_template('create_event.html', form=form)
 
 # Events Dashboard Route

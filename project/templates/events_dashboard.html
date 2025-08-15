@@ -3,13 +3,14 @@
 
 {% block head %}
 <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<script async defer src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key() }}&callback=initDashboardMaps"></script>
 {% endblock %}
 
 {% block content %}
 <style>
 .google-container {
     font-family: 'Google Sans', Arial, sans-serif;
-    background: #ffffff;
+    background: #f8f9fa;
     min-height: 80vh;
     padding: 24px;
     max-width: 1200px;
@@ -208,6 +209,50 @@
     font-size: 14px;
     margin-bottom: 24px;
 }
+
+/* Map styles for modals */
+.event-map-container {
+    border: 1px solid #dadce0;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.event-map {
+    height: 250px;
+    width: 100%;
+}
+
+.event-location-info {
+    background: #f8f9fa;
+    padding: 12px;
+    border-radius: 4px;
+    margin-bottom: 12px;
+    font-size: 14px;
+    color: #5f6368;
+}
+
+.directions-btn {
+    background: #4285f4;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 14px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.2s;
+    margin-bottom: 12px;
+}
+
+.directions-btn:hover {
+    background: #3367d6;
+    color: #fff;
+    text-decoration: none;
+}
+
 @media (max-width: 768px) {
     .google-container {
         padding: 16px;
@@ -299,6 +344,9 @@
                                     <div>
                                         <i class="bi bi-geo-alt" style="width: 16px;"></i>
                                         {{ event.location }}
+                                        {% if event.latitude and event.longitude %}
+                                            <small class="text-muted">({{ event.latitude|round(4) }}, {{ event.longitude|round(4) }})</small>
+                                        {% endif %}
                                     </div>
                                 {% endif %}
                             </div>
@@ -315,8 +363,20 @@
                                 {% if event.is_reminder %}
                                     <span class="google-badge google-badge-info">Personal Reminder</span>
                                 {% endif %}
+                                {% if event.latitude and event.longitude %}
+                                    <span class="google-badge google-badge-success">
+                                        <i class="bi bi-geo-alt" style="font-size: 10px;"></i>
+                                        Location Mapped
+                                    </span>
+                                {% endif %}
                             </div>
                             <div class="google-event-actions">
+                                {% if event.latitude and event.longitude %}
+                                    <button type="button" class="google-btn google-btn-secondary google-btn-small" data-bs-toggle="modal" data-bs-target="#locationModal{{ event.event_id }}">
+                                        <i class="bi bi-geo-alt"></i>
+                                        View Location
+                                    </button>
+                                {% endif %}
                                 {% if not event.is_reminder and participant_count > 0 %}
                                     <button type="button" class="google-btn google-btn-secondary google-btn-small" data-bs-toggle="modal" data-bs-target="#viewParticipantsModal{{ event.event_id }}">
                                         <i class="bi bi-people"></i>
@@ -331,7 +391,47 @@
                         </div>
                     </div>
 
-                    <!-- Modals remain the same as your original code -->
+                    <!-- Location Modal for Created Events -->
+                    {% if event.latitude and event.longitude %}
+                        <div class="modal fade" id="locationModal{{ event.event_id }}" tabindex="-1" aria-labelledby="locationModalLabel{{ event.event_id }}" aria-hidden="true">
+                            <div class="modal-dialog modal-lg">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title" id="locationModalLabel{{ event.event_id }}">
+                                            <i class="bi bi-geo-alt"></i> Location for "{{ event.title|e }}"
+                                        </h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="event-location-info">
+                                            <strong>Address:</strong> {{ event.location }}<br>
+                                            <strong>Coordinates:</strong> {{ event.latitude|round(6) }}, {{ event.longitude|round(6) }}
+                                        </div>
+                                        <div class="event-map-container">
+                                            <div id="createdEventMap{{ event.event_id }}" class="event-map"></div>
+                                        </div>
+                                        <div class="text-center">
+                                            <a href="https://www.google.com/maps/dir/?api=1&destination={{ event.latitude }},{{ event.longitude }}" 
+                                               target="_blank" class="directions-btn">
+                                                <i class="bi bi-geo-alt"></i>
+                                                Get Directions
+                                            </a>
+                                            <a href="https://www.google.com/maps?q={{ event.latitude }},{{ event.longitude }}" 
+                                               target="_blank" class="google-btn google-btn-secondary" style="display: inline-flex;">
+                                                <i class="bi bi-map"></i>
+                                                View on Google Maps
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+
+                    <!-- Participants Modal -->
                     {% if not event.is_reminder %}
                         <div class="modal fade" id="viewParticipantsModal{{ event.event_id }}" tabindex="-1">
                             <div class="modal-dialog">
@@ -373,6 +473,7 @@
                         </div>
                     {% endif %}
                     
+                    <!-- Delete Modal -->
                     <div class="modal fade" id="deleteModal{{ event.event_id }}" tabindex="-1">
                         <div class="modal-dialog">
                             <div class="modal-content">
@@ -445,6 +546,9 @@
                                     <div>
                                         <i class="bi bi-geo-alt" style="width: 16px;"></i>
                                         {{ event.location }}
+                                        {% if event.latitude and event.longitude %}
+                                            <small class="text-muted">({{ event.latitude|round(4) }}, {{ event.longitude|round(4) }})</small>
+                                        {% endif %}
                                     </div>
                                 {% endif %}
                                 <div>
@@ -467,8 +571,20 @@
                                     <i class="bi bi-calendar-check" style="font-size: 10px;"></i>
                                     Joined
                                 </span>
+                                {% if event.latitude and event.longitude %}
+                                    <span class="google-badge google-badge-success">
+                                        <i class="bi bi-geo-alt" style="font-size: 10px;"></i>
+                                        Location Available
+                                    </span>
+                                {% endif %}
                             </div>
                             <div class="google-event-actions">
+                                {% if event.latitude and event.longitude %}
+                                    <button type="button" class="google-btn google-btn-secondary google-btn-small" data-bs-toggle="modal" data-bs-target="#attendingLocationModal{{ event.event_id }}">
+                                        <i class="bi bi-geo-alt"></i>
+                                        View Location
+                                    </button>
+                                {% endif %}
                                 <button type="button" class="google-btn google-btn-secondary google-btn-small" data-bs-toggle="modal" data-bs-target="#leaveModal{{ event.event_id }}">
                                     <i class="bi bi-box-arrow-right"></i>
                                     Leave Event
@@ -476,6 +592,47 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Location Modal for Attending Events -->
+                    {% if event.latitude and event.longitude %}
+                        <div class="modal fade" id="attendingLocationModal{{ event.event_id }}" tabindex="-1">
+                            <div class="modal-dialog modal-lg">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">
+                                            <i class="bi bi-geo-alt"></i> Location for "{{ event.title|e }}"
+                                        </h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="event-location-info">
+                                            <strong>Address:</strong> {{ event.location }}<br>
+                                            <strong>Coordinates:</strong> {{ event.latitude|round(6) }}, {{ event.longitude|round(6) }}<br>
+                                            <strong>Event Creator:</strong> {{ event.creator.username }}
+                                        </div>
+                                        <div class="event-map-container">
+                                            <div id="attendingEventMap{{ event.event_id }}" class="event-map"></div>
+                                        </div>
+                                        <div class="text-center">
+                                            <a href="https://www.google.com/maps/dir/?api=1&destination={{ event.latitude }},{{ event.longitude }}" 
+                                               target="_blank" class="directions-btn">
+                                                <i class="bi bi-geo-alt"></i>
+                                                Get Directions
+                                            </a>
+                                            <a href="https://www.google.com/maps?q={{ event.latitude }},{{ event.longitude }}" 
+                                               target="_blank" class="google-btn google-btn-secondary" style="display: inline-flex;">
+                                                <i class="bi bi-map"></i>
+                                                View on Google Maps
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
 
                     <!-- Leave Modal -->
                     <div class="modal fade" id="leaveModal{{ event.event_id }}" tabindex="-1">
@@ -522,7 +679,101 @@
 </div>
 
 <script>
+function initDashboardMaps() {
+    // This function will be called after Google Maps API loads
+    console.log('Dashboard maps initialized');
+}
+
+// Initialize individual event maps
+{% for event in created_events %}
+    {% if event.latitude and event.longitude %}
+    function initCreatedEventMap{{ event.event_id }}() {
+        const location = { lat: {{ event.latitude }}, lng: {{ event.longitude }} };
+        
+        const mapContainer = document.getElementById('createdEventMap{{ event.event_id }}');
+        if (!mapContainer) return;
+        
+        const map = new google.maps.Map(mapContainer, {
+            zoom: 15,
+            center: location,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: false,
+            gestureHandling: 'cooperative'
+        });
+        
+        const marker = new google.maps.Marker({
+            position: location,
+            map: map,
+            title: '{{ event.title|e }}',
+            icon: {
+                url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+            }
+        });
+        
+        const infoWindow = new google.maps.InfoWindow({
+            content: `
+                <div>
+                    <strong>{{ event.title|e }}</strong><br>
+                    {{ event.location|e }}<br>
+                    <small>{{ event.event_datetime.strftime('%B %d, %Y at %I:%M %p') }}</small>
+                </div>
+            `
+        });
+        
+        marker.addListener('click', function() {
+            infoWindow.open(map, marker);
+        });
+    }
+    {% endif %}
+{% endfor %}
+
+{% for event in participated_events %}
+    {% if event.latitude and event.longitude %}
+    function initAttendingEventMap{{ event.event_id }}() {
+        const location = { lat: {{ event.latitude }}, lng: {{ event.longitude }} };
+        
+        const mapContainer = document.getElementById('attendingEventMap{{ event.event_id }}');
+        if (!mapContainer) return;
+        
+        const map = new google.maps.Map(mapContainer, {
+            zoom: 15,
+            center: location,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: false,
+            gestureHandling: 'cooperative'
+        });
+        
+        const marker = new google.maps.Marker({
+            position: location,
+            map: map,
+            title: '{{ event.title|e }}',
+            icon: {
+                url: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png'
+            }
+        });
+        
+        const infoWindow = new google.maps.InfoWindow({
+            content: `
+                <div>
+                    <strong>{{ event.title|e }}</strong><br>
+                    {{ event.location|e }}<br>
+                    <small>Created by {{ event.creator.username }}</small><br>
+                    <small>{{ event.event_datetime.strftime('%B %d, %Y at %I:%M %p') }}</small>
+                </div>
+            `
+        });
+        
+        marker.addListener('click', function() {
+            infoWindow.open(map, marker);
+        });
+    }
+    {% endif %}
+{% endfor %}
+
 document.addEventListener('DOMContentLoaded', function() {
+    // Auto-dismiss alerts
     setTimeout(function() {
         var alerts = document.querySelectorAll('.alert');
         alerts.forEach(function(alert) {
@@ -532,6 +783,29 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }, 5000);
+
+    // Initialize maps when modals are shown
+    {% for event in created_events %}
+        {% if event.latitude and event.longitude %}
+        const createdModal{{ event.event_id }} = document.getElementById('locationModal{{ event.event_id }}');
+        if (createdModal{{ event.event_id }}) {
+            createdModal{{ event.event_id }}.addEventListener('shown.bs.modal', function() {
+                setTimeout(() => initCreatedEventMap{{ event.event_id }}(), 200);
+            });
+        }
+        {% endif %}
+    {% endfor %}
+
+    {% for event in participated_events %}
+        {% if event.latitude and event.longitude %}
+        const attendingModal{{ event.event_id }} = document.getElementById('attendingLocationModal{{ event.event_id }}');
+        if (attendingModal{{ event.event_id }}) {
+            attendingModal{{ event.event_id }}.addEventListener('shown.bs.modal', function() {
+                setTimeout(() => initAttendingEventMap{{ event.event_id }}(), 200);
+            });
+        }
+        {% endif %}
+    {% endfor %}
 });
 </script>
 {% endblock %}

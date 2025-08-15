@@ -2,21 +2,74 @@
 {% block content %}
 <div class="container mt-4">
     <h2>Edit Profile</h2>
-    <form method="POST" enctype="multipart/form-data">
-        
+    <form method="POST" enctype="multipart/form-data" onsubmit="return validateForm()">
         {{ form.hidden_tag() }}
         <div class="mb-3">
             <label for="username" class="form-label">Username</label>
-            {{ form.username(class="form-control", value=user.username) }}
+            {{ form.username(class="form-control", value=user.username|e, pattern="^[a-zA-Z0-9_]{3,20}$", 
+               title="Username must be 3-20 characters long and contain only letters, numbers, and underscores") }}
         </div>
         <div class="mb-3">
             <label for="profile_pic" class="form-label">Profile Picture</label><br>
-            <img src="{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') if not user.profile_pic_url else user.profile_pic_url }}" 
-                 alt="Profile Picture" class="rounded-circle mb-2" width="100" height="100"><br>
-            {{ form.image(class="form-control", accept=".jpg,.jpeg,.png") }}
+            <img id="preview-image" 
+                 src="{{ url_for('static', filename=user.profile_pic_url) if user.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}" 
+                 alt="Profile Picture" 
+                 class="rounded-circle mb-2" 
+                 width="100" 
+                 height="100"><br>
+            {{ form.profile_pic(class="form-control", accept="image/jpeg,image/png", onchange="previewImage(event)") }}
+            <small class="text-muted">Maximum file size: 5MB. Allowed formats: JPG, PNG</small>
         </div>
         <button type="submit" class="btn btn-success">Save Changes</button>
-        <a href="/account" class="btn btn-secondary">Cancel</a>
+        <a href="{{ url_for('account') }}" class="btn btn-secondary">Cancel</a>
     </form>
 </div>
+
+<script>
+function previewImage(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png'];
+    if (!allowedTypes.includes(file.type)) {
+        alert('Please upload only JPG or PNG images.');
+        event.target.value = '';
+        return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+        alert('File size must be less than 5MB');
+        event.target.value = '';
+        return;
+    }
+
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        document.getElementById('preview-image').src = e.target.result;
+    }
+    reader.readAsDataURL(file);
+}
+
+function validateForm() {
+    const usernameInput = document.getElementById('username');
+    const username = usernameInput.value;
+
+    // Validate username
+    const usernamePattern = /^[a-zA-Z0-9_]{3,20}$/;
+    if (!usernamePattern.test(username)) {
+        alert('Username must be 3-20 characters long and contain only letters, numbers, and underscores');
+        return false;
+    }
+
+    return true;
+}
+
+// Prevent XSS in username input
+document.getElementById('username').addEventListener('input', function(e) {
+    this.value = this.value.replace(/[<>]/g, '');
+});
+</script>
 {% endblock %}

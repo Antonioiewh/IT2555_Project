@@ -25,3 +25,5 @@ pyotp
 qrcode
 pillow
 fido2==0.9.2
+python-magic==0.4.27
+bleach==6.1.0

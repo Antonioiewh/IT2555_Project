@@ -135,7 +135,7 @@ CREATE TABLE post_images (
 CREATE TABLE notifications (
     notification_id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
-    type ENUM('like', 'comment', 'friend_request', 'event_reminder', 'message', 'report_status', 'admin_override') NOT NULL,
+    type VARCHAR(100) NOT NULL,
     source_id INT NULL, -- ID of the related item (e.g., post_id, friendship_id)
     message VARCHAR(255) NOT NULL,
     is_read BOOLEAN NOT NULL DEFAULT FALSE,

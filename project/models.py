@@ -69,6 +69,7 @@ class User(UserMixin, db.Model):
     admin_actions_performed = db.relationship('AdminAction', foreign_keys='AdminAction.admin_user_id', backref='admin_user', lazy=True)
     admin_actions_targeted = db.relationship('AdminAction', foreign_keys='AdminAction.target_user_id', backref='target_user', lazy=True)
     user_logs = db.relationship('UserLog', backref='user', lazy=True)
+    notifications = db.relationship('Notification', backref='user', lazy=True, cascade='all, delete-orphan')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -188,16 +189,15 @@ class PostImage(db.Model):
 # **************************************
 class Notification(db.Model):
     __tablename__ = 'notifications'
-    notification_id = db.Column(db.Integer, primary_key=True)
+    
+    notification_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
-    type = db.Column(ENUM('like', 'comment', 'friend_request', 'event_reminder', 'message', 'report_status', 'admin_override', name='notification_type'), nullable=False)
+    type = db.Column(db.String(50), nullable=False)  # ✅ Changed from smaller size to 50
     source_id = db.Column(db.Integer, nullable=True)
-    message = db.Column(db.String(255), nullable=False)
-    is_read = db.Column(db.Boolean, nullable=False, default=False)
+    message = db.Column(db.Text, nullable=False)
+    is_read = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-
-    def __repr__(self):
-        return f"<Notification {self.notification_id} for User:{self.user_id}>"
+    
 
 # **************************************
 # 6. Customer Service

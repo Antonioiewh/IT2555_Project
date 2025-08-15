@@ -1,0 +1,201 @@
+{% extends "UserBase.html" %}
+{% block title %}Create Event{% endblock %}
+{% from "includes/_formHelper.html" import render_field %}
+
+{% block head %}
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<style>
+.google-container {
+    font-family: 'Google Sans', Arial, sans-serif;
+    background: #ffffff;
+    min-height: 80vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 40px 20px;
+}
+.google-card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(60,64,67,.08);
+    border: 1px solid #dadce0;
+    padding: 40px;
+    width: 100%;
+    max-width: 500px;
+}
+.google-header {
+    text-align: center;
+    margin-bottom: 32px;
+}
+.google-icon {
+    width: 48px;
+    height: 48px;
+    background: #4285f4;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+    color: white;
+    font-size: 24px;
+}
+.google-title {
+    font-size: 24px;
+    font-weight: 400;
+    color: #202124;
+    margin: 0 0 8px 0;
+}
+.google-form-group {
+    margin-bottom: 24px;
+}
+.google-label {
+    display: block;
+    font-size: 14px;
+    color: #3c4043;
+    font-weight: 500;
+    margin-bottom: 8px;
+}
+.google-input, .google-textarea {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    font-size: 16px;
+    color: #3c4043;
+    background: #fff;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+.google-input:focus, .google-textarea:focus {
+    outline: none;
+    border-color: #4285f4;
+    box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.2);
+}
+.google-textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+.google-btn {
+    width: 100%;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    gap: 8px;
+}
+.google-btn-primary {
+    background: #4285f4;
+    color: #fff;
+}
+.google-btn-primary:hover {
+    background: #3367d6;
+    box-shadow: 0 1px 3px rgba(66,133,244,.3);
+}
+.google-link-section {
+    text-align: center;
+    margin-top: 24px;
+}
+.google-link {
+    color: #4285f4;
+    text-decoration: none;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.google-link:hover {
+    text-decoration: underline;
+    color: #3367d6;
+}
+.google-error {
+    color: #d93025;
+    font-size: 12px;
+    margin-top: 4px;
+}
+@media (max-width: 768px) {
+    .google-card {
+        padding: 32px 16px;
+        margin: 0 8px;
+    }
+}
+</style>
+
+<div class="google-container">
+    <div class="google-card">
+        <div class="google-header">
+            <div class="google-icon">
+                <i class="bi bi-calendar-plus"></i>
+            </div>
+            <h1 class="google-title">Create Event</h1>
+        </div>
+        
+        <form method="POST" action="" enctype="multipart/form-data">
+            {{ form.hidden_tag() }}
+            
+            <div class="google-form-group">
+                <label for="title" class="google-label">Event Title</label>
+                {{ form.title(class="google-input", id="title", placeholder="Enter event title") }}
+                {% if form.title.errors %}
+                    {% for error in form.title.errors %}
+                        <div class="google-error">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            
+            <div class="google-form-group">
+                <label for="description" class="google-label">Description</label>
+                {{ form.description(class="google-textarea", id="description", placeholder="Describe your event") }}
+                {% if form.description.errors %}
+                    {% for error in form.description.errors %}
+                        <div class="google-error">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            
+            <div class="google-form-group">
+                <label for="event_datetime" class="google-label">Date & Time</label>
+                {{ form.event_datetime(class="google-input", id="event_datetime", type="datetime-local") }}
+                {% if form.event_datetime.errors %}
+                    {% for error in form.event_datetime.errors %}
+                        <div class="google-error">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            
+            <div class="google-form-group">
+                <label for="location" class="google-label">Location</label>
+                {{ form.location(class="google-input", id="location", placeholder="Event location") }}
+                {% if form.location.errors %}
+                    {% for error in form.location.errors %}
+                        <div class="google-error">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            
+            <button type="submit" class="google-btn google-btn-primary">
+                <i class="bi bi-calendar-plus"></i>
+                Create Event
+            </button>
+        </form>
+        
+        <div class="google-link-section">
+            <a href="{{ url_for('events_dashboard') }}" class="google-link">
+                <i class="bi bi-arrow-left"></i>
+                Back to Events Dashboard
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

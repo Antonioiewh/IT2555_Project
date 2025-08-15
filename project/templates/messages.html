@@ -357,7 +357,7 @@
 
 
 const myChatIds = {{ my_chat_ids|tojson }};
-const socket = io('https://localhost', {
+const socket = io(window.location.origin, {
     withCredentials: true,
     transports: ['websocket', 'polling']
 });
@@ -377,16 +377,15 @@ const secretKey = 'YOUR_SHARED_SECRET_KEY'; // Replace with a per-chat key for r
 const myUserId = {{ current_user.user_id }};
 
 // Send message handler
+// This part changed , may nuke the function idfk
 document.getElementById('chat-form').addEventListener('submit', function(e) {
   e.preventDefault();
-  console.log('[SUBMIT] clicked');
   const input = document.getElementById('chat-input');
   let plaintext = input.value;
   console.log('[SUBMIT] Plaintext:', plaintext);
   if (!currentChatId) return;
 
   let ciphertext = CryptoJS.AES.encrypt(plaintext, secretKey).toString();
-  console.log('[SUBMIT] Emitting:', { chat_id: currentChatId, message: ciphertext });
   socket.emit('send_message', { chat_id: currentChatId, message: ciphertext });
   console.log('Sending to chat:', currentChatId);
 

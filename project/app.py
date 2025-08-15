@@ -268,7 +268,6 @@ def get_fido2_server():
 def home():
     return render_template('UserHome.html')
 
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     form = LoginForm()
@@ -317,6 +316,9 @@ def login():
                     user.current_status = 'online'
                     user.last_active_at = datetime.utcnow()
                     db.session.commit()
+
+                    # ✅ Send event reminders on login
+                    send_user_event_reminders(user.user_id)
 
                     log_user_login_success(user.user_id, details="User logged in successfully with password only.")
                     next_page = request.args.get('next')
@@ -399,6 +401,10 @@ def verify_2fa():
         if totp.verify(code):
             login_user(user)
             session.pop('pending_2fa_user_id', None)
+            
+            # ✅ Send event reminders on successful 2FA login
+            send_user_event_reminders(user.user_id)
+            
             return redirect(url_for('home'))
     return render_template('UserVerify2FA.html', form=form)
 
@@ -1036,23 +1042,52 @@ def search_users():
 
 
 # --- Notifications ---
+# Find the notifications route (around lines 985-1020) and replace it:
+
 @app.route('/Notifications')
 @user_required
 def notifications():
     notifications = Notification.query.filter_by(user_id=current_user.user_id).order_by(Notification.created_at.desc()).all()
-    # Group notifications by type
+    
+    # Standardized notification grouping - 6 types only
     grouped = {
-        'like': [],
-        'comment': [],
         'friend_request': [],
-        'event_reminder': [],
+        'event_notification': [],
         'message': [],
+        'post_activity': [],
         'report_status': [],
-        'admin_override': []
+        'admin_notification': []
     }
+    
+    # Group notifications by standardized types - FIX THE LOGIC ORDER
     for n in notifications:
-        grouped[n.type].append(n)
+        notification_type = n.type
+        
+        # First check for current standardized types
+        if notification_type == 'friend_request':
+            grouped['friend_request'].append(n)
+        elif notification_type == 'event_notification':
+            grouped['event_notification'].append(n)
+        elif notification_type == 'message':
+            grouped['message'].append(n)
+        elif notification_type == 'post_activity':
+            grouped['post_activity'].append(n)
+        elif notification_type == 'report_status':
+            grouped['report_status'].append(n)
+        elif notification_type == 'admin_notification':
+            grouped['admin_notification'].append(n)
+        # Then map legacy types to standardized types
+        elif notification_type in ['event_reminder', 'event_join', 'event_cancelled']:
+            grouped['event_notification'].append(n)
+        elif notification_type in ['like', 'comment']:
+            grouped['post_activity'].append(n)
+        elif notification_type in ['admin_override', 'admin_action']:
+            grouped['admin_notification'].append(n)
+        else:
+            # Default unknown types to admin_notification
+            grouped['admin_notification'].append(n)
 
+    # Get friend request notifications with user details
     friend_request_notifs = (
         db.session.query(Notification, User)
         .join(Friendship, Notification.source_id == Friendship.friendship_id)
@@ -1064,19 +1099,104 @@ def notifications():
         .order_by(Notification.created_at.desc())
         .all()
     )
+    
+    # Get event notifications with event details
+    event_notifs_with_details = []
+    for notif in grouped['event_notification']:
+        event = Event.query.get(notif.source_id) if notif.source_id else None
+        event_notifs_with_details.append((notif, event))
+    
     form = FriendRequestForm()
+    
     return render_template('notifications.html',
             form=form,
             grouped=grouped,
             friend_request_notifs=friend_request_notifs,
+            event_notifs=event_notifs_with_details,
             message_notifs=grouped['message'],
-            like_notifs=grouped['like'],
-            comment_notifs=grouped['comment'],
-            event_reminder_notifs=grouped['event_reminder'],
+            post_activity_notifs=grouped['post_activity'],
             report_status_notifs=grouped['report_status'],
-            admin_override_notifs=grouped['admin_override']
+            admin_notifs=grouped['admin_notification']
         )
 
+@app.route('/delete_notification/<int:notification_id>', methods=['POST'])
+@user_required
+def delete_notification(notification_id):
+    """Delete a specific notification"""
+    notification = Notification.query.get_or_404(notification_id)
+    
+    # Check if user owns this notification
+    if notification.user_id != current_user.user_id:
+        abort(403)
+    
+    try:
+        db.session.delete(notification)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/delete_all_notifications/<notification_type>', methods=['POST'])
+@user_required
+def delete_all_notifications(notification_type):
+    """Delete all notifications of a specific type for the current user"""
+    
+    # Validate notification type
+    valid_types = [
+        'friend_request', 'event_notification', 'message', 
+        'post_activity', 'report_status', 'admin_notification'
+    ]
+    
+    if notification_type not in valid_types:
+        return jsonify({'success': False, 'error': 'Invalid notification type'}), 400
+    
+    try:
+        # Build query based on type (including legacy type mapping)
+        query = Notification.query.filter_by(user_id=current_user.user_id)
+        
+        if notification_type == 'event_notification':
+            # Include legacy event types
+            query = query.filter(Notification.type.in_(['event_notification', 'event_reminder', 'event_join', 'event_cancelled']))
+        elif notification_type == 'post_activity':
+            # Include legacy post types
+            query = query.filter(Notification.type.in_(['post_activity', 'like', 'comment']))
+        elif notification_type == 'admin_notification':
+            # Include legacy admin types
+            query = query.filter(Notification.type.in_(['admin_notification', 'admin_override', 'admin_action']))
+        else:
+            query = query.filter_by(type=notification_type)
+        
+        # Delete all matching notifications
+        deleted_count = query.delete()
+        db.session.commit()
+        
+        return jsonify({
+            'success': True, 
+            'deleted_count': deleted_count
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    
+@app.route('/mark_notification_read/<int:notification_id>', methods=['POST'])
+@user_required
+def mark_notification_read(notification_id):
+    """Mark a specific notification as read"""
+    notification = Notification.query.get_or_404(notification_id)
+    
+    # Check if user owns this notification
+    if notification.user_id != current_user.user_id:
+        abort(403)
+    
+    try:
+        notification.is_read = True
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # -- Friends Management --
 @app.route('/send_friend_request/<int:target_user_id>', methods=['POST'])
@@ -2129,7 +2249,7 @@ def discover_events():
                          events=public_events, 
                          participated_event_ids=participated_event_ids)
 
-# Join Event Route
+# JOIN event
 @app.route('/join_event/<int:event_id>', methods=['POST'])
 @user_required
 def join_event(event_id):
@@ -2140,41 +2260,70 @@ def join_event(event_id):
         flash("You cannot join your own event.", 'warning')
         return redirect(url_for('discover_events'))
     
-    # Check if user is already participating
+    # Check if user is already participating with 'joined' status
     existing_participation = EventParticipant.query.filter_by(
         user_id=current_user.user_id,
-        event_id=event_id
+        event_id=event_id,
+        status='joined'
     ).first()
+    
+    print(f"DEBUG: User {current_user.user_id} attempting to join event {event_id}")
+    print(f"DEBUG: Existing participation: {existing_participation}")
     
     if existing_participation:
         flash('You are already participating in this event!', 'warning')
-    else:
-        try:
-            # Create new participation
-            new_participation = EventParticipant(
-                user_id=current_user.user_id,
-                event_id=event_id,
-                status='joined',
-                joined_at=datetime.utcnow()
-            )
-            db.session.add(new_participation)
-            db.session.commit()
-            
-            # Create notification for event creator
-            creator_notification = Notification(
-                user_id=event.user_id,
-                type='event_reminder',
-                source_id=event_id,
-                message=f"{current_user.username} joined your event '{event.title}'"
-            )
-            db.session.add(creator_notification)
-            db.session.commit()
-            
-            flash(f'Successfully joined "{event.title}"!', 'success')
-            
-        except Exception as e:
-            db.session.rollback()
-            flash('An error occurred while joining the event.', 'danger')
+        return redirect(url_for('discover_events'))
+    
+    try:
+        # Create new participation record
+        new_participation = EventParticipant(
+            user_id=current_user.user_id,
+            event_id=event_id,
+            status='joined',
+            joined_at=datetime.utcnow()
+        )
+        
+        print(f"DEBUG: Creating participation record: user_id={current_user.user_id}, event_id={event_id}")
+        
+        db.session.add(new_participation)
+        db.session.flush()  # Flush to get any constraint errors before notification
+        
+        print(f"DEBUG: Participation record created successfully")
+        
+        # Create notification for event creator using standardized type
+        creator_notification = Notification(
+            user_id=event.user_id,
+            type='event_notification',
+            source_id=event_id,
+            message=f"{current_user.username} joined your event '{event.title}'",
+            created_at=datetime.utcnow(),
+            is_read=False
+        )
+        
+        print(f"DEBUG: Creating notification for user {event.user_id}")
+        
+        db.session.add(creator_notification)
+        db.session.commit()
+        
+        print(f"DEBUG: Successfully joined event and created notification")
+        
+        flash(f'Successfully joined "{event.title}"!', 'success')
+        
+    except IntegrityError as ie:
+        db.session.rollback()
+        print(f"ERROR: IntegrityError joining event: {str(ie)}")
+        # Check if it's a duplicate key error
+        if "Duplicate entry" in str(ie) or "UNIQUE constraint" in str(ie):
+            flash('You are already participating in this event!', 'warning')
+        else:
+            flash('A database constraint error occurred. Please try again.', 'danger')
+    except Exception as e:
+        db.session.rollback()
+        print(f"ERROR: Exception joining event: {str(e)}")
+        print(f"ERROR: Exception type: {type(e)}")
+        import traceback
+        traceback.print_exc()
+        flash('An error occurred while joining the event. Please try again.', 'danger')
     
     return redirect(url_for('discover_events'))
 
@@ -2208,7 +2357,8 @@ def leave_event(event_id):
     else:
         return redirect(url_for('events_dashboard'))
 
-# Delete Event Route
+
+
 @app.route('/delete_event/<int:event_id>', methods=['POST'])
 @user_required
 def delete_event(event_id):
@@ -2229,9 +2379,11 @@ def delete_event(event_id):
         for participant in participants:
             notif = Notification(
                 user_id=participant.user_id,
-                type='event_reminder',
+                type='event_notification',  # ✅ Standardized type
                 source_id=event_id,
-                message=f"The event '{event.title}' you joined has been cancelled."
+                message=f"The event '{event.title}' you joined has been cancelled.",
+                created_at=datetime.utcnow(),
+                is_read=False
             )
             db.session.add(notif)
         
@@ -2246,13 +2398,12 @@ def delete_event(event_id):
         
     except Exception as e:
         db.session.rollback()
+        print(f"Error deleting event: {str(e)}")
         flash('An error occurred while deleting the event.', 'danger')
         
     return redirect(url_for('events_dashboard'))
 
 
-
-# Event Reminder Scheduler Function
 def send_event_reminders():
     """Send notifications for events happening tomorrow"""
     tomorrow = datetime.utcnow().date() + timedelta(days=1)
@@ -2270,17 +2421,18 @@ def send_event_reminders():
         # Notify event creator
         creator_notif_exists = Notification.query.filter_by(
             user_id=event.user_id,
-            type='event_reminder',
-            source_id=event.event_id,
-            message=f"Reminder: Your event '{event.title}' is happening tomorrow!"
-        ).first()
+            type='event_notification',  # ✅ Standardized type
+            source_id=event.event_id
+        ).filter(Notification.message.like(f"%Your event '{event.title}' is happening tomorrow%")).first()
         
         if not creator_notif_exists:
             creator_notif = Notification(
                 user_id=event.user_id,
-                type='event_reminder',
+                type='event_notification',  # ✅ Standardized type
                 source_id=event.event_id,
-                message=f"Reminder: Your event '{event.title}' is happening tomorrow!"
+                message=f"Reminder: Your event '{event.title}' is happening tomorrow!",
+                created_at=datetime.utcnow(),
+                is_read=False
             )
             db.session.add(creator_notif)
         
@@ -2293,22 +2445,121 @@ def send_event_reminders():
         for participant in participants:
             participant_notif_exists = Notification.query.filter_by(
                 user_id=participant.user_id,
-                type='event_reminder',
-                source_id=event.event_id,
-                message=f"Reminder: '{event.title}' you joined is happening tomorrow!"
-            ).first()
+                type='event_notification',  # ✅ Standardized type
+                source_id=event.event_id
+            ).filter(Notification.message.like(f"%'{event.title}' you joined is happening tomorrow%")).first()
             
             if not participant_notif_exists:
                 participant_notif = Notification(
                     user_id=participant.user_id,
-                    type='event_reminder',
+                    type='event_notification',  # ✅ Standardized type
                     source_id=event.event_id,
-                    message=f"Reminder: '{event.title}' you joined is happening tomorrow!"
+                    message=f"Reminder: '{event.title}' you joined is happening tomorrow!",
+                    created_at=datetime.utcnow(),
+                    is_read=False
                 )
                 db.session.add(participant_notif)
     
     db.session.commit()
 
+# Add this function after the existing send_event_reminders() function (around line 2307):
+
+def send_user_event_reminders(user_id):
+    """Send event reminder notifications to a specific user for events happening in the next 24 hours"""
+    try:
+        # Get events happening in the next 24 hours
+        now = datetime.utcnow()
+        next_24_hours = now + timedelta(hours=24)
+        
+        # Find events user created that are happening in next 24 hours
+        user_created_events = Event.query.filter(
+            Event.user_id == user_id,
+            Event.event_datetime >= now,
+            Event.event_datetime <= next_24_hours,
+            Event.is_reminder == False
+        ).all()
+        
+        # Find events user joined that are happening in next 24 hours
+        user_joined_events = (
+            db.session.query(Event)
+            .join(EventParticipant, Event.event_id == EventParticipant.event_id)
+            .filter(
+                EventParticipant.user_id == user_id,
+                EventParticipant.status == 'joined',
+                Event.event_datetime >= now,
+                Event.event_datetime <= next_24_hours,
+                Event.is_reminder == False
+            )
+            .all()
+        )
+        
+        # Send reminders for events user created
+        for event in user_created_events:
+            # Check if reminder already exists
+            existing_notif = Notification.query.filter_by(
+                user_id=user_id,
+                type='event_notification',
+                source_id=event.event_id
+            ).filter(
+                Notification.message.like(f"%Your event '{event.title}' is happening%"),
+                Notification.created_at >= now - timedelta(hours=1)  # Don't spam - only if no recent reminder
+            ).first()
+            
+            if not existing_notif:
+                hours_until = int((event.event_datetime - now).total_seconds() / 3600)
+                if hours_until <= 1:
+                    time_msg = "very soon"
+                elif hours_until <= 6:
+                    time_msg = f"in {hours_until} hours"
+                else:
+                    time_msg = "within 24 hours"
+                
+                notification = Notification(
+                    user_id=user_id,
+                    type='event_notification',
+                    source_id=event.event_id,
+                    message=f"Reminder: Your event '{event.title}' is happening {time_msg}!",
+                    created_at=datetime.utcnow(),
+                    is_read=False
+                )
+                db.session.add(notification)
+        
+        # Send reminders for events user joined
+        for event in user_joined_events:
+            # Check if reminder already exists
+            existing_notif = Notification.query.filter_by(
+                user_id=user_id,
+                type='event_notification',
+                source_id=event.event_id
+            ).filter(
+                Notification.message.like(f"%'{event.title}' you joined is happening%"),
+                Notification.created_at >= now - timedelta(hours=1)  # Don't spam
+            ).first()
+            
+            if not existing_notif:
+                hours_until = int((event.event_datetime - now).total_seconds() / 3600)
+                if hours_until <= 1:
+                    time_msg = "very soon"
+                elif hours_until <= 6:
+                    time_msg = f"in {hours_until} hours"
+                else:
+                    time_msg = "within 24 hours"
+                
+                notification = Notification(
+                    user_id=user_id,
+                    type='event_notification',
+                    source_id=event.event_id,
+                    message=f"Reminder: '{event.title}' you joined is happening {time_msg}!",
+                    created_at=datetime.utcnow(),
+                    is_read=False
+                )
+                db.session.add(notification)
+        
+        db.session.commit()
+        
+    except Exception as e:
+        print(f"Error sending user event reminders: {e}")
+        db.session.rollback()
 # Initialize scheduler for event reminders
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=send_event_reminders, trigger="interval", hours=24)

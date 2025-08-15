@@ -2246,6 +2246,8 @@ def delete_event(event_id):
         
     return redirect(url_for('events_dashboard'))
 
+
+
 # Event Reminder Scheduler Function
 def send_event_reminders():
     """Send notifications for events happening tomorrow"""

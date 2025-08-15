@@ -101,6 +101,8 @@
 .google-btn-primary:hover {
     background: #3367d6;
     box-shadow: 0 1px 3px 0 rgba(66,133,244,0.5);
+    color: #fff;
+    text-decoration: none;
 }
 
 .google-btn-secondary {
@@ -112,6 +114,8 @@
 .google-btn-secondary:hover {
     background: #f8f9fa;
     box-shadow: 0 1px 1px 0 rgba(65,69,73,0.3), 0 1px 3px 1px rgba(65,69,73,0.15);
+    color: #3c4043;
+    text-decoration: none;
 }
 
 .google-main {
@@ -293,6 +297,7 @@
 .google-btn-outline:hover {
     background: #f8f9fa;
     border-color: #4285f4;
+    color: #4285f4;
 }
 
 .google-btn-success {
@@ -316,6 +321,7 @@
 
 .google-btn-warning:hover {
     background: #f9ab00;
+    color: #1f2937;
 }
 
 .event-card.hidden {
@@ -357,57 +363,251 @@
     flex-wrap: wrap;
 }
 
-/* Enhanced Modals */
-.modal-content {
-    border: none;
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(32,33,36,0.28);
+/* Google-style Modal Enhancements */
+.google-modal .modal-dialog {
+    max-width: 700px;
+    margin: 1rem auto;
 }
 
-.modal-header {
+.google-modal .modal-content {
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 8px 25px rgba(60,64,67,.3);
+    overflow: hidden;
+}
+
+.google-modal .modal-header {
+    background: #f8f9fa;
     border-bottom: 1px solid #e8eaed;
     padding: 24px;
+    position: relative;
 }
 
-.modal-body {
+.google-modal .modal-title {
+    font-family: 'Google Sans', Arial, sans-serif;
+    font-size: 1.375rem;
+    font-weight: 400;
+    color: #3c4043;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.google-modal .modal-title .material-icons {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #4285f4;
+    color: white;
+    border-radius: 50%;
+    font-size: 16px;
+}
+
+.google-modal .btn-close {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+}
+
+.google-modal .btn-close:hover {
+    background: #f1f3f4;
+}
+
+.google-modal .modal-body {
+    padding: 0;
+    font-family: 'Google Sans', Arial, sans-serif;
+}
+
+.google-event-detail-section {
     padding: 24px;
+    border-bottom: 1px solid #f0f0f0;
 }
 
-.modal-footer {
-    border-top: 1px solid #e8eaed;
-    padding: 20px 24px;
+.google-event-detail-section:last-child {
+    border-bottom: none;
 }
 
-/* Google Maps Styles */
-.event-map-container {
-    border: 1px solid #dadce0;
-    border-radius: 8px;
-    overflow: hidden;
+.google-event-detail-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
     margin-bottom: 16px;
 }
 
-.event-map {
+.google-event-detail-icon {
+    width: 20px;
+    height: 20px;
+    color: #5f6368;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.google-event-detail-label {
+    font-weight: 500;
+    color: #3c4043;
+    font-size: 14px;
+}
+
+.google-event-detail-content {
+    color: #5f6368;
+    font-size: 14px;
+    line-height: 1.5;
+    margin-left: 32px;
+}
+
+.google-event-map-container {
+    border: 1px solid #e8eaed;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 12px;
+    background: #f8f9fa;
+}
+
+.google-event-map {
     height: 200px;
     width: 100%;
 }
 
-.directions-btn {
+.google-event-map-footer {
+    padding: 12px;
+    background: #f8f9fa;
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.google-directions-btn {
     background: #4285f4;
-    color: #fff;
+    color: white;
     border: none;
     border-radius: 4px;
     padding: 8px 16px;
-    font-size: 14px;
+    font-size: 12px;
+    font-weight: 500;
     text-decoration: none;
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     transition: background 0.2s;
 }
 
-.directions-btn:hover {
+.google-directions-btn:hover {
     background: #3367d6;
-    color: #fff;
+    color: white;
+    text-decoration: none;
+}
+
+.google-modal .modal-footer {
+    background: #f8f9fa;
+    border-top: 1px solid #e8eaed;
+    padding: 16px 24px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.google-join-btn {
+    background: #1a73e8;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.google-join-btn:hover {
+    background: #1557b0;
+}
+
+.google-close-btn {
+    background: white;
+    color: #5f6368;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.google-close-btn:hover {
+    background: #f8f9fa;
+    box-shadow: 0 1px 1px rgba(60,64,67,.3);
+}
+
+.google-attendee-count {
+    background: #e8f0fe;
+    color: #1967d2;
+    border-radius: 16px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.google-creator-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-top: 12px;
+}
+
+.google-creator-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #4285f4;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.google-creator-details {
+    flex: 1;
+}
+
+.google-creator-name {
+    font-weight: 500;
+    color: #3c4043;
+    font-size: 14px;
+    margin-bottom: 2px;
+}
+
+.google-creator-label {
+    font-size: 12px;
+    color: #5f6368;
 }
 
 /* Responsive Design */
@@ -447,6 +647,30 @@
     
     .google-empty-actions .google-btn {
         min-width: 200px;
+    }
+
+    .google-modal .modal-dialog {
+        margin: 0.5rem;
+        max-width: calc(100% - 1rem);
+    }
+    
+    .google-event-detail-section {
+        padding: 16px;
+    }
+    
+    .google-modal .modal-header {
+        padding: 16px;
+    }
+    
+    .google-modal .modal-footer {
+        padding: 12px 16px;
+        flex-direction: column-reverse;
+    }
+    
+    .google-join-btn,
+    .google-close-btn {
+        width: 100%;
+        justify-content: center;
     }
 }
 </style>
@@ -588,80 +812,113 @@
                         </div>
                     </div>
 
-                    <!-- Event Details Modal -->
-                    <div class="modal fade" id="viewDetailsModal{{ event.event_id }}" tabindex="-1" aria-labelledby="viewDetailsModalLabel{{ event.event_id }}" aria-hidden="true">
-                        <div class="modal-dialog modal-lg">
+                    <!-- Enhanced Event Details Modal -->
+                    <div class="modal fade google-modal" id="viewDetailsModal{{ event.event_id }}" tabindex="-1" aria-labelledby="viewDetailsModalLabel{{ event.event_id }}" aria-hidden="true">
+                        <div class="modal-dialog">
                             <div class="modal-content">
                                 <div class="modal-header">
                                     <h5 class="modal-title" id="viewDetailsModalLabel{{ event.event_id }}">
-                                        <span class="material-icons" style="margin-right: 8px;">event</span>{{ event.title }}
+                                        <span class="material-icons">event</span>
+                                        {{ event.title }}
                                     </h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close">
+                                        <span class="material-icons" style="font-size: 16px; color: #5f6368;">close</span>
+                                    </button>
                                 </div>
                                 <div class="modal-body">
-                                    <div class="row">
-                                        <div class="col-md-6">
-                                            <h6><span class="material-icons" style="font-size: 18px; vertical-align: middle; margin-right: 8px;">schedule</span>Date & Time</h6>
-                                            <p>{{ event.event_datetime.strftime('%A, %B %d, %Y at %I:%M %p') }}</p>
-                                            
-                                            {% if event.location %}
-                                                <h6><span class="material-icons" style="font-size: 18px; vertical-align: middle; margin-right: 8px;">location_on</span>Location</h6>
-                                                <p>{{ event.location }}</p>
-                                                
-                                                {% if event.latitude and event.longitude %}
-                                                    <div class="event-map-container">
-                                                        <div id="eventMap{{ event.event_id }}" class="event-map"></div>
-                                                    </div>
-                                                    <div class="text-center">
-                                                        <a href="https://www.google.com/maps/dir/?api=1&destination={{ event.latitude }},{{ event.longitude }}" 
-                                                           target="_blank" class="directions-btn">
-                                                            <span class="material-icons" style="font-size: 16px;">directions</span>
-                                                            Get Directions
-                                                        </a>
-                                                    </div>
-                                                {% endif %}
+                                    <!-- Date & Time Section -->
+                                    <div class="google-event-detail-section">
+                                        <div class="google-event-detail-header">
+                                            <div class="google-event-detail-icon">
+                                                <span class="material-icons">schedule</span>
+                                            </div>
+                                            <div class="google-event-detail-label">Date & Time</div>
+                                            <div class="google-attendee-count">
+                                                <span class="material-icons" style="font-size: 12px;">group</span>
+                                                {{ attendee_count }} attendee{{ 's' if attendee_count != 1 else '' }}
+                                            </div>
+                                        </div>
+                                        <div class="google-event-detail-content">
+                                            {{ event.event_datetime.strftime('%A, %B %d, %Y at %I:%M %p') }}
+                                        </div>
+                                    </div>
+
+                                    <!-- Location Section -->
+                                    {% if event.location %}
+                                    <div class="google-event-detail-section">
+                                        <div class="google-event-detail-header">
+                                            <div class="google-event-detail-icon">
+                                                <span class="material-icons">location_on</span>
+                                            </div>
+                                            <div class="google-event-detail-label">Location</div>
+                                        </div>
+                                        <div class="google-event-detail-content">
+                                            {{ event.location }}
+                                            {% if event.latitude and event.longitude %}
+                                                <small class="text-muted d-block mt-1">
+                                                    Coordinates: {{ event.latitude|round(6) }}, {{ event.longitude|round(6) }}
+                                                </small>
                                             {% endif %}
                                             
-                                            <h6><span class="material-icons" style="font-size: 18px; vertical-align: middle; margin-right: 8px;">person</span>Event Creator</h6>
-                                            <p>{{ event.creator.username }}</p>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <h6><span class="material-icons" style="font-size: 18px; vertical-align: middle; margin-right: 8px;">group</span>Attendees ({{ attendee_count }})</h6>
-                                            {% set participants = event.participants.filter_by(status='joined').limit(5).all() %}
-                                            {% if participants %}
-                                                <div class="list-group list-group-flush">
-                                                    {% for participant in participants %}
-                                                        <div class="list-group-item d-flex align-items-center">
-                                                            <img src="{{ participant.participant.profile_pic_url or url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
-                                                                 alt="Profile Picture"
-                                                                 class="rounded-circle me-2"
-                                                                 width="30" height="30">
-                                                            <small>{{ participant.participant.username }}</small>
-                                                        </div>
-                                                    {% endfor %}
-                                                    {% if attendee_count > 5 %}
-                                                        <div class="list-group-item text-muted">
-                                                            <small>+ {{ attendee_count - 5 }} more attendee{{ 's' if (attendee_count - 5) != 1 else '' }}</small>
-                                                        </div>
-                                                    {% endif %}
+                                            {% if event.latitude and event.longitude %}
+                                            <div class="google-event-map-container">
+                                                <div id="eventMap{{ event.event_id }}" class="google-event-map"></div>
+                                                <div class="google-event-map-footer">
+                                                    <a href="https://www.google.com/maps/dir/?api=1&destination={{ event.latitude }},{{ event.longitude }}" 
+                                                       target="_blank" class="google-directions-btn">
+                                                        <span class="material-icons" style="font-size: 14px;">directions</span>
+                                                        Get Directions
+                                                    </a>
                                                 </div>
-                                            {% else %}
-                                                <p class="text-muted">No one has joined yet. Be the first!</p>
+                                            </div>
                                             {% endif %}
                                         </div>
                                     </div>
+                                    {% endif %}
+
+                                    <!-- Event Creator Section -->
+                                    <div class="google-event-detail-section">
+                                        <div class="google-event-detail-header">
+                                            <div class="google-event-detail-icon">
+                                                <span class="material-icons">person</span>
+                                            </div>
+                                            <div class="google-event-detail-label">Event Creator</div>
+                                        </div>
+                                        <div class="google-event-detail-content">
+                                            <div class="google-creator-info">
+                                                <div class="google-creator-avatar">
+                                                    {{ event.creator.username[0].upper() }}
+                                                </div>
+                                                <div class="google-creator-details">
+                                                    <div class="google-creator-name">{{ event.creator.username }}</div>
+                                                    <div class="google-creator-label">Event Organizer</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Description Section -->
                                     {% if event.description %}
-                                        <hr>
-                                        <h6><span class="material-icons" style="font-size: 18px; vertical-align: middle; margin-right: 8px;">description</span>Description</h6>
-                                        <p>{{ event.description }}</p>
+                                    <div class="google-event-detail-section">
+                                        <div class="google-event-detail-header">
+                                            <div class="google-event-detail-icon">
+                                                <span class="material-icons">description</span>
+                                            </div>
+                                            <div class="google-event-detail-label">Description</div>
+                                        </div>
+                                        <div class="google-event-detail-content">
+                                            {{ event.description }}
+                                        </div>
+                                    </div>
                                     {% endif %}
                                 </div>
                                 <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                    <button type="button" class="google-close-btn" data-bs-dismiss="modal">Close</button>
                                     <form method="POST" action="{{ url_for('join_event', event_id=event.event_id) }}" class="d-inline">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                        <button type="submit" class="btn btn-primary">
-                                            <span class="material-icons" style="font-size: 16px; margin-right: 4px;">add_circle</span>Join This Event
+                                        <button type="submit" class="google-join-btn">
+                                            <span class="material-icons" style="font-size: 16px;">add_circle</span>
+                                            Join This Event
                                         </button>
                                     </form>
                                 </div>
@@ -671,25 +928,29 @@
 
                     <!-- Leave Event Modal -->
                     {% if event.event_id in participated_event_ids %}
-                        <div class="modal fade" id="leaveModal{{ event.event_id }}" tabindex="-1" aria-labelledby="leaveModalLabel{{ event.event_id }}" aria-hidden="true">
+                        <div class="modal fade google-modal" id="leaveModal{{ event.event_id }}" tabindex="-1" aria-labelledby="leaveModalLabel{{ event.event_id }}" aria-hidden="true">
                             <div class="modal-dialog">
                                 <div class="modal-content">
                                     <div class="modal-header">
                                         <h5 class="modal-title" id="leaveModalLabel{{ event.event_id }}">
-                                            <span class="material-icons text-warning" style="margin-right: 8px;">help</span>Confirm Leave
+                                            <span class="material-icons" style="color: #fbbc04;">help</span>
+                                            Confirm Leave
                                         </h5>
-                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close">
+                                            <span class="material-icons" style="font-size: 16px; color: #5f6368;">close</span>
+                                        </button>
                                     </div>
-                                    <div class="modal-body">
-                                        <p>Are you sure you want to leave "<strong>{{ event.title|e }}</strong>"?</p>
-                                        <p class="text-muted">You can always join again later if you change your mind.</p>
+                                    <div class="google-event-detail-section">
+                                        <p style="color: #3c4043; margin: 0;">Are you sure you want to leave "<strong>{{ event.title|e }}</strong>"?</p>
+                                        <p style="color: #5f6368; margin-top: 8px; margin-bottom: 0;">You can always join again later if you change your mind.</p>
                                     </div>
                                     <div class="modal-footer">
-                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="button" class="google-close-btn" data-bs-dismiss="modal">Cancel</button>
                                         <form method="POST" action="{{ url_for('leave_event', event_id=event.event_id) }}" class="d-inline">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                            <button type="submit" class="btn btn-warning">
-                                                <span class="material-icons" style="font-size: 16px; margin-right: 4px;">exit_to_app</span>Leave Event
+                                            <button type="submit" class="google-join-btn" style="background: #ea4335;">
+                                                <span class="material-icons" style="font-size: 16px;">exit_to_app</span>
+                                                Leave Event
                                             </button>
                                         </form>
                                     </div>
@@ -747,17 +1008,25 @@ function initEventMaps() {
             mapTypeControl: false,
             streetViewControl: false,
             fullscreenControl: false,
-            gestureHandling: 'cooperative'
+            gestureHandling: 'cooperative',
+            styles: [
+                {
+                    featureType: 'poi',
+                    elementType: 'labels',
+                    stylers: [{ visibility: 'off' }]
+                }
+            ]
         });
         
         const marker = new google.maps.Marker({
             position: location,
             map: map,
-            title: '{{ event.title|e }}'
+            title: '{{ event.title|e }}',
+            animation: google.maps.Animation.DROP
         });
         
         const infoWindow = new google.maps.InfoWindow({
-            content: '<div><strong>{{ event.title|e }}</strong><br>{{ event.location|e }}</div>'
+            content: '<div style="font-family: Google Sans, Arial, sans-serif; padding: 8px;"><strong>{{ event.title|e }}</strong><br><span style="color: #5f6368; font-size: 12px;">{{ event.location|e }}</span></div>'
         });
         
         marker.addListener('click', function() {

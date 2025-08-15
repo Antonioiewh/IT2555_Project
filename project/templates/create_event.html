@@ -4,13 +4,15 @@
 
 {% block head %}
 <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<script async defer src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key() }}&libraries=places&callback=initMap"></script>
 {% endblock %}
 
 {% block content %}
 <style>
 .google-container {
     font-family: 'Google Sans', Arial, sans-serif;
-    background: #ffffff;
+    background: #f8f9fa;
     min-height: 80vh;
     display: flex;
     justify-content: center;
@@ -24,7 +26,7 @@
     border: 1px solid #dadce0;
     padding: 40px;
     width: 100%;
-    max-width: 500px;
+    max-width: 600px;
 }
 .google-header {
     text-align: center;
@@ -79,6 +81,206 @@
     min-height: 100px;
     resize: vertical;
 }
+
+/* Location Input with Map Button */
+.location-input-group {
+    position: relative;
+    display: flex;
+    gap: 8px;
+}
+.location-input-group .google-input {
+    flex: 1;
+}
+.map-selector-btn {
+    background: #4285f4;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: background 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    min-width: 140px;
+    justify-content: center;
+}
+.map-selector-btn:hover {
+    background: #3367d6;
+}
+
+/* Selected Location Display */
+.selected-location-display {
+    margin-top: 12px;
+    padding: 12px;
+    background: #e8f0fe;
+    border-radius: 4px;
+    border-left: 4px solid #4285f4;
+    display: none;
+}
+.selected-location-display.show {
+    display: block;
+}
+.location-address {
+    font-weight: 500;
+    color: #1967d2;
+    margin-bottom: 4px;
+}
+.location-coords {
+    font-size: 12px;
+    color: #5f6368;
+}
+
+/* Map Modal Styles */
+.map-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 1000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+.map-modal.show {
+    display: flex;
+}
+.map-modal-content {
+    background: #fff;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 1000px;
+    max-height: 90vh;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+}
+.map-modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #e8eaed;
+    display: flex;
+    justify-content: between;
+    align-items: center;
+}
+.map-modal-title {
+    font-size: 18px;
+    font-weight: 500;
+    color: #202124;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
+    flex: 1;
+}
+.map-close-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: #5f6368;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    transition: background 0.2s;
+}
+.map-close-btn:hover {
+    background: #f1f3f4;
+}
+.map-modal-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+.map-search-container {
+    padding: 16px 24px;
+    border-bottom: 1px solid #e8eaed;
+    background: #f8f9fa;
+}
+.map-search-input {
+    width: 100%;
+    padding: 12px 16px 12px 48px;
+    border: 1px solid #dadce0;
+    border-radius: 24px;
+    font-size: 16px;
+    background: #fff;
+    position: relative;
+}
+.map-search-input:focus {
+    outline: none;
+    border-color: #4285f4;
+    box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.2);
+}
+.search-icon {
+    position: absolute;
+    left: 40px;
+    top: 28px;
+    color: #9aa0a6;
+    font-size: 20px;
+    pointer-events: none;
+}
+#fullscreenMap {
+    flex: 1;
+    min-height: 400px;
+}
+.map-modal-footer {
+    padding: 16px 24px;
+    border-top: 1px solid #e8eaed;
+    background: #f8f9fa;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+.current-selection {
+    flex: 1;
+    font-size: 14px;
+    color: #5f6368;
+}
+.current-selection strong {
+    color: #202124;
+}
+.map-modal-actions {
+    display: flex;
+    gap: 12px;
+}
+.modal-btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.modal-btn-secondary {
+    background: #fff;
+    color: #3c4043;
+    border: 1px solid #dadce0;
+}
+.modal-btn-secondary:hover {
+    background: #f8f9fa;
+}
+.modal-btn-primary {
+    background: #4285f4;
+    color: #fff;
+}
+.modal-btn-primary:hover {
+    background: #3367d6;
+}
+.modal-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .google-btn {
     width: 100%;
     padding: 12px 24px;
@@ -124,10 +326,21 @@
     font-size: 12px;
     margin-top: 4px;
 }
+
 @media (max-width: 768px) {
     .google-card {
         padding: 32px 16px;
         margin: 0 8px;
+    }
+    .map-modal-content {
+        margin: 10px;
+        max-height: 95vh;
+    }
+    .location-input-group {
+        flex-direction: column;
+    }
+    .map-selector-btn {
+        width: 100%;
     }
 }
 </style>
@@ -136,7 +349,7 @@
     <div class="google-card">
         <div class="google-header">
             <div class="google-icon">
-                <i class="bi bi-calendar-plus"></i>
+                <span class="material-icons">event</span>
             </div>
             <h1 class="google-title">Create Event</h1>
         </div>
@@ -176,7 +389,19 @@
             
             <div class="google-form-group">
                 <label for="location" class="google-label">Location</label>
-                {{ form.location(class="google-input", id="location", placeholder="Event location") }}
+                <div class="location-input-group">
+                    {{ form.location(class="google-input", id="location", placeholder="Enter location or click to select on map", readonly=true) }}
+                    <button type="button" class="map-selector-btn" onclick="openMapModal()">
+                        <span class="material-icons">location_on</span>
+                        Select on Map
+                    </button>
+                </div>
+                
+                <div id="selectedLocationDisplay" class="selected-location-display">
+                    <div class="location-address" id="displayAddress"></div>
+                    <div class="location-coords" id="displayCoords"></div>
+                </div>
+                
                 {% if form.location.errors %}
                     {% for error in form.location.errors %}
                         <div class="google-error">{{ error }}</div>
@@ -184,18 +409,238 @@
                 {% endif %}
             </div>
             
+            <!-- Hidden fields for coordinates -->
+            <input type="hidden" id="latitude" name="latitude" value="">
+            <input type="hidden" id="longitude" name="longitude" value="">
+            
             <button type="submit" class="google-btn google-btn-primary">
-                <i class="bi bi-calendar-plus"></i>
+                <span class="material-icons">add_circle</span>
                 Create Event
             </button>
         </form>
         
         <div class="google-link-section">
             <a href="{{ url_for('events_dashboard') }}" class="google-link">
-                <i class="bi bi-arrow-left"></i>
+                <span class="material-icons">arrow_back</span>
                 Back to Events Dashboard
             </a>
         </div>
     </div>
 </div>
+
+<!-- Map Modal -->
+<div id="mapModal" class="map-modal">
+    <div class="map-modal-content">
+        <div class="map-modal-header">
+            <h3 class="map-modal-title">
+                <span class="material-icons">location_on</span>
+                Select Event Location
+            </h3>
+            <button type="button" class="map-close-btn" onclick="closeMapModal()">
+                <span class="material-icons">close</span>
+            </button>
+        </div>
+        
+        <div class="map-modal-body">
+            <div class="map-search-container">
+                <span class="material-icons search-icon">search</span>
+                <input type="text" id="mapSearchInput" class="map-search-input" placeholder="Search for a location...">
+            </div>
+            
+            <div id="fullscreenMap"></div>
+        </div>
+        
+        <div class="map-modal-footer">
+            <div class="current-selection">
+                <div id="modalCurrentAddress">Click on the map or search to select a location</div>
+                <div id="modalCurrentCoords"></div>
+            </div>
+            <div class="map-modal-actions">
+                <button type="button" class="modal-btn modal-btn-secondary" onclick="closeMapModal()">
+                    <span class="material-icons">close</span>
+                    Cancel
+                </button>
+                <button type="button" class="modal-btn modal-btn-primary" id="confirmLocationBtn" onclick="confirmLocation()" disabled>
+                    <span class="material-icons">check</span>
+                    Confirm Location
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let map;
+let marker;
+let autocomplete;
+let currentSelectedLocation = null;
+
+function initMap() {
+    // This will be called when the API loads, but we'll initialize the modal map when needed
+    console.log('Google Maps API loaded');
+}
+
+function openMapModal() {
+    const modal = document.getElementById('mapModal');
+    modal.classList.add('show');
+    
+    // Initialize the fullscreen map
+    setTimeout(() => {
+        initFullscreenMap();
+    }, 100);
+}
+
+function closeMapModal() {
+    const modal = document.getElementById('mapModal');
+    modal.classList.remove('show');
+}
+
+function initFullscreenMap() {
+    // Default location (Singapore)
+    const defaultLocation = { lat: 1.3521, lng: 103.8198 };
+    
+    map = new google.maps.Map(document.getElementById('fullscreenMap'), {
+        zoom: 11,
+        center: defaultLocation,
+        mapTypeControl: true,
+        streetViewControl: true,
+        fullscreenControl: true,
+        gestureHandling: 'auto'
+    });
+    
+    marker = new google.maps.Marker({
+        position: defaultLocation,
+        map: map,
+        draggable: true,
+        title: 'Event Location',
+        animation: google.maps.Animation.DROP
+    });
+    
+    // Initialize autocomplete for modal search
+    const searchInput = document.getElementById('mapSearchInput');
+    autocomplete = new google.maps.places.Autocomplete(searchInput);
+    autocomplete.bindTo('bounds', map);
+    
+    // Handle place selection from autocomplete
+    autocomplete.addListener('place_changed', function() {
+        const place = autocomplete.getPlace();
+        
+        if (place.geometry) {
+            const location = place.geometry.location;
+            
+            // Update map and marker
+            map.setCenter(location);
+            map.setZoom(15);
+            marker.setPosition(location);
+            
+            // Update current selection
+            updateModalSelection(location, place.formatted_address || place.name);
+        }
+    });
+    
+    // Handle marker dragging
+    marker.addListener('dragend', function(event) {
+        const location = event.latLng;
+        updateLocationFromCoordinates(location);
+    });
+    
+    // Handle map clicks
+    map.addListener('click', function(event) {
+        const location = event.latLng;
+        marker.setPosition(location);
+        marker.setAnimation(google.maps.Animation.BOUNCE);
+        setTimeout(() => marker.setAnimation(null), 750);
+        
+        updateLocationFromCoordinates(location);
+    });
+    
+    // If there's already a selected location, show it
+    const currentLat = document.getElementById('latitude').value;
+    const currentLng = document.getElementById('longitude').value;
+    
+    if (currentLat && currentLng) {
+        const currentLocation = { lat: parseFloat(currentLat), lng: parseFloat(currentLng) };
+        map.setCenter(currentLocation);
+        map.setZoom(15);
+        marker.setPosition(currentLocation);
+        
+        const currentAddress = document.getElementById('location').value;
+        updateModalSelection(new google.maps.LatLng(currentLocation.lat, currentLocation.lng), currentAddress);
+    }
+}
+
+function updateLocationFromCoordinates(location) {
+    // Reverse geocoding to get address
+    const geocoder = new google.maps.Geocoder();
+    geocoder.geocode({ location: location }, function(results, status) {
+        if (status === 'OK' && results[0]) {
+            const address = results[0].formatted_address;
+            updateModalSelection(location, address);
+        } else {
+            // If geocoding fails, use coordinates
+            updateModalSelection(location, `Location: ${location.lat().toFixed(6)}, ${location.lng().toFixed(6)}`);
+        }
+    });
+}
+
+function updateModalSelection(location, address) {
+    currentSelectedLocation = {
+        lat: location.lat(),
+        lng: location.lng(),
+        address: address
+    };
+    
+    // Update modal display
+    document.getElementById('modalCurrentAddress').innerHTML = `<strong>${address}</strong>`;
+    document.getElementById('modalCurrentCoords').textContent = 
+        `Coordinates: ${currentSelectedLocation.lat.toFixed(6)}, ${currentSelectedLocation.lng.toFixed(6)}`;
+    
+    // Enable confirm button
+    document.getElementById('confirmLocationBtn').disabled = false;
+}
+
+function confirmLocation() {
+    if (!currentSelectedLocation) return;
+    
+    // Update form fields
+    document.getElementById('location').value = currentSelectedLocation.address;
+    document.getElementById('latitude').value = currentSelectedLocation.lat;
+    document.getElementById('longitude').value = currentSelectedLocation.lng;
+    
+    // Update display
+    document.getElementById('displayAddress').textContent = currentSelectedLocation.address;
+    document.getElementById('displayCoords').textContent = 
+        `Coordinates: ${currentSelectedLocation.lat.toFixed(6)}, ${currentSelectedLocation.lng.toFixed(6)}`;
+    
+    document.getElementById('selectedLocationDisplay').classList.add('show');
+    
+    // Close modal
+    closeMapModal();
+    
+    // Show success feedback
+    const btn = document.querySelector('.map-selector-btn');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<span class="material-icons">check_circle</span>Location Selected';
+    btn.style.background = '#34a853';
+    
+    setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.style.background = '#4285f4';
+    }, 2000);
+}
+
+// Close modal when clicking outside
+document.getElementById('mapModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeMapModal();
+    }
+});
+
+// Close modal with Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeMapModal();
+    }
+});
+</script>
 {% endblock %}

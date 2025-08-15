@@ -4,6 +4,7 @@
 {% block head %}
 <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<script async defer src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key() }}&callback=initEventMaps"></script>
 {% endblock %}
 
 {% block content %}
@@ -243,8 +244,9 @@
     gap: 8px;
 }
 
-.google-event-details i {
+.google-event-details .material-icons {
     width: 16px;
+    font-size: 16px;
     color: #9aa0a6;
 }
 
@@ -355,21 +357,6 @@
     flex-wrap: wrap;
 }
 
-/* Loading Animation */
-.google-loading {
-    display: inline-block;
-    width: 20px;
-    height: 20px;
-    border: 2px solid rgba(255,255,255,0.3);
-    border-radius: 50%;
-    border-top-color: #fff;
-    animation: spin 1s ease-in-out infinite;
-}
-
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
-
 /* Enhanced Modals */
 .modal-content {
     border: none;
@@ -389,6 +376,38 @@
 .modal-footer {
     border-top: 1px solid #e8eaed;
     padding: 20px 24px;
+}
+
+/* Google Maps Styles */
+.event-map-container {
+    border: 1px solid #dadce0;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.event-map {
+    height: 200px;
+    width: 100%;
+}
+
+.directions-btn {
+    background: #4285f4;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 14px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.2s;
+}
+
+.directions-btn:hover {
+    background: #3367d6;
+    color: #fff;
 }
 
 /* Responsive Design */
@@ -584,10 +603,25 @@
                                         <div class="col-md-6">
                                             <h6><span class="material-icons" style="font-size: 18px; vertical-align: middle; margin-right: 8px;">schedule</span>Date & Time</h6>
                                             <p>{{ event.event_datetime.strftime('%A, %B %d, %Y at %I:%M %p') }}</p>
+                                            
                                             {% if event.location %}
                                                 <h6><span class="material-icons" style="font-size: 18px; vertical-align: middle; margin-right: 8px;">location_on</span>Location</h6>
                                                 <p>{{ event.location }}</p>
+                                                
+                                                {% if event.latitude and event.longitude %}
+                                                    <div class="event-map-container">
+                                                        <div id="eventMap{{ event.event_id }}" class="event-map"></div>
+                                                    </div>
+                                                    <div class="text-center">
+                                                        <a href="https://www.google.com/maps/dir/?api=1&destination={{ event.latitude }},{{ event.longitude }}" 
+                                                           target="_blank" class="directions-btn">
+                                                            <span class="material-icons" style="font-size: 16px;">directions</span>
+                                                            Get Directions
+                                                        </a>
+                                                    </div>
+                                                {% endif %}
                                             {% endif %}
+                                            
                                             <h6><span class="material-icons" style="font-size: 18px; vertical-align: middle; margin-right: 8px;">person</span>Event Creator</h6>
                                             <p>{{ event.creator.username }}</p>
                                         </div>
@@ -689,6 +723,50 @@
 </div>
 
 <script>
+function initEventMaps() {
+    // This function will be called after Google Maps API loads
+    {% for event in events %}
+        {% if event.latitude and event.longitude %}
+            setTimeout(() => initEventMap{{ event.event_id }}(), 100);
+        {% endif %}
+    {% endfor %}
+}
+
+{% for event in events %}
+    {% if event.latitude and event.longitude %}
+    function initEventMap{{ event.event_id }}() {
+        const location = { lat: {{ event.latitude }}, lng: {{ event.longitude }} };
+        
+        // Check if the map container exists (modal might not be open)
+        const mapContainer = document.getElementById('eventMap{{ event.event_id }}');
+        if (!mapContainer) return;
+        
+        const map = new google.maps.Map(mapContainer, {
+            zoom: 15,
+            center: location,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: false,
+            gestureHandling: 'cooperative'
+        });
+        
+        const marker = new google.maps.Marker({
+            position: location,
+            map: map,
+            title: '{{ event.title|e }}'
+        });
+        
+        const infoWindow = new google.maps.InfoWindow({
+            content: '<div><strong>{{ event.title|e }}</strong><br>{{ event.location|e }}</div>'
+        });
+        
+        marker.addListener('click', function() {
+            infoWindow.open(map, marker);
+        });
+    }
+    {% endif %}
+{% endfor %}
+
 document.addEventListener('DOMContentLoaded', function() {
     const searchBar = document.getElementById('search-bar');
     const sortFilter = document.getElementById('sort-filter');
@@ -768,6 +846,19 @@ document.addEventListener('DOMContentLoaded', function() {
             card.style.transform = 'translateY(0)';
         }, index * 50);
     });
+
+    // Add modal event listeners for maps
+    {% for event in events %}
+        {% if event.latitude and event.longitude %}
+        const modal{{ event.event_id }} = document.getElementById('viewDetailsModal{{ event.event_id }}');
+        if (modal{{ event.event_id }}) {
+            modal{{ event.event_id }}.addEventListener('shown.bs.modal', function() {
+                // Delay to ensure modal is fully rendered
+                setTimeout(() => initEventMap{{ event.event_id }}(), 200);
+            });
+        }
+        {% endif %}
+    {% endfor %}
 });
 </script>
 {% endblock %}

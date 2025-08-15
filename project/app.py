@@ -30,6 +30,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import pyotp
 import qrcode
 from base64 import b64encode
+from werkzeug.utils import secure_filename
 
 # --- WebAuthn/Passkey Imports ---
 from fido2.server import Fido2Server
@@ -75,6 +76,9 @@ from user_actions import (
 
 # Log parsing utilities
 from parse_test import parse_modsec_audit_log, parse_error_log
+
+from file_validate import validate_file_security, scan_upload
+
 
 # --- Configuration ---
 # Flask app configuration
@@ -205,6 +209,54 @@ def get_fido2_server():
     return Fido2Server(rp)
 
 
+
+
+
+    """Test multiple files at once"""
+    files = request.files.getlist('files')
+    
+    if not files or all(f.filename == '' for f in files):
+        return jsonify({'error': 'No files provided'}), 400
+    
+    results = []
+    
+    for file in files:
+        if file.filename == '':
+            continue
+        
+        try:
+            file_data = file.read()
+            is_safe, issues = scan_upload(file_data, file.filename)
+            
+            results.append({
+                'filename': file.filename,
+                'is_safe': is_safe,
+                'issues': issues,
+                'size': len(file_data)
+            })
+            
+        except Exception as e:
+            results.append({
+                'filename': file.filename,
+                'is_safe': False,
+                'issues': [f'Processing error: {str(e)}'],
+                'size': 0
+            })
+    
+    # Summary statistics
+    total_files = len(results)
+    safe_files = sum(1 for r in results if r['is_safe'])
+    dangerous_files = total_files - safe_files
+    
+    return jsonify({
+        'results': results,
+        'summary': {
+            'total_files': total_files,
+            'safe_files': safe_files,
+            'dangerous_files': dangerous_files,
+            'safety_percentage': (safe_files / total_files * 100) if total_files > 0 else 0
+        }
+    })
 
 # --- login,signup,home ---
 
@@ -1573,6 +1625,7 @@ def manage_users():
         search_query=search_query,
         form=UpdateUserStatusForm()
     )
+
 @app.route('/manage_user/<int:user_id>', methods=['GET', 'POST'])
 @admin_required
 def manage_user(user_id):
@@ -1635,7 +1688,6 @@ def manage_reports():
         action_taken_reports=action_taken_reports,
         rejected_reports=rejected_reports
     )
-
 
 @app.route('/manage_report/<int:report_id>', methods=['GET', 'POST'])
 @admin_required
@@ -1878,6 +1930,87 @@ def admin_user_actions():
         search_query=search_query
     )
 
+
+# test polyglot 
+
+@app.route('/test_upload', methods=['GET', 'POST'])
+@csrf.exempt 
+@admin_required
+def test_upload():
+    """Testing endpoint for file upload security validation"""
+    if request.method == 'POST':
+        # Check if file is present
+        if 'file' not in request.files:
+            flash('No file selected', 'error')
+            return redirect(request.url)
+        
+        file = request.files['file']
+        if file.filename == '':
+            flash('No file selected', 'error')
+            return redirect(request.url)
+        
+        try:
+            # Get file data
+            file.seek(0)  # Reset file pointer
+            file_data = file.read()
+            file.seek(0)  # Reset again for potential future use
+            
+            # Run security validation
+            result = validate_file_security(
+                file_data=file_data, 
+                filename=file.filename,
+                max_size=10*1024*1024  # 10MB limit
+            )
+            
+            # Display results
+            if result['is_safe']:
+                flash('✅ File passed security validation!', 'success')
+                flash(f"Risk Level: {result['risk_level'].upper()}", 'info')
+                
+                # Show file info
+                info = result['file_info']
+                flash(f"File: {info['filename']} ({info['size']} bytes)", 'info')
+                flash(f"MD5: {info['md5_hash'][:16]}...", 'info')
+                
+                # Save the safe file (optional)
+                if request.form.get('save_file'):
+                    upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'test_uploads')
+                    os.makedirs(upload_dir, exist_ok=True)
+                    
+                    filename = secure_filename(file.filename)
+                    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+                    safe_filename = f"safe_{timestamp}_{filename}"
+                    
+                    file_path = os.path.join(upload_dir, safe_filename)
+                    with open(file_path, 'wb') as f:
+                        f.write(file_data)
+                    
+                    flash(f'File saved as: {safe_filename}', 'success')
+            else:
+                flash('❌ File FAILED security validation!', 'error')
+                flash(f"Risk Level: {result['risk_level'].upper()}", 'warning')
+                
+                # Show threats
+                for threat in result['threats']:
+                    flash(f"🚨 THREAT: {threat}", 'error')
+                
+                # Show warnings
+                for warning in result['warnings']:
+                    flash(f"⚠️ WARNING: {warning}", 'warning')
+            
+            # Show polyglot detection details if available
+            if 'polyglot_detection' in result:
+                polyglot = result['polyglot_detection']
+                if polyglot.get('detected_formats'):
+                    formats = ', '.join(polyglot['detected_formats'])
+                    flash(f"Detected formats: {formats}", 'info')
+        
+        except Exception as e:
+            flash(f'Validation error: {str(e)}', 'error')
+    
+    return render_template('test_upload.html')
+
+
 # --- Error Handlers ---
 @app.errorhandler(404)
 def not_found_error(error):
@@ -2042,7 +2175,7 @@ def join_event(event_id):
     
     return redirect(url_for('discover_events'))
 
-# Leave Event Route (KEEP ONLY THIS ONE)
+# Leave Event Route
 @app.route('/leave_event/<int:event_id>', methods=['POST'])
 @user_required
 def leave_event(event_id):

@@ -872,45 +872,44 @@ def passkey_finish_login():
         return jsonify({"error": f"Failed to complete passkey authentication: {str(e)}"}), 500
 
 # --- User Reporting ---
+
+# ...existing code...
+
 @app.route('/report_user', methods=['GET', 'POST'])
-@user_required # Ensure only logged-in users can access this page
+@login_required
+@user_required
 def report_user():
     form = ReportForm()
+    report_submitted = False
+    reported_username = None
 
     if form.validate_on_submit():
-        # The custom validator `validate_reported_username` in forms.py
-        # has already found the user and stored it in `form.user_to_report_obj`
-        reported_user = form.user_to_report_obj
-
-        # At this point, reported_user is guaranteed to exist and not be the current user
-        # due to the form's custom validator.
-
-        new_report = Report(
-            reporter_id=current_user.user_id, # The current logged-in user is the reporter
-            reported_user_id=reported_user.user_id, # Get ID from the found user object
-            report_type=form.report_type.data,
-            description=form.description.data,
-            submitted_at=datetime.utcnow(),
-            status='open' # Default status
-        )
-
         try:
-            db.session.add(new_report)
-            db.session.commit()
-            # Redirect to the profile of the user who was reported, or a confirmation page
-            return redirect(url_for('report_confirmation', reported_username=reported_user.username))
-        except:
-            #error or smth
+            # Lookup user by username
+            reported_user = User.query.filter_by(username=form.reported_username.data).first()
+            if not reported_user:
+                flash('User not found.', 'error')
+            else:
+                new_report = Report(
+                    reporter_id=current_user.user_id,
+                    reported_user_id=reported_user.user_id,  # Use user_id, not username
+                    report_type=form.report_type.data,
+                    description=form.description.data,
+                    submitted_at=datetime.utcnow(),
+                    status='open'
+                )
+                db.session.add(new_report)
+                db.session.commit()
+                report_submitted = True
+                reported_username = reported_user.username
+                form = ReportForm()
+        except Exception as e:
             db.session.rollback()
-
-    return render_template('UserReport.html', form=form)
-
-@app.route('/report_confirmation')
-@user_required
-def report_confirmation():
-    reported_username = request.args.get('reported_username', 'the user')
-    return render_template('UserReportConfirmed.html', reported_username=reported_username)
-
+            flash('An error occurred while submitting your report. Please try again.', 'error')
+    return render_template('UserReport.html',
+                          form=form,
+                          report_submitted=report_submitted,
+                          reported_username=reported_username)
 
 # -- User friends management --
 @app.route('/UserFriends')

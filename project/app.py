@@ -40,6 +40,8 @@ from fido2.ctap2 import AuthenticatorData
 import cbor2
 
 # --- Custom Module Imports ---
+
+
 # Models
 from models import (
     db, User, Role, Permission, Event, EventParticipant, Post, PostImage, 
@@ -49,6 +51,9 @@ from models import (
     WebAuthnCredential, user_role_assignments,Event,FriendChatMap
 
 )
+from decorators import user_required, admin_required, editor_required, role_required, admin_or_editor_required
+
+
 # Filters
 from filters import (
     apply_user_filters, apply_user_sorting, 
@@ -121,28 +126,6 @@ def load_user(user_id):
 
 # --- User Required Decorator ---
 
-# @login_required is already imported
-def user_required(f):
-    @wraps(f)
-    @login_required
-    def decorated_function(*args, **kwargs):
-        # Count the number of roles for the current user
-        user_roles = [role.role_name for role in current_user.roles]
-        if user_roles == ['user']:
-            return f(*args, **kwargs)
-        else:
-            abort(403)
-    return decorated_function
-
-# --- Admin Required Decorator ---
-def admin_required(f):
-    @wraps(f)
-    @login_required # Ensure user is logged in first
-    def decorated_function(*args, **kwargs):
-        if not current_user.has_role('admin'):
-            abort(403)
-        return f(*args, **kwargs)
-    return decorated_function
 
 
 # Replace both b64encode_all function definitions with this single improved version:
@@ -213,7 +196,6 @@ def b64encode_all(data, _seen=None):
         return data
 
 # -- Fido2 WebAuthn Server Setup --
-# -- For passkey
 
 def get_fido2_server():
     from flask import request

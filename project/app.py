@@ -1810,6 +1810,8 @@ def manage_reports():
         rejected_reports=rejected_reports
     )
 
+# Find the manage_report route (around line 1600) and replace the POST handling section:
+
 @app.route('/manage_report/<int:report_id>', methods=['GET', 'POST'])
 @admin_required
 def manage_report(report_id):
@@ -1831,12 +1833,39 @@ def manage_report(report_id):
     if request.method == 'POST':
         new_status = request.form.get('status')
         admin_notes = request.form.get('admin_notes')
+        
         if new_status in ['open', 'in_review', 'action_taken', 'rejected']:
+            old_status = report.status
             report.status = new_status
             report.admin_notes = admin_notes
             report.resolved_at = datetime.utcnow() if new_status in ['action_taken', 'rejected'] else None
+            
+            # ✅ CREATE NOTIFICATION FOR THE REPORTER
+            if report.reporter_id:  # Make sure reporter exists
+                # Create user-friendly status messages
+                status_messages = {
+                    'open': 'reopened',
+                    'in_review': 'under review',
+                    'action_taken': 'resolved with action taken',
+                    'rejected': 'closed without action'
+                }
+                
+                status_display = status_messages.get(new_status, new_status)
+                
+                notification = Notification(
+                    user_id=report.reporter_id,
+                    type='report_status',
+                    source_id=report.report_id,
+                    message=f"Your report against {reported_username} has been {status_display}.",
+                    created_at=datetime.utcnow(),
+                    is_read=False
+                )
+                
+                db.session.add(notification)
+                print(f"DEBUG: Created report status notification for user {report.reporter_id}")
+            
             db.session.commit()
-            flash(f"Report {report.report_id} updated successfully.", "success")
+            flash(f"Report {report.report_id} updated from '{old_status}' to '{new_status}' and reporter notified.", "success")
         else:
             flash("Invalid status.", "danger")
         return redirect(url_for('manage_reports'))
@@ -1848,7 +1877,6 @@ def manage_report(report_id):
         reported_username=reported_username,
         form=form
     )
-
 @app.route('/manage_ModSecLogs', methods=['GET'])
 @admin_required
 def admin_modsec_logs():

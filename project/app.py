@@ -1197,6 +1197,40 @@ def mark_notification_read(notification_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+@app.route('/mark_all_notifications_read/<notification_type>', methods=['POST'])
+@user_required
+def mark_all_notifications_read(notification_type):
+    """Mark all notifications of a specific type as read for the current user"""
+    try:
+        # Get notification IDs from request body
+        data = request.get_json()
+        notification_ids = data.get('notification_ids', [])
+        
+        if not notification_ids:
+            return jsonify({'success': False, 'error': 'No notification IDs provided'}), 400
+        
+        # Update all specified notifications to read status
+        updated_count = Notification.query.filter(
+            Notification.notification_id.in_(notification_ids),
+            Notification.user_id == current_user.user_id,
+            Notification.is_read == False
+        ).update(
+            {Notification.is_read: True},
+            synchronize_session=False
+        )
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True, 
+            'message': f'Marked {updated_count} notifications as read',
+            'updated_count': updated_count
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error marking notifications as read: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # -- Friends Management --
 @app.route('/send_friend_request/<int:target_user_id>', methods=['POST'])

@@ -503,10 +503,6 @@
     color: #ff9800;
 }
 
-.notification-admin-notification {
-    color: #f44336;
-}
-
 /* Notification item type-specific styling */
 .google-notification-item.notification-friend-request .google-notification-icon {
     background: #e8f0fe;
@@ -531,11 +527,6 @@
 .google-notification-item.notification-report-status .google-notification-icon {
     background: #fff3e0;
     color: #ff9800;
-}
-
-.google-notification-item.notification-admin-notification .google-notification-icon {
-    background: #fce8e6;
-    color: #f44336;
 }
 
 /* Responsive Design */
@@ -705,14 +696,6 @@
                                     <span class="google-dropdown-item-text">Report Status</span>
                                 </div>
                                 <span class="google-dropdown-item-count">{{ report_status_notifs|length if report_status_notifs else 0 }}</span>
-                            </div>
-                            
-                            <div class="google-dropdown-item" onclick="selectNotificationType('admin_notification', 'Admin Notifications', 'admin_panel_settings', 0)" data-type="admin_notification">
-                                <div class="google-dropdown-item-content">
-                                    <span class="material-icons google-dropdown-item-icon notification-admin-notification">admin_panel_settings</span>
-                                    <span class="google-dropdown-item-text">Admin Notifications</span>
-                                </div>
-                                <span class="google-dropdown-item-count">{{ admin_notifs|length if admin_notifs else 0 }}</span>
                             </div>
                         </div>
                     </div>
@@ -986,48 +969,6 @@
                         </div>
                     {% endif %}
                 </div>
-
-                <!-- Admin Notifications Tab -->
-                <div id="tab-admin_notification" class="google-tab-content">
-                    {% if admin_notifs %}
-                        {% for notification in admin_notifs %}
-                            <div class="google-notification-item notification-admin-notification {% if not notification.is_read %}unread{% endif %}" 
-                                 data-notification-id="{{ notification.notification_id }}">
-                                <div class="google-notification-icon">
-                                    <span class="material-icons">admin_panel_settings</span>
-                                </div>
-                                <div class="google-notification-content">
-                                    <div class="google-notification-title">
-                                        Admin Notification
-                                    </div>
-                                    <div class="google-notification-message">
-                                        {{ notification.message }}
-                                    </div>
-                                    <div class="google-notification-meta">
-                                        <span>{{ notification.created_at.strftime('%B %d, %Y at %I:%M %p') }}</span>
-                                        {% if not notification.is_read %}
-                                            <span style="color: #f44336; font-weight: 500;">• New</span>
-                                        {% endif %}
-                                    </div>
-                                    <div class="google-notification-actions">
-                                        <button onclick="deleteNotification({{ notification.notification_id }})" class="google-btn google-btn-delete google-btn-small">
-                                            <span class="material-icons" style="font-size: 16px;">delete</span>
-                                            Delete
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        {% endfor %}
-                    {% else %}
-                        <div class="google-empty-state">
-                            <div class="google-empty-icon">
-                                <span class="material-icons" style="font-size: inherit;">admin_panel_settings</span>
-                            </div>
-                            <h3 class="google-empty-title">No admin notifications</h3>
-                            <p class="google-empty-subtitle">Administrative notifications will appear here when available.</p>
-                        </div>
-                    {% endif %}
-                </div>
             </div>
         </div>
     </div>
@@ -1109,29 +1050,99 @@ function refreshNotifications() {
 function markAllAsRead() {
     const notifications = document.querySelectorAll(`#tab-${currentTab} .google-notification-item.unread`);
     
-    notifications.forEach((notification, index) => {
-        setTimeout(() => {
-            notification.classList.remove('unread');
-            notification.style.background = '#e8f5e8';
+    if (notifications.length === 0) {
+        return;
+    }
+    
+    // Get all notification IDs that need to be marked as read
+    const notificationIds = Array.from(notifications).map(notification => 
+        notification.getAttribute('data-notification-id')
+    );
+    
+    // Make API call to mark notifications as read
+    fetch(`/mark_all_notifications_read/${currentTab}`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('meta[name=csrf-token]').getAttribute('content'),
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            notification_ids: notificationIds
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update UI to show success
+            notifications.forEach((notification, index) => {
+                setTimeout(() => {
+                    notification.classList.remove('unread');
+                    notification.style.background = '#e8f5e8';
+                    
+                    setTimeout(() => {
+                        notification.style.background = '';
+                    }, 1000);
+                }, index * 100);
+            });
+            
+            // Hide mark all as read button
+            const markAllBtn = document.getElementById('markAllReadBtn');
+            markAllBtn.style.opacity = '0';
+            markAllBtn.style.transform = 'scale(0.8)';
             
             setTimeout(() => {
-                notification.style.background = '';
-            }, 1000);
-        }, index * 100);
+                markAllBtn.style.display = 'none';
+                markAllBtn.style.opacity = '';
+                markAllBtn.style.transform = '';
+            }, 300);
+        } else {
+            alert('Error marking notifications as read: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error marking notifications as read');
     });
-    
-    // Hide mark all as read button
-    const markAllBtn = document.getElementById('markAllReadBtn');
-    markAllBtn.style.opacity = '0';
-    markAllBtn.style.transform = 'scale(0.8)';
-    
-    setTimeout(() => {
-        markAllBtn.style.display = 'none';
-        markAllBtn.style.opacity = '';
-        markAllBtn.style.transform = '';
-    }, 300);
+}
+function markNotificationAsRead(notificationId) {
+    fetch(`/mark_notification_read/${notificationId}`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('meta[name=csrf-token]').getAttribute('content'),
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const notification = document.querySelector(`[data-notification-id="${notificationId}"]`);
+            if (notification) {
+                notification.classList.remove('unread');
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error marking notification as read:', error);
+    });
 }
 
+// Add click event listeners to notification items
+document.addEventListener('DOMContentLoaded', function() {
+    // ... existing DOMContentLoaded code ...
+    
+    // Add click handlers to mark notifications as read when clicked
+    document.querySelectorAll('.google-notification-item.unread').forEach(notification => {
+        notification.addEventListener('click', function(e) {
+            // Don't mark as read if clicking on action buttons
+            if (!e.target.closest('.google-notification-actions')) {
+                const notificationId = this.getAttribute('data-notification-id');
+                if (notificationId) {
+                    markNotificationAsRead(notificationId);
+                }
+            }
+        });
+    });
+});
 function deleteNotification(notificationId) {
     if (!confirm('Are you sure you want to delete this notification?')) {
         return;
@@ -1247,13 +1258,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize with friend requests
     showTab('friend_request');
     
-    // Set initial counts
+    // Set initial counts (removed admin notification count)
     const friendRequestCount = {{ friend_request_notifs|length if friend_request_notifs else 0 }};
     const eventNotifCount = {{ event_notifs|length if event_notifs else 0 }};
     const messageCount = {{ message_notifs|length if message_notifs else 0 }};
     const postActivityCount = {{ post_activity_notifs|length if post_activity_notifs else 0 }};
     const reportStatusCount = {{ report_status_notifs|length if report_status_notifs else 0 }};
-    const adminNotifCount = {{ admin_notifs|length if admin_notifs else 0 }};
     
     document.getElementById('dropdown-current-count').textContent = friendRequestCount;
     document.querySelector('[data-type="friend_request"] .google-dropdown-item-count').textContent = friendRequestCount;
@@ -1261,7 +1271,6 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelector('[data-type="message"] .google-dropdown-item-count').textContent = messageCount;
     document.querySelector('[data-type="post_activity"] .google-dropdown-item-count').textContent = postActivityCount;
     document.querySelector('[data-type="report_status"] .google-dropdown-item-count').textContent = reportStatusCount;
-    document.querySelector('[data-type="admin_notification"] .google-dropdown-item-count').textContent = adminNotifCount;
     
     // Show buttons based on initial state
     const hasUnread = document.querySelectorAll('#tab-friend_request .unread').length > 0;

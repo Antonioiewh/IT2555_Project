@@ -1931,7 +1931,7 @@ def admin_user_actions():
     )
 
 
-# test polyglot 
+# Admin - test polyglot 
 
 @app.route('/test_upload', methods=['GET', 'POST'])
 @csrf.exempt 

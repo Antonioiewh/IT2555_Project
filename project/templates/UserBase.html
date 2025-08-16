@@ -548,10 +548,10 @@
                     <div class="nav-section-title">Account</div>
                     
                     <div class="nav-item">
-                        <a href="/account" class="nav-link-google">
-                            <i class="bi bi-person nav-icon"></i>
-                            Profile
+                        <a class="nav-link" href="{{ url_for('view_profile', user_id=current_user.user_id) }}">
+                            <i class="bi bi-person-circle"></i> Profile
                         </a>
+
                     </div>
                     
                     <div class="nav-item">

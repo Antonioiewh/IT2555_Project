@@ -35,6 +35,7 @@ CREATE TABLE users (
     -- Removed first_name VARCHAR(50) DEFAULT NULL,
     -- Removed last_name VARCHAR(50) DEFAULT NULL,
     profile_pic_url VARCHAR(255) DEFAULT NULL,
+    banner_url VARCHAR(255) DEFAULT NULL,
     bio TEXT DEFAULT NULL,
     current_status VARCHAR(50) NOT NULL DEFAULT 'offline',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

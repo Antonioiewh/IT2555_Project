@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 from functools import wraps
 import random
 import string
+import uuid
+import logging
 from PIL import Image
 
 # --- Flask Core Imports ---
@@ -33,7 +35,7 @@ from forms import SignupForm,LoginForm,ReportForm,UpdateUserStatusForm,FriendReq
 # No clue but seems important
 from sqlalchemy.dialects.mysql import ENUM
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-
+from sqlalchemy import and_, or_
 # --- Forms & Validation Imports ---
 from wtforms import StringField, PasswordField, SubmitField, TextAreaField, SelectField, ValidationError
 
@@ -279,7 +281,9 @@ def get_relative_time(post_date):
         return f"{minutes} minute{'s' if minutes > 1 else ''} ago"
     
     return "Just now"
-# Update the load more posts route
+
+
+# load posts
 @app.route('/api/load_more_posts')
 @login_required
 def load_more_posts():
@@ -330,6 +334,96 @@ def load_more_posts():
     except Exception as e:
         app.logger.error(f"Error loading more posts: {str(e)}")
         return jsonify({'error': 'Failed to load posts'}), 500
+
+@app.route('/upload_banner', methods=['POST'])
+@login_required
+def upload_banner():
+    try:
+        if 'banner' not in request.files:
+            return jsonify({'success': False, 'error': 'No banner file provided'})
+        
+        file = request.files['banner']
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'})
+        
+        # Validate file type
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+        if '.' not in file.filename or file.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
+            return jsonify({'success': False, 'error': 'Invalid file type'})
+        
+        # Generate unique filename
+        file_extension = file.filename.rsplit('.', 1)[1].lower()
+        filename = f"banner_{current_user.user_id}_{uuid.uuid4().hex}.{file_extension}"
+        
+        # Ensure upload directory exists
+        upload_dir = os.path.join(app.static_folder, 'uploads')
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        file_path = os.path.join(upload_dir, filename)
+        
+        # Save and optimize the image
+        file.save(file_path)
+        
+        # Optimize image with PIL
+        with Image.open(file_path) as img:
+            # Convert to RGB if necessary
+            if img.mode in ('RGBA', 'P'):
+                img = img.convert('RGB')
+            
+            # Optimize and save
+            img.save(file_path, 'JPEG', quality=85, optimize=True)
+        
+        # Remove old banner if exists
+        if current_user.banner_url:
+            old_banner_path = os.path.join(upload_dir, current_user.banner_url)
+            if os.path.exists(old_banner_path):
+                try:
+                    os.remove(old_banner_path)
+                except:
+                    pass  # Ignore if file doesn't exist or can't be deleted
+        
+        # Update user's banner in database
+        current_user.banner_url = filename
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'banner_url': filename,
+            'message': 'Banner updated successfully!'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error uploading banner: {str(e)}")
+        return jsonify({'success': False, 'error': 'Failed to upload banner. Please try again.'})
+
+@app.route('/remove_banner', methods=['POST'])
+@login_required
+def remove_banner():
+    try:
+        # Remove banner file if exists
+        if current_user.banner_url:
+            upload_dir = os.path.join(app.static_folder, 'uploads')
+            banner_path = os.path.join(upload_dir, current_user.banner_url)
+            if os.path.exists(banner_path):
+                try:
+                    os.remove(banner_path)
+                except:
+                    pass  # Ignore if file can't be deleted
+        
+        # Update database
+        current_user.banner_url = None
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Banner removed successfully!'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error removing banner: {str(e)}")
+        return jsonify({'success': False, 'error': 'Failed to remove banner. Please try again.'})
 
 @app.route('/')
 @login_required
@@ -1213,46 +1307,43 @@ def discover_friends():
     return render_template('DiscoverFriends.html',all_users=all_users,current_user=user,form=form,pending_requests=pending_requests,accepted_friends=accepted_friends)
 
 @app.route('/search_users')
-@user_required
+@login_required
 def search_users():
     query = request.args.get('q', '').strip()
-    user = current_user
-
-    subq = (
-    db.session.query(user_role_assignments.c.user_id)
-    .join(Role, user_role_assignments.c.role_id == Role.role_id)
-    .filter(Role.role_name.in_(['admin', 'editor', 'guest']))
-    )
-    users = (
-        db.session.query(User)
-        .join(user_role_assignments, User.user_id == user_role_assignments.c.user_id)
-        .join(Role, user_role_assignments.c.role_id == Role.role_id)
-        .filter(
-            User.user_id.in_(subq),
-            User.user_id != user.user_id,
-            User.username.ilike(f'%{query}%')
-        )
-        .all()
-    )
-    pending_friendships = [
-        f.user_id2 if f.user_id1 == user.user_id else f.user_id1
-        for f in Friendship.query.filter(
-            ((Friendship.user_id1 == user.user_id) | (Friendship.user_id2 == user.user_id)),
-            Friendship.status == 'pending'
-        ).all()
-    ]
-    # Return minimal user info as JSON
-    return jsonify([
-        {
-            'user_id': u.user_id,
-            'username': u.username,
-            'profile_pic_url': u.profile_pic_url or url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp'),
-            'pending': u.user_id in pending_friendships  # Add this if you want to show "Pending"
-        }
-        for u in users
-    ])
-
-
+    if len(query) < 2:
+        return jsonify([])
+    
+    users = User.query.filter(
+        User.username.ilike(f'%{query}%'),
+        User.user_id != current_user.user_id,
+        User.is_active == True
+    ).limit(10).all()
+    
+    user_list = []
+    for user in users:
+        # Check friendship status
+        user1, user2 = sorted([current_user.user_id, user.user_id])
+        friendship = Friendship.query.filter_by(user_id1=user1, user_id2=user2).first()
+        
+        pending = False
+        is_friend = False
+        if friendship:
+            if friendship.status == 'pending':
+                pending = True
+            elif friendship.status == 'accepted':
+                is_friend = True
+        
+        # SIMPLIFIED: Just return the stored profile_pic_url as-is
+        user_list.append({
+            'user_id': user.user_id,
+            'username': user.username,
+            'bio': user.bio[:100] if user.bio else '',
+            'profile_pic_url': user.profile_pic_url,  # Just the stored value
+            'pending': pending,
+            'is_friend': is_friend
+        })
+    
+    return jsonify(user_list)
 # --- Notifications ---
 # Find the notifications route (around lines 985-1020) and replace it:
 
@@ -2421,6 +2512,85 @@ def internal_server_error(error):
     return render_template('500_error.html'), 500
 
 
+# -- USER
+
+@app.route('/account/<int:user_id>')
+@login_required
+def view_profile(user_id):
+    """
+    Route to view user profiles with dynamic permissions.
+    Automatically redirects to appropriate template based on ownership.
+    """
+    import logging
+    
+    # Input validation
+    if not user_id or user_id <= 0:
+        flash('Invalid user ID provided.', 'error')
+        return redirect(url_for('home'))
+    
+    try:
+        # Get the target user by ID
+        target_user = User.query.get(user_id)
+        if not target_user:
+            flash('User not found.', 'error')
+            return redirect(url_for('home'))
+        
+        
+        
+        # CRITICAL: Simple ownership check
+        is_own_profile = (current_user.user_id == user_id)
+        
+        # Log profile access for security monitoring
+        logging.info(f"User {current_user.user_id} ({current_user.username}) accessing profile of {user_id} ({target_user.username}). Own profile: {is_own_profile}")
+        
+        # Get friendship status for permission checks (only if not own profile)
+        friendship_status = 'none'
+        friendship_id = None
+        
+        if not is_own_profile:
+            pass
+        
+        # Get user's posts
+        posts_query = Post.query.filter_by(user_id=user_id)
+        posts = posts_query.order_by(Post.created_at.desc()).all()
+        
+        # Prepare template data
+        template_data = {
+            'user': target_user,
+            'profile_user': target_user,
+            'user_id': target_user,
+            'posts': posts,
+            'is_own_profile': is_own_profile,
+            'friendship_status': friendship_status,
+            'friendship_id': friendship_id,
+            'current_user': current_user
+        }
+        
+        # DYNAMIC TEMPLATE SELECTION BASED ON OWNERSHIP
+        if is_own_profile:
+            # Own profile - full permissions (edit, delete, create)
+            logging.info(f"Rendering own profile template for user {current_user.username}")
+            return render_template('UserProfilePage.html', **template_data)
+        else:
+            # Viewing someone else's profile - restricted permissions (view only)
+            logging.info(f"Rendering view-only profile template for user {target_user.username} viewed by {current_user.username}")
+            return render_template('ViewProfile.html', **template_data)
+            
+    except Exception as e:
+        logging.error(f"Error in view_profile for user ID {user_id}: {str(e)}")
+        flash('An error occurred while loading the profile.', 'error')
+        return redirect(url_for('home'))
+
+# Update the account route to redirect to the new ID-based route
+@app.route('/account')
+@login_required
+def account():
+    """Redirect to user's own profile using ID"""
+    return redirect(url_for('view_profile', user_id=current_user.user_id))
+
+
+    
+
 
 @app.route('/create_post', methods=['GET', 'POST'])
 @login_required
@@ -2698,22 +2868,12 @@ def like_post(post_id):
         return jsonify({'success': False, 'message': 'An error occurred'}), 500
     
 # --- user account/profile page ---
-@app.route('/account', methods=['GET', 'POST'])
-@login_required
-def account():
-    try:
-        user = current_user
-        posts = Post.query.filter_by(user_id=user.user_id)\
-                         .order_by(Post.created_at.desc())\
-                         .all()
-                         
-        return render_template('UserProfilePage.html', 
-                             user=user, 
-                             posts=posts)
-                             
-    except SQLAlchemyError:
-        flash('Error loading profile data.', 'danger')
-        return redirect(url_for('home'))
+
+
+
+
+
+
 
 
 # --- Edit Profile ---

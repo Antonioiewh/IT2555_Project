@@ -67,24 +67,44 @@
     <div id="friend-list">
         {% for friend in friends %}
             <div class="friend-row">
-                <img src="{{ friend.profile_pic_url or url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
-                    alt="Profile Picture"
-                    class="friend-profile"
-                    width="64" height="64">
+                <!-- Profile Picture with Link -->
+                <a href="{{ url_for('view_profile', user_id=friend.user_id) }}" class="text-decoration-none">
+                    {% if friend.profile_pic_url %}
+                        <img src="{{ url_for('static', filename='uploads/' + friend.profile_pic_url) }}"
+                    {% else %}
+                        <img src="{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
+                    {% endif %}
+                         alt="{{ friend.username }} Profile Picture"
+                         class="friend-profile"
+                         width="64" height="64"
+                         onerror="this.src='{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}'">
+                </a>
+                
                 <div class="friend-info">
-                    <div class="friend-name">{{ friend.username }}</div>
+                    <!-- Username with Link -->
+                    <div class="friend-name">
+                        <a href="{{ url_for('view_profile', user_id=friend.user_id) }}" class="text-decoration-none text-dark">
+                            {{ friend.username }}
+                        </a>
+                    </div>
                     {% if friend.status == 'blocked' %}
                         <span class="badge bg-warning text-dark">Blocked</span>
                     {% endif %}
                 </div>
+                
                 <div class="friend-actions">
                     {% if friend.status == 'accepted' %}
-                    <button type="button" class="btn btn-outline-primary btn-sm me-2" disabled>
-                    <i class="bi bi-person"></i> Profile
-                    </button>
+                    <!-- Profile Button -->
+                    <a href="{{ url_for('view_profile', user_id=friend.user_id) }}" class="btn btn-outline-primary btn-sm me-2">
+                        <i class="bi bi-person"></i> Profile
+                    </a>
+                    
+                    <!-- Message Button -->
                     <button type="button" class="btn btn-outline-primary btn-sm me-2" onclick="window.location.href='{{ url_for('messages') }}?friend_id={{ friend.user_id }}'">
-                        <i class="bi bi-chat">Message</i>
+                        <i class="bi bi-chat"></i> Message
                     </button>
+                    
+                    <!-- Dropdown Menu -->
                     <div class="dropdown">
                         <button class="btn btn-secondary btn-sm dropdown-toggle" type="button" id="dropdownMenuButton-{{ friend.user_id }}" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-three-dots-vertical"></i>
@@ -92,60 +112,79 @@
                         <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton-{{ friend.user_id }}">
                             <li>
                                 <button class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#unfriendModal-{{ friend.user_id }}">
-                                    Unfriend
+                                    <i class="bi bi-person-x"></i> Unfriend
                                 </button>
                             </li>
-                            
                             <li>
                                 <button class="dropdown-item text-warning" onclick="showBlockConfirm({{ friend.user_id }}, '{{ friend.username }}')">
-                                    Block
+                                    <i class="bi bi-slash-circle"></i> Block
                                 </button>
                             </li>
                         </ul>
-                        
                     </div>
+                    
+                    <!-- Unfriend Modal -->
                     <div class="modal fade" id="unfriendModal-{{ friend.user_id }}" tabindex="-1" aria-labelledby="unfriendModalLabel-{{ friend.user_id }}" aria-hidden="true">
-                            <div class="modal-dialog modal-dialog-centered">
-                                <div class="modal-content">
-                                    <div class="modal-header">
-                                        <h5 class="modal-title" id="unfriendModalLabel-{{ friend.user_id }}">Confirm Unfriend</h5>
-                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                    </div>
-                                    <div class="modal-body">
-                                        Are you sure you want to unfriend <strong>{{ friend.username }}</strong>?
-                                    </div>
-                                    <div class="modal-footer">
-                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                        <form method="post" action="{{ url_for('unfriend', friendship_id=friend.friendship_id) }}" style="display:inline;">
-                                            {{ form.hidden_tag() }}
-                                            <button type="submit" class="btn btn-danger">Unfriend</button>
-                                        </form>
-                                    </div>
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="unfriendModalLabel-{{ friend.user_id }}">Confirm Unfriend</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    Are you sure you want to unfriend <strong>{{ friend.username }}</strong>?
+                                    <br><small class="text-muted">This action will remove them from your friends list and delete your chat history.</small>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <form method="post" action="{{ url_for('unfriend', friendship_id=friend.friendship_id) }}" style="display:inline;">
+                                        {{ form.hidden_tag() }}
+                                        <button type="submit" class="btn btn-danger">
+                                            <i class="bi bi-person-x"></i> Unfriend
+                                        </button>
+                                    </form>
                                 </div>
                             </div>
+                        </div>
                     </div>
+                    
                     {% elif friend.status == 'blocked' %}
+                        <!-- Unblock Button -->
                         <form method="post" action="{{ url_for('unblock_user_friend', friend_id=friend.user_id) }}" style="display:inline;">
                             {{ form.hidden_tag() }}
-                            <button type="submit" class="btn btn-success btn-sm">Unblock</button>
+                            <button type="submit" class="btn btn-success btn-sm">
+                                <i class="bi bi-check-circle"></i> Unblock
+                            </button>
                         </form>
                     {% endif %}
                 </div>
+                
+                <!-- Online Status Indicator -->
                 <div class="status-indicator{% if friend.is_online %} online{% endif %}"></div>
             </div>
         {% else %}
-            <div class="alert alert-info text-center">No friends found.</div>
+            <div class="alert alert-info text-center">
+                <i class="bi bi-people"></i>
+                <h5>No friends found</h5>
+                <p>Start by <a href="{{ url_for('discover_friends') }}" class="text-decoration-none">discovering new friends</a>!</p>
+            </div>
         {% endfor %}
     </div>
 </div>
-<div id="confirm-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.3); z-index:2000; align-items:center; justify-content:center;">
-  <div style="background:#fff; border-radius:12px; padding:2rem; min-width:320px; max-width:90vw; box-shadow:0 4px 32px rgba(44,62,80,0.15); text-align:center;">
-    <div id="confirm-modal-message" style="margin-bottom:1.5rem; font-size:1.1rem;"></div>
-    <button id="confirm-modal-yes" class="btn btn-danger" style="margin-right:1rem;">Continue</button>
-    <button id="confirm-modal-no" class="btn btn-secondary">Cancel</button>
-  </div>
+
+<!-- Block Confirmation Modal -->
+<div id="confirm-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.5); z-index:2000; align-items:center; justify-content:center;">
+    <div style="background:#fff; border-radius:12px; padding:2rem; min-width:320px; max-width:90vw; box-shadow:0 4px 32px rgba(44,62,80,0.15); text-align:center;">
+        <div id="confirm-modal-message" style="margin-bottom:1.5rem; font-size:1.1rem;"></div>
+        <button id="confirm-modal-yes" class="btn btn-warning me-2">
+            <i class="bi bi-slash-circle"></i> Block User
+        </button>
+        <button id="confirm-modal-no" class="btn btn-secondary">Cancel</button>
+    </div>
 </div>
+
 <script>
+// Search functionality
 document.getElementById('search-bar').addEventListener('input', function() {
     const query = this.value.toLowerCase();
     document.querySelectorAll('#friend-list .friend-row').forEach(row => {
@@ -154,22 +193,59 @@ document.getElementById('search-bar').addEventListener('input', function() {
     });
 });
 
+// Block confirmation
 function showBlockConfirm(friendId, friendName) {
-  const modal = document.getElementById('confirm-modal');
-  document.getElementById('confirm-modal-message').textContent = `Are you sure you want to block ${friendName}?`;
-  modal.style.display = 'flex';
+    const modal = document.getElementById('confirm-modal');
+    document.getElementById('confirm-modal-message').innerHTML = `
+        Are you sure you want to block <strong>${friendName}</strong>?
+        <br><small class="text-muted">This will remove them from your friends list and prevent future contact.</small>
+    `;
+    modal.style.display = 'flex';
 
-  document.getElementById('confirm-modal-yes').onclick = function() {
-    modal.style.display = 'none';
-    fetch(`/block_user/${friendId}`, { method: 'POST' })
-      .then(() => {
-        alert('User blocked.');
-        // Optionally update UI, e.g. remove friend row or show blocked status
-      });
-  };
-  document.getElementById('confirm-modal-no').onclick = function() {
-    modal.style.display = 'none';
-  };
+    document.getElementById('confirm-modal-yes').onclick = function() {
+        modal.style.display = 'none';
+        
+        // Show loading state
+        const button = this;
+        const originalText = button.innerHTML;
+        button.innerHTML = '<i class="bi bi-hourglass-split"></i> Blocking...';
+        button.disabled = true;
+        
+        fetch(`/block_user/${friendId}`, { 
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        })
+        .then(response => {
+            if (response.ok) {
+                // Show success message and reload page
+                alert(`${friendName} has been blocked.`);
+                window.location.reload();
+            } else {
+                throw new Error('Failed to block user');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while blocking the user. Please try again.');
+            // Reset button
+            button.innerHTML = originalText;
+            button.disabled = false;
+        });
+    };
+    
+    document.getElementById('confirm-modal-no').onclick = function() {
+        modal.style.display = 'none';
+    };
 }
+
+// Close modal when clicking outside
+document.getElementById('confirm-modal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        this.style.display = 'none';
+    }
+});
 </script>
 {% endblock %}

@@ -32,6 +32,7 @@ class User(UserMixin, db.Model):
     phone_number = db.Column(db.String(8), unique=True, nullable=True)
     password_hash = db.Column(db.String(255), nullable=False)
     profile_pic_url = db.Column(db.String(255), nullable=True)
+    banner_url = db.Column(db.String(255), nullable=True)
     bio = db.Column(db.Text, nullable=True)
     current_status = db.Column(db.String(50), nullable=False, default='offline')
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)

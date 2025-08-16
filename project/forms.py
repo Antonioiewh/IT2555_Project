@@ -102,7 +102,7 @@ class CreatePostForm(FlaskForm):
 # --- edit profile form ---
 
 class EditProfileForm(FlaskForm):
-    username = StringField('Username', validators=[DataRequired(), Length(min=2, max=50)])
+    username = StringField('Username', validators=[Optional(), Length(min=2, max=50)])
     profile_pic = FileField('Profile Picture', validators=[FileAllowed(['jpg', 'jpeg', 'png'], 'Images only!')])
     submit = SubmitField('Save Changes')
 

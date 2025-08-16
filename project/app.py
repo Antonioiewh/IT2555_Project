@@ -4,11 +4,13 @@ import re
 import json
 import socket
 import base64
+import io
 from io import BytesIO
 from datetime import datetime, timedelta
 from functools import wraps
 import random
 import string
+from PIL import Image
 
 # --- Flask Core Imports ---
 from flask import Flask, render_template, redirect, url_for, flash, request, current_app, abort, jsonify, session
@@ -243,60 +245,240 @@ def get_fido2_server():
 
 
 
-
-    """Test multiple files at once"""
-    files = request.files.getlist('files')
-    
-    if not files or all(f.filename == '' for f in files):
-        return jsonify({'error': 'No files provided'}), 400
-    
-    results = []
-    
-    for file in files:
-        if file.filename == '':
-            continue
-        
-        try:
-            file_data = file.read()
-            is_safe, issues = scan_upload(file_data, file.filename)
-            
-            results.append({
-                'filename': file.filename,
-                'is_safe': is_safe,
-                'issues': issues,
-                'size': len(file_data)
-            })
-            
-        except Exception as e:
-            results.append({
-                'filename': file.filename,
-                'is_safe': False,
-                'issues': [f'Processing error: {str(e)}'],
-                'size': 0
-            })
-    
-    # Summary statistics
-    total_files = len(results)
-    safe_files = sum(1 for r in results if r['is_safe'])
-    dangerous_files = total_files - safe_files
-    
-    return jsonify({
-        'results': results,
-        'summary': {
-            'total_files': total_files,
-            'safe_files': safe_files,
-            'dangerous_files': dangerous_files,
-            'safety_percentage': (safe_files / total_files * 100) if total_files > 0 else 0
-        }
-    })
-
 # --- login,signup,home ---
 
+# Helper function for relative time
+def get_relative_time(post_date):
+    from datetime import datetime, timezone
+    import math
+    
+    now = datetime.now(timezone.utc)
+    if post_date.tzinfo is None:
+        post_date = post_date.replace(tzinfo=timezone.utc)
+    
+    diff = now - post_date
+    
+    if diff.days > 0:
+        if diff.days == 1:
+            return "1 day ago"
+        elif diff.days < 7:
+            return f"{diff.days} days ago"
+        elif diff.days < 30:
+            weeks = diff.days // 7
+            return f"{weeks} week{'s' if weeks > 1 else ''} ago"
+        else:
+            months = diff.days // 30
+            return f"{months} month{'s' if months > 1 else ''} ago"
+    
+    hours = diff.seconds // 3600
+    if hours > 0:
+        return f"{hours} hour{'s' if hours > 1 else ''} ago"
+    
+    minutes = diff.seconds // 60
+    if minutes > 0:
+        return f"{minutes} minute{'s' if minutes > 1 else ''} ago"
+    
+    return "Just now"
+# Update the load more posts route
+@app.route('/api/load_more_posts')
+@login_required
+def load_more_posts():
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = 10
+        
+        # FIXED: Use created_at instead of post_date
+        posts_query = Post.query.order_by(Post.created_at.desc())
+        
+        posts = posts_query.paginate(
+            page=page, 
+            per_page=per_page, 
+            error_out=False
+        )
+        
+        posts_data = []
+        for post in posts.items:
+            # Get the first image for this post
+            first_image = PostImage.query.filter_by(post_id=post.post_id).first()
+            image_url = None
+            if first_image:
+                image_url = url_for('static', filename=first_image.image_url)
+            
+            post_data = {
+                'post_id': post.post_id,
+                'content': post.post_content,
+                'image_url': image_url,
+                'date': post.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'relative_date': get_relative_time(post.created_at),
+                'user': {
+                    'user_id': post.user.user_id,
+                    'username': post.user.username,
+                    'profile_picture': url_for('static', filename=f'uploads/{post.user.profile_pic_url}') if post.user.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp')
+                },
+                'likes_count': PostLike.query.filter_by(post_id=post.post_id).count(),
+                'is_liked': PostLike.query.filter_by(post_id=post.post_id, user_id=current_user.user_id).first() is not None,
+                'is_own_post': post.user_id == current_user.user_id
+            }
+            posts_data.append(post_data)
+        
+        return jsonify({
+            'posts': posts_data,
+            'has_more': posts.has_next,
+            'next_page': page + 1 if posts.has_next else None
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error loading more posts: {str(e)}")
+        return jsonify({'error': 'Failed to load posts'}), 500
 
 @app.route('/')
 @login_required
 def home():
-    return render_template('UserHome.html')
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = 10  # Posts per page
+        
+        # FIXED: Use created_at instead of post_date
+        posts_query = Post.query.order_by(Post.created_at.desc())
+        
+        posts = posts_query.paginate(
+            page=page, 
+            per_page=per_page, 
+            error_out=False
+        )
+        
+        # Format posts data for frontend
+        posts_data = []
+        for post in posts.items:
+            # Get the first image for this post
+            first_image = PostImage.query.filter_by(post_id=post.post_id).first()
+            image_url = None
+            if first_image:
+                image_url = url_for('static', filename=first_image.image_url)
+            
+            post_data = {
+                'post_id': post.post_id,
+                'content': post.post_content,
+                'image_url': image_url,
+                'date': post.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'relative_date': get_relative_time(post.created_at),
+                'user': {
+                    'user_id': post.user.user_id,
+                    'username': post.user.username,
+                    'profile_picture': url_for('static', filename=f'uploads/{post.user.profile_pic_url}') if post.user.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp')
+                },
+                'likes_count': PostLike.query.filter_by(post_id=post.post_id).count(),
+                'is_liked': PostLike.query.filter_by(post_id=post.post_id, user_id=current_user.user_id).first() is not None,
+                'is_own_post': post.user_id == current_user.user_id
+            }
+            posts_data.append(post_data)
+        
+        print(f"DEBUG: Found {len(posts_data)} posts for home feed")
+        
+        return render_template('UserHome.html', 
+                             posts=posts_data,
+                             pagination=posts,
+                             has_more=posts.has_next)
+                             
+    except Exception as e:
+        app.logger.error(f"Error loading home feed: {str(e)}")
+        print(f"DEBUG: Error in home route: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        flash('Error loading feed. Please try again.', 'error')
+        return render_template('UserHome.html', posts=[], pagination=None, has_more=False)
+
+# Add the missing toggle like route that the frontend expects
+@app.route('/api/toggle_like/<int:post_id>', methods=['POST'])
+@login_required
+def toggle_like_api(post_id):
+    try:
+        post = Post.query.get_or_404(post_id)
+        
+        # Check if user already liked this post
+        existing_like = PostLike.query.filter_by(
+            user_id=current_user.user_id,
+            post_id=post_id
+        ).first()
+        
+        if existing_like:
+            # Unlike the post
+            db.session.delete(existing_like)
+            is_liked = False
+        else:
+            # Like the post
+            new_like = PostLike(
+                user_id=current_user.user_id,
+                post_id=post_id
+            )
+            db.session.add(new_like)
+            is_liked = True
+        
+        db.session.commit()
+        
+        # Get updated like count
+        likes_count = PostLike.query.filter_by(post_id=post_id).count()
+        
+        return jsonify({
+            'success': True,
+            'is_liked': is_liked,
+            'likes_count': likes_count
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error toggling like: {str(e)}")
+        return jsonify({'success': False, 'error': 'Failed to toggle like'}), 500
+
+
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = 10
+        
+        # Same query as home route
+        posts_query = Post.query.order_by(Post.post_date.desc())
+        
+        posts = posts_query.paginate(
+            page=page, 
+            per_page=per_page, 
+            error_out=False
+        )
+        
+        posts_data = []
+        for post in posts.items:
+            # Get the first image for this post
+            first_image = PostImage.query.filter_by(post_id=post.post_id).first()
+            image_url = None
+            if first_image:
+                image_url = url_for('static', filename=first_image.image_url)
+            
+            post_data = {
+                'post_id': post.post_id,
+                'content': post.post_content,
+                'image_url': image_url,
+                'date': post.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'relative_date': get_relative_time(post.created_at),
+                'user': {
+                    'user_id': post.user.user_id,
+                    'username': post.user.username,
+                    'profile_picture': url_for('static', filename=f'uploads/{post.user.profile_pic_url}') if post.user.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp')
+                },
+                'likes_count': PostLike.query.filter_by(post_id=post.post_id).count(),
+                'is_liked': PostLike.query.filter_by(post_id=post.post_id, user_id=current_user.user_id).first() is not None,
+                'is_own_post': post.user_id == current_user.user_id
+            }
+            posts_data.append(post_data)
+        
+        return jsonify({
+            'posts': posts_data,
+            'has_more': posts.has_next,
+            'next_page': page + 1 if posts.has_next else None
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error loading more posts: {str(e)}")
+        return jsonify({'error': 'Failed to load posts'}), 500
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -2356,27 +2538,54 @@ def edit_post(post_id):
     # Security check: Ensure user owns the post
     if post.user_id != current_user.user_id:
         abort(403)
-        
-    form = CreatePostForm(obj=post)
     
-    if form.validate_on_submit():
+    if request.method == 'POST':
         try:
-            # Sanitize input
-            sanitized_content = bleach.clean(form.post_content.data)
+            # Get content from form
+            post_content = request.form.get('post_content', '').strip()
             
+            # Validate content
+            if not post_content:
+                flash('Post content cannot be empty.', 'error')
+                return render_template('edit_post.html', post=post)
+            
+            if len(post_content) > 250:
+                flash('Post content must be 250 characters or less.', 'error')
+                return render_template('edit_post.html', post=post)
+            
+            # Sanitize input
+            sanitized_content = bleach.clean(post_content, tags=[], strip=True)
+            
+            # Update post
             post.post_content = sanitized_content
             post.updated_at = datetime.utcnow()
             
             db.session.commit()
+            
+            # Log the action
+            try:
+                from user_actions import log_user_action
+                log_user_action(
+                    current_user.user_id,
+                    'edit_post',
+                    f'Edited post {post_id}',
+                    request.remote_addr,
+                    request.headers.get('User-Agent', 'Unknown')
+                )
+            except ImportError:
+                pass
+            
             flash('Post updated successfully!', 'success')
             return redirect(url_for('account'))
             
-        except SQLAlchemyError:
+        except Exception as e:
             db.session.rollback()
-            flash('An error occurred while updating the post.', 'danger')
-            return redirect(url_for('edit_post', post_id=post_id))
-            
-    return render_template('edit_post.html', form=form, post=post)
+            app.logger.error(f"Error updating post: {str(e)}")
+            flash('An error occurred while updating the post.', 'error')
+            return render_template('edit_post.html', post=post)
+    
+    # GET request - show form with current content
+    return render_template('edit_post.html', post=post)
 
 
 @app.route('/delete_post/<int:post_id>', methods=['POST'])
@@ -2510,142 +2719,96 @@ def account():
 # --- Edit Profile ---
 
 @app.route('/edit_profile', methods=['GET', 'POST'])
-@user_required
+@login_required
 def edit_profile():
     form = EditProfileForm()
     
+    if request.method == 'GET':
+        # Pre-populate form with current user data
+        form.username.data = current_user.username
+    
     if form.validate_on_submit():
         try:
-            # Update username if changed
+            # Check if username was changed and if it's already taken
             if form.username.data != current_user.username:
-                # Check if username is already taken
                 existing_user = User.query.filter_by(username=form.username.data).first()
                 if existing_user:
-                    flash('Username already taken. Please choose a different one.', 'danger')
+                    flash('Username already exists. Please choose a different one.', 'error')
                     return render_template('EditProfile.html', form=form)
                 
+                # Update username
                 current_user.username = form.username.data
-
-            # Handle profile picture update
+            
+            # Handle profile picture upload
             cropped_image_data = request.form.get('cropped_image_data')
             
             if cropped_image_data:
-                # Process cropped image data
                 try:
+                    
                     # Remove data URL prefix
-                    if cropped_image_data.startswith('data:image'):
-                        header, encoded = cropped_image_data.split(',', 1)
-                        image_data = base64.b64decode(encoded)
-                    else:
-                        raise ValueError("Invalid image data format")
+                    image_data = cropped_image_data.split(',')[1]
+                    image_binary = base64.b64decode(image_data)
                     
-                    # Create a BytesIO object from the decoded data
-                    image_stream = BytesIO(image_data)
+                    # Open with PIL
+                    image = Image.open(io.BytesIO(image_binary))
                     
-                    # Open with PIL to ensure it's a valid image
-                    from PIL import Image
-                    image = Image.open(image_stream)
-                    
-                    # Convert to RGB if necessary (handles PNG with transparency)
-                    if image.mode in ('RGBA', 'LA', 'P'):
-                        # Create white background
-                        background = Image.new('RGB', image.size, (255, 255, 255))
-                        if image.mode == 'P':
-                            image = image.convert('RGBA')
-                        background.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
-                        image = background
-                    
-                    # Generate unique filename
-                    filename = f"profile_{current_user.user_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-                    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                    # Generate filename
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    filename = f"profile_{current_user.user_id}_{timestamp}.jpg"
+                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
                     
                     # Ensure upload directory exists
                     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
                     
-                    # Save the processed image
-                    image.save(filepath, 'JPEG', quality=95, optimize=True)
+                    # Save image
+                    image.save(file_path, 'JPEG', quality=90)
                     
-                    # Delete old profile picture if it exists and is not the default
-                    # CHANGE: Use profile_pic_url instead of profile_pic
-                    if current_user.profile_pic_url and current_user.profile_pic_url != 'blank-profile-picture-973460_1280.webp':
-                        old_filepath = os.path.join(app.config['UPLOAD_FOLDER'], current_user.profile_pic_url)
-                        if os.path.exists(old_filepath):
+                    # Delete old profile picture if it exists
+                    if current_user.profile_pic_url:
+                        old_file_path = os.path.join(app.config['UPLOAD_FOLDER'], current_user.profile_pic_url)
+                        if os.path.exists(old_file_path):
                             try:
-                                os.remove(old_filepath)
-                            except OSError:
-                                pass  # If file can't be deleted, continue anyway
+                                os.remove(old_file_path)
+                            except Exception as e:
+                                app.logger.warning(f"Could not delete old profile picture: {e}")
                     
-                    # Update user profile picture
-                    # CHANGE: Use profile_pic_url instead of profile_pic
+                    # Update user profile picture URL (store just the filename)
                     current_user.profile_pic_url = filename
                     
+                    print(f"DEBUG: Saved profile picture: {filename}")
+                    
                 except Exception as e:
-                    print(f"Error processing cropped image: {str(e)}")
-                    flash('Error processing the cropped image. Please try again.', 'danger')
+                    app.logger.error(f"Error processing profile picture: {str(e)}")
+                    flash('Error processing profile picture. Please try again.', 'error')
                     return render_template('EditProfile.html', form=form)
             
-            elif form.profile_pic.data:
-                # Handle regular file upload (fallback)
-                file = form.profile_pic.data
-                
-                # Validate file
-                if not file_validate.validate_image(file):
-                    flash('Invalid image file. Please upload a JPG or PNG image under 5MB.', 'danger')
-                    return render_template('EditProfile.html', form=form)
-                
-                # Generate unique filename
-                filename = f"profile_{current_user.user_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                
-                # Process and save the image
-                try:
-                    from PIL import Image
-                    image = Image.open(file.stream)
-                    
-                    # Convert to RGB if necessary
-                    if image.mode in ('RGBA', 'LA', 'P'):
-                        background = Image.new('RGB', image.size, (255, 255, 255))
-                        if image.mode == 'P':
-                            image = image.convert('RGBA')
-                        background.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
-                        image = background
-                    
-                    # Resize to reasonable size if too large
-                    max_size = (1024, 1024)
-                    if image.size[0] > max_size[0] or image.size[1] > max_size[1]:
-                        image.thumbnail(max_size, Image.Resampling.LANCZOS)
-                    
-                    # Save the image
-                    image.save(filepath, 'JPEG', quality=95, optimize=True)
-                    
-                    # Delete old profile picture
-                    # CHANGE: Use profile_pic_url instead of profile_pic
-                    if current_user.profile_pic_url and current_user.profile_pic_url != 'blank-profile-picture-973460_1280.webp':
-                        old_filepath = os.path.join(app.config['UPLOAD_FOLDER'], current_user.profile_pic_url)
-                        if os.path.exists(old_filepath):
-                            try:
-                                os.remove(old_filepath)
-                            except OSError:
-                                pass
-                    
-                    # CHANGE: Use profile_pic_url instead of profile_pic
-                    current_user.profile_pic_url = filename
-                    
-                except Exception as e:
-                    print(f"Error processing uploaded image: {str(e)}")
-                    flash('Error processing the uploaded image. Please try again.', 'danger')
-                    return render_template('EditProfile.html', form=form)
-
-            # Save changes to database
+            # Update timestamp
+            current_user.updated_at = datetime.utcnow()
+            
+            # Commit changes
             db.session.commit()
+            
+            # Log the action
+            try:
+                from user_actions import log_user_action
+                log_user_action(
+                    current_user.user_id,
+                    'update_profile',
+                    'Updated profile information',
+                    request.remote_addr,
+                    request.headers.get('User-Agent', 'Unknown')
+                )
+            except ImportError:
+                pass
+            
             flash('Profile updated successfully!', 'success')
-            return redirect(url_for('profile', user_id=current_user.user_id))
+            return redirect(url_for('account'))  # Changed from 'profile' to 'account'
             
         except Exception as e:
             db.session.rollback()
-            print(f"Error updating profile: {str(e)}")
-            flash('An error occurred while updating your profile. Please try again.', 'danger')
-
+            app.logger.error(f"Error updating profile: {str(e)}")
+            flash('An error occurred while updating your profile.', 'error')
+    
     return render_template('EditProfile.html', form=form)
 
 # -- Events 

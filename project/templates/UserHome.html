@@ -1,6 +1,585 @@
-{% extends "UserBase.html" %} {# Or base.html, depending on your setup #}
-{% block title %}Home{% endblock %}
+{% extends "UserBase.html" %}
+
+{% block head %}
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<style>
+/* Instagram-like Timeline Styles */
+.timeline-container {
+    max-width: 614px;
+    margin: 0 auto;
+    padding: 20px 0;
+}
+
+.timeline-header {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    margin-bottom: 24px;
+    padding: 20px;
+    text-align: center;
+}
+
+.create-post-prompt {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    margin-bottom: 24px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.create-post-prompt:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.create-post-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.create-post-input {
+    flex: 1;
+    padding: 12px 16px;
+    border: 1px solid #dbdbdb;
+    border-radius: 24px;
+    background: #fafafa;
+    font-size: 14px;
+    color: #8e8e8e;
+    cursor: pointer;
+}
+
+.timeline-post {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    margin-bottom: 24px;
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+.timeline-post:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.post-header {
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #efefef;
+}
+
+.post-user-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.post-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.post-user-details h4 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #262626;
+}
+
+.post-user-details .post-time {
+    font-size: 12px;
+    color: #8e8e8e;
+    margin: 2px 0 0 0;
+}
+
+.post-menu-btn {
+    background: none;
+    border: none;
+    padding: 8px;
+    cursor: pointer;
+    color: #8e8e8e;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.post-menu-btn:hover {
+    background: #f5f5f5;
+    color: #262626;
+}
+
+.post-content {
+    padding: 16px 20px;
+}
+
+.post-text {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #262626;
+    margin-bottom: 12px;
+    word-wrap: break-word;
+}
+
+.post-image-container {
+    position: relative;
+    width: 100%;
+    margin: 0 -20px 12px -20px;
+}
+
+.post-image {
+    width: 100%;
+    max-height: 600px;
+    object-fit: cover;
+    display: block;
+}
+
+.post-actions {
+    padding: 12px 20px 16px;
+    border-top: 1px solid #efefef;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.post-action-btn {
+    background: none;
+    border: none;
+    padding: 8px;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #262626;
+}
+
+.post-action-btn:hover {
+    background: #f5f5f5;
+}
+
+.post-action-btn.liked {
+    color: #ed4956;
+}
+
+.post-action-btn i {
+    font-size: 18px;
+}
+
+.like-count {
+    font-weight: 600;
+    font-size: 14px;
+    color: #262626;
+}
+
+.loading-container {
+    text-align: center;
+    padding: 40px 20px;
+}
+
+.loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #405de6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 16px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.load-more-btn {
+    width: 100%;
+    padding: 12px;
+    background: #405de6;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin: 20px 0;
+}
+
+.load-more-btn:hover {
+    background: #3651d4;
+}
+
+.load-more-btn:disabled {
+    background: #c7c7c7;
+    cursor: not-allowed;
+}
+
+.empty-timeline {
+    text-align: center;
+    padding: 60px 20px;
+    color: #8e8e8e;
+}
+
+.empty-timeline i {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.empty-timeline h3 {
+    margin: 0 0 8px 0;
+    font-size: 20px;
+    color: #262626;
+}
+
+.empty-timeline p {
+    margin: 0;
+    font-size: 14px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .timeline-container {
+        padding: 12px;
+    }
+    
+    .timeline-post,
+    .create-post-prompt,
+    .timeline-header {
+        border-radius: 0;
+        margin-left: -12px;
+        margin-right: -12px;
+    }
+    
+    .post-image-container {
+        margin-left: -20px;
+        margin-right: -20px;
+    }
+}
+
+/* Hide scrollbar for clean look */
+.timeline-container::-webkit-scrollbar {
+    width: 0px;
+    background: transparent;
+}
+</style>
+{% endblock %}
 
 {% block content %}
+<div class="timeline-container">
+    <!-- Timeline Header -->
+    <div class="timeline-header">
+        <h2>Welcome back, {{ current_user.username }}!</h2>
+        <p>See what's happening in your network</p>
+    </div>
+    
+    <!-- Create Post Prompt -->
+    <div class="create-post-prompt" onclick="window.location.href='{{ url_for('create_post') }}'">
+        <img src="{{ url_for('static', filename='uploads/' + current_user.profile_picture) if current_user.profile_picture else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}" 
+             alt="Your avatar" class="create-post-avatar">
+        <div class="create-post-input">What's on your mind, {{ current_user.username }}?</div>
+        <i class="bi bi-camera" style="color: #405de6; font-size: 20px;"></i>
+    </div>
+    
+    <!-- Timeline Posts -->
+    <div id="timelinePosts">
+        {% if posts %}
+            {% for post in posts %}
+            <article class="timeline-post" data-post-id="{{ post.post_id }}">
+                <!-- Post Header -->
+                <div class="post-header">
+                    <div class="post-user-info">
+                        <img src="{{ post.user.profile_picture }}" alt="{{ post.user.username }}" class="post-avatar">
+                        <div class="post-user-details">
+                            <h4>{{ post.user.username }}</h4>
+                            <p class="post-time">{{ post.relative_date }}</p>
+                        </div>
+                    </div>
+                    {% if post.is_own_post %}
+                    <button class="post-menu-btn" onclick="openPostMenu({{ post.post_id }})">
+                        <i class="bi bi-three-dots"></i>
+                    </button>
+                    {% endif %}
+                </div>
+                
+                <!-- Post Content -->
+                <div class="post-content">
+                    {% if post.content %}
+                    <p class="post-text">{{ post.content }}</p>
+                    {% endif %}
+                    
+                    {% if post.image_url %}
+                    <div class="post-image-container">
+                        <img src="{{ post.image_url }}" alt="Post image" class="post-image" loading="lazy">
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Post Actions -->
+                <div class="post-actions">
+                    <button class="post-action-btn {{ 'liked' if post.is_liked else '' }}" 
+                            onclick="toggleLike({{ post.post_id }}, this)" 
+                            data-post-id="{{ post.post_id }}">
+                        <i class="bi bi-heart{{ '-fill' if post.is_liked else '' }}"></i>
+                        <span class="like-count">{{ post.likes_count }}</span>
+                    </button>
+                </div>
+            </article>
+            {% endfor %}
+        {% else %}
+            <div class="empty-timeline">
+                <i class="bi bi-camera"></i>
+                <h3>No posts yet</h3>
+                <p>Start sharing your moments by creating your first post!</p>
+            </div>
+        {% endif %}
+    </div>
+    
+    <!-- Load More Button -->
+    {% if has_more %}
+    <button id="loadMoreBtn" class="load-more-btn" onclick="loadMorePosts()">
+        Load More Posts
+    </button>
+    {% endif %}
+    
+    <!-- Loading Indicator -->
+    <div id="loadingIndicator" class="loading-container" style="display: none;">
+        <div class="loading-spinner"></div>
+        <p>Loading more posts...</p>
+    </div>
+</div>
+{% endblock %}
 
+{% block scripts %}
+{{ super() }}
+
+<script>
+let currentPage = 1;
+let isLoading = false;
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize infinite scroll
+    initializeInfiniteScroll();
+});
+
+// Toggle like functionality
+function toggleLike(postId, button) {
+    if (isLoading) return;
+    
+    const csrfToken = document.querySelector('meta[name=csrf-token]').getAttribute('content');
+    const likeIcon = button.querySelector('i');
+    const likeCount = button.querySelector('.like-count');
+    const currentCount = parseInt(likeCount.textContent);
+    const isLiked = button.classList.contains('liked');
+    
+    // Optimistic UI update
+    if (isLiked) {
+        button.classList.remove('liked');
+        likeIcon.className = 'bi bi-heart';
+        likeCount.textContent = currentCount - 1;
+    } else {
+        button.classList.add('liked');
+        likeIcon.className = 'bi bi-heart-fill';
+        likeCount.textContent = currentCount + 1;
+    }
+    
+    // Send request to server
+    fetch(`/api/toggle_like/${postId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update with server response
+            likeCount.textContent = data.likes_count;
+            if (data.is_liked) {
+                button.classList.add('liked');
+                likeIcon.className = 'bi bi-heart-fill';
+            } else {
+                button.classList.remove('liked');
+                likeIcon.className = 'bi bi-heart';
+            }
+        } else {
+            // Revert optimistic update on error
+            if (!isLiked) {
+                button.classList.remove('liked');
+                likeIcon.className = 'bi bi-heart';
+                likeCount.textContent = currentCount;
+            } else {
+                button.classList.add('liked');
+                likeIcon.className = 'bi bi-heart-fill';
+                likeCount.textContent = currentCount;
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error toggling like:', error);
+        // Revert optimistic update on error
+        if (!isLiked) {
+            button.classList.remove('liked');
+            likeIcon.className = 'bi bi-heart';
+            likeCount.textContent = currentCount;
+        } else {
+            button.classList.add('liked');
+            likeIcon.className = 'bi bi-heart-fill';
+            likeCount.textContent = currentCount;
+        }
+    });
+}
+
+// Load more posts
+function loadMorePosts() {
+    if (isLoading) return;
+    
+    isLoading = true;
+    const loadMoreBtn = document.getElementById('loadMoreBtn');
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    
+    loadMoreBtn.style.display = 'none';
+    loadingIndicator.style.display = 'block';
+    
+    currentPage++;
+    
+    fetch(`/api/load_more_posts?page=${currentPage}`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.posts && data.posts.length > 0) {
+            appendPosts(data.posts);
+            
+            if (data.has_more) {
+                loadMoreBtn.style.display = 'block';
+            }
+        } else {
+            loadMoreBtn.style.display = 'none';
+        }
+        
+        loadingIndicator.style.display = 'none';
+        isLoading = false;
+    })
+    .catch(error => {
+        console.error('Error loading more posts:', error);
+        loadingIndicator.style.display = 'none';
+        loadMoreBtn.style.display = 'block';
+        currentPage--; // Revert page increment
+        isLoading = false;
+    });
+}
+
+// Append new posts to timeline
+function appendPosts(posts) {
+    const timelinePosts = document.getElementById('timelinePosts');
+    
+    posts.forEach(post => {
+        const postElement = createPostElement(post);
+        timelinePosts.appendChild(postElement);
+    });
+}
+
+// Create post element
+function createPostElement(post) {
+    const article = document.createElement('article');
+    article.className = 'timeline-post';
+    article.setAttribute('data-post-id', post.post_id);
+    
+    article.innerHTML = `
+        <div class="post-header">
+            <div class="post-user-info">
+                <img src="${post.user.profile_picture}" alt="${post.user.username}" class="post-avatar">
+                <div class="post-user-details">
+                    <h4>${post.user.username}</h4>
+                    <p class="post-time">${post.relative_date}</p>
+                </div>
+            </div>
+            ${post.is_own_post ? `
+            <button class="post-menu-btn" onclick="openPostMenu(${post.post_id})">
+                <i class="bi bi-three-dots"></i>
+            </button>
+            ` : ''}
+        </div>
+        
+        <div class="post-content">
+            ${post.content ? `<p class="post-text">${post.content}</p>` : ''}
+            ${post.image_url ? `
+            <div class="post-image-container">
+                <img src="${post.image_url}" alt="Post image" class="post-image" loading="lazy">
+            </div>
+            ` : ''}
+        </div>
+        
+        <div class="post-actions">
+            <button class="post-action-btn ${post.is_liked ? 'liked' : ''}" 
+                    onclick="toggleLike(${post.post_id}, this)" 
+                    data-post-id="${post.post_id}">
+                <i class="bi bi-heart${post.is_liked ? '-fill' : ''}"></i>
+                <span class="like-count">${post.likes_count}</span>
+            </button>
+        </div>
+    `;
+    
+    return article;
+}
+
+// Initialize infinite scroll
+function initializeInfiniteScroll() {
+    window.addEventListener('scroll', function() {
+        if (isLoading) return;
+        
+        const loadMoreBtn = document.getElementById('loadMoreBtn');
+        if (!loadMoreBtn || loadMoreBtn.style.display === 'none') return;
+        
+        const scrollPosition = window.innerHeight + window.scrollY;
+        const documentHeight = document.documentElement.offsetHeight;
+        
+        // Load more when user is near bottom (200px threshold)
+        if (scrollPosition >= documentHeight - 200) {
+            loadMorePosts();
+        }
+    });
+}
+
+// Post menu functionality (for editing/deleting own posts)
+function openPostMenu(postId) {
+    // This can be implemented later for edit/delete functionality
+    console.log('Opening menu for post:', postId);
+}
+
+// Intersection Observer for lazy loading and animations
+const observerOptions = {
+    threshold: 0.1,
+    rootMargin: '0px 0px -50px 0px'
+};
+
+const observer = new IntersectionObserver(function(entries) {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            entry.target.style.opacity = '1';
+            entry.target.style.transform = 'translateY(0)';
+        }
+    });
+}, observerOptions);
+
+// Observe all timeline posts for animations
+document.querySelectorAll('.timeline-post').forEach(post => {
+    post.style.opacity = '0';
+    post.style.transform = 'translateY(20px)';
+    post.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+    observer.observe(post);
+});
+</script>
 {% endblock %}

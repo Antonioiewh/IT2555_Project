@@ -699,8 +699,11 @@
                 <div class="google-card-body">
                     <!-- Username Field -->
                     <div class="google-form-group">
-                        <label for="username" class="google-form-label">Username</label>
-                        {{ form.username(class="google-form-input" + (" error" if form.username.errors else "")) }}
+                        <label for="username" class="google-form-label">
+                            Username 
+                            <span style="color: #5f6368; font-weight: 400;">(optional)</span>
+                        </label>
+                        {{ form.username(class="google-form-input" + (" error" if form.username.errors else ""), placeholder="Leave empty to keep current username") }}
                         {% if form.username.errors %}
                             <div class="google-error-text">
                                 {% for error in form.username.errors %}
@@ -708,6 +711,9 @@
                                 {% endfor %}
                             </div>
                         {% endif %}
+                        <div class="upload-instructions">
+                            Current username: <strong>{{ current_user.username }}</strong>
+                        </div>
                     </div>
 
                     <!-- Profile Picture Section -->

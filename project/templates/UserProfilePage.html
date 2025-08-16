@@ -919,10 +919,6 @@
                             style="color: {{ '#ed4956' if post.is_liked_by_user(current_user.user_id) else 'white' }}"></i>
                             <span class="like-count">{{ post.get_like_count() }}</span>
                         </div>
-                        <div class="post-stat">
-                            <i class="bi bi-chat-fill"></i>
-                            <span>0</span>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -954,12 +950,6 @@
                                 onclick="toggleLike({{ post.post_id }}, event)">
                             <i class="bi bi-heart{{ '-fill' if post.is_liked_by_user(current_user.user_id) else '' }} list-like-icon" 
                             style="color: {{ '#ed4956' if post.is_liked_by_user(current_user.user_id) else '#262626' }}"></i>
-                        </button>
-                        <button class="post-action-btn" title="Comment on post">
-                            <i class="bi bi-chat"></i>
-                        </button>
-                        <button class="post-action-btn" title="Share this post">
-                            <i class="bi bi-share"></i>
                         </button>
                     </div>
                     
@@ -1020,12 +1010,7 @@
                     <button class="post-action-btn" title="Like this post" onclick="toggleLike(currentPostId, event)">
                         <i id="modalLikeIcon" class="bi bi-heart"></i>
                     </button>
-                    <button class="post-action-btn" title="Comment on post">
-                        <i class="bi bi-chat"></i>
-                    </button>
-                    <button class="post-action-btn" title="Share this post">
-                        <i class="bi bi-share"></i>
-                    </button>
+                    
                 </div>
                 
                 <div class="post-modal-likes" style="margin-bottom: 12px; color: #262626; font-weight: 600;">

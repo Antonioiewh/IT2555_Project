@@ -703,11 +703,13 @@
             <h3 class="widget-title">Your Activity</h3>
             <div class="widget-stats">
                 <div class="stat-item">
-                    <span class="stat-number">{{ posts|length if posts else 0 }}</span>
+                    <!-- FIXED: Show current user's actual post count, not posts on current page -->
+                    <span class="stat-number" id="user-post-count">{{ current_user_post_count }}</span>
                     <span class="stat-label">Posts</span>
                 </div>
                 <div class="stat-item">
-                    <span class="stat-number">0</span>
+                    <!-- FIXED: Show current user's actual friend count -->
+                    <span class="stat-number" id="user-friend-count">{{ current_user_friend_count }}</span>
                     <span class="stat-label">Friends</span>
                 </div>
                 <div class="stat-item">
@@ -725,6 +727,7 @@
                 </a>
             </div>
         </div>
+
     </div>
 </div>
 

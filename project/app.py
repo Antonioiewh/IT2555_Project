@@ -291,8 +291,27 @@ def load_more_posts():
         page = request.args.get('page', 1, type=int)
         per_page = 10
         
-        # FIXED: Use created_at instead of post_date
-        posts_query = Post.query.order_by(Post.created_at.desc())
+        # Get current user's accepted friendships
+        friendships = Friendship.query.filter(
+            ((Friendship.user_id1 == current_user.user_id) | (Friendship.user_id2 == current_user.user_id)),
+            Friendship.status == 'accepted'
+        ).all()
+        
+        # Get friend user IDs
+        friend_ids = []
+        for f in friendships:
+            if f.user_id1 == current_user.user_id:
+                friend_ids.append(f.user_id2)
+            else:
+                friend_ids.append(f.user_id1)
+        
+        # Include current user's own posts
+        friend_ids.append(current_user.user_id)
+        
+        # Query posts only from friends and current user
+        posts_query = Post.query.filter(
+            Post.user_id.in_(friend_ids)
+        ).order_by(Post.created_at.desc())
         
         posts = posts_query.paginate(
             page=page, 
@@ -334,6 +353,7 @@ def load_more_posts():
     except Exception as e:
         app.logger.error(f"Error loading more posts: {str(e)}")
         return jsonify({'error': 'Failed to load posts'}), 500
+
 
 @app.route('/upload_banner', methods=['POST'])
 @login_required
@@ -432,14 +452,37 @@ def home():
         page = request.args.get('page', 1, type=int)
         per_page = 10  # Posts per page
         
-        # FIXED: Use created_at instead of post_date
-        posts_query = Post.query.order_by(Post.created_at.desc())
+        # Get current user's accepted friendships
+        friendships = Friendship.query.filter(
+            ((Friendship.user_id1 == current_user.user_id) | (Friendship.user_id2 == current_user.user_id)),
+            Friendship.status == 'accepted'
+        ).all()
+        
+        # Get friend user IDs
+        friend_ids = []
+        for f in friendships:
+            if f.user_id1 == current_user.user_id:
+                friend_ids.append(f.user_id2)
+            else:
+                friend_ids.append(f.user_id1)
+        
+        # Include current user's own posts
+        friend_ids.append(current_user.user_id)
+        
+        # Query posts only from friends and current user
+        posts_query = Post.query.filter(
+            Post.user_id.in_(friend_ids)
+        ).order_by(Post.created_at.desc())
         
         posts = posts_query.paginate(
             page=page, 
             per_page=per_page, 
             error_out=False
         )
+        
+        # Get current user's actual stats
+        current_user_post_count = Post.query.filter_by(user_id=current_user.user_id).count()
+        current_user_friend_count = len(friendships)  # Number of accepted friendships
         
         # Format posts data for frontend
         posts_data = []
@@ -467,12 +510,16 @@ def home():
             }
             posts_data.append(post_data)
         
-        print(f"DEBUG: Found {len(posts_data)} posts for home feed")
+        print(f"DEBUG: Found {len(posts_data)} posts from friends and self")
+        print(f"DEBUG: User post count: {current_user_post_count}")
+        print(f"DEBUG: User friend count: {current_user_friend_count}")
         
         return render_template('UserHome.html', 
                              posts=posts_data,
                              pagination=posts,
-                             has_more=posts.has_next)
+                             has_more=posts.has_next,
+                             current_user_post_count=current_user_post_count,
+                             current_user_friend_count=current_user_friend_count)
                              
     except Exception as e:
         app.logger.error(f"Error loading home feed: {str(e)}")
@@ -480,7 +527,12 @@ def home():
         import traceback
         traceback.print_exc()
         flash('Error loading feed. Please try again.', 'error')
-        return render_template('UserHome.html', posts=[], pagination=None, has_more=False)
+        return render_template('UserHome.html', 
+                             posts=[], 
+                             pagination=None, 
+                             has_more=False,
+                             current_user_post_count=0,
+                             current_user_friend_count=0)
 
 # Add the missing toggle like route that the frontend expects
 @app.route('/api/toggle_like/<int:post_id>', methods=['POST'])
@@ -2514,6 +2566,15 @@ def internal_server_error(error):
 
 # -- USER
 
+
+
+# Update the account route to redirect to the new ID-based route
+@app.route('/account')
+@login_required
+def account():
+    """Redirect to user's own profile using ID"""
+    return redirect(url_for('view_profile', user_id=current_user.user_id))
+
 @app.route('/account/<int:user_id>')
 @login_required
 def view_profile(user_id):
@@ -2535,8 +2596,6 @@ def view_profile(user_id):
             flash('User not found.', 'error')
             return redirect(url_for('home'))
         
-        
-        
         # CRITICAL: Simple ownership check
         is_own_profile = (current_user.user_id == user_id)
         
@@ -2548,11 +2607,26 @@ def view_profile(user_id):
         friendship_id = None
         
         if not is_own_profile:
-            pass
+            # Check friendship status
+            user1, user2 = sorted([current_user.user_id, user_id])
+            friendship = Friendship.query.filter_by(user_id1=user1, user_id2=user2).first()
+            
+            if friendship:
+                friendship_status = friendship.status
+                friendship_id = friendship.friendship_id
         
-        # Get user's posts
+        # Get user's posts (only their own posts)
         posts_query = Post.query.filter_by(user_id=user_id)
         posts = posts_query.order_by(Post.created_at.desc()).all()
+        
+        # Get accurate friend count (accepted friendships only)
+        accepted_friendships = Friendship.query.filter(
+            ((Friendship.user_id1 == user_id) | (Friendship.user_id2 == user_id)),
+            Friendship.status == 'accepted'
+        ).count()
+        
+        # Get accurate post count for this user
+        user_post_count = Post.query.filter_by(user_id=user_id).count()
         
         # Prepare template data
         template_data = {
@@ -2560,6 +2634,8 @@ def view_profile(user_id):
             'profile_user': target_user,
             'user_id': target_user,
             'posts': posts,
+            'post_count': user_post_count,  # Accurate post count
+            'friend_count': accepted_friendships,  # Accurate friend count
             'is_own_profile': is_own_profile,
             'friendship_status': friendship_status,
             'friendship_id': friendship_id,
@@ -2580,15 +2656,6 @@ def view_profile(user_id):
         logging.error(f"Error in view_profile for user ID {user_id}: {str(e)}")
         flash('An error occurred while loading the profile.', 'error')
         return redirect(url_for('home'))
-
-# Update the account route to redirect to the new ID-based route
-@app.route('/account')
-@login_required
-def account():
-    """Redirect to user's own profile using ID"""
-    return redirect(url_for('view_profile', user_id=current_user.user_id))
-
-
     
 
 

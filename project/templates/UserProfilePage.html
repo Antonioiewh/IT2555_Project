@@ -72,7 +72,26 @@
         display: flex;
         margin-bottom: 30px; /* Increased from 20px */
     }
-
+    .stat {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        min-width: 80px; /* Ensure consistent width */
+    }
+    .stat-number {
+        font-size: 24px; /* Larger, more prominent numbers */
+        font-weight: 700;
+        color: #262626;
+        line-height: 1;
+        margin-bottom: 4px;
+    }
+    .stat-label {
+        font-size: 16px;
+        color: #8e8e8e;
+        font-weight: 500;
+        text-transform: none; /* Remove uppercase for cleaner look */
+    }
     .stat-item {
         margin-right: 50px; /* Increased from 40px */
         color: #262626;
@@ -841,6 +860,7 @@
             border-top-width: 4px;
         }
     }
+
 </style>
 {% endblock %}
 
@@ -849,7 +869,7 @@
     <!-- Profile Header -->
     <div class="profile-header">
         <img src="{% if current_user.profile_pic_url %}{{ url_for('static', filename='uploads/' + current_user.profile_pic_url) }}{% else %}{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}{% endif %}" 
-             alt="Profile Picture" class="profile-avatar" onerror="handleImageError(this)">
+            alt="Profile Picture" class="profile-avatar" onerror="handleImageError(this)">
         
         <div class="profile-info">
             <div class="profile-username">
@@ -858,16 +878,26 @@
             </div>
             
             <div class="profile-stats">
-                <div class="stat-item">
-                    <span class="stat-number">{{ posts|length }}</span>
-                    <span>posts</span>
+                <div class="stat">
+                    <span class="stat-number">{{ post_count }}</span>
+                    <span class="stat-label">Posts</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-number">{{ friend_count }}</span>
+                    <span class="stat-label">Friends</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-number">{{ user.created_at.strftime('%b %Y') if user.created_at else 'N/A' }}</span>
+                    <span class="stat-label">Joined</span>
                 </div>
             </div>
             
+            <!-- Remove the duplicate bio section, keep only this clean version -->
+            {% if user.bio %}
             <div class="profile-bio">
-                <strong>{{ user.username }}</strong><br>
-                Member since {{ user.created_at.strftime('%B %Y') if user.created_at else 'Unknown' }}
+                {{ user.bio }}
             </div>
+            {% endif %}
         </div>
     </div>
 

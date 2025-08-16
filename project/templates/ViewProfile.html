@@ -864,12 +864,20 @@
             </div>
             
             <div class="profile-stats">
-                <div class="stat-item">
-                    <span class="stat-number">{{ posts|length }}</span>
-                    <span>posts</span>
+                <div class="stat">
+                    <span class="stat-number">{{ post_count }}</span>
+                    <span class="stat-label">Posts</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-number">{{ friend_count }}</span>
+                    <span class="stat-label">Friends</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-number">Aug 2025</span>
+                    <span class="stat-label">Joined</span>
                 </div>
             </div>
-            
+                        
             <div class="profile-bio">
                 <strong>{{ profile_user.username }}</strong><br>
                 {% if profile_user.bio %}

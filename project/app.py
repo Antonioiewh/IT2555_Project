@@ -13,7 +13,15 @@ from flask import Flask, render_template, redirect, url_for, flash, request, cur
 from flask_wtf import CSRFProtect, FlaskForm
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_socketio import SocketIO, emit, join_room, leave_room, send
+from flask_wtf.file import FileAllowed, FileField
+from wtforms.validators import DataRequired, Length, Email, EqualTo,ValidationError, Optional
+from werkzeug.utils import secure_filename
 from apscheduler.schedulers.background import BackgroundScheduler
+
+# -- profile imports --
+import imghdr
+import bleach
+import magic
 
 # antonio: forms
 from forms import SignupForm,LoginForm,ReportForm,UpdateUserStatusForm,FriendRequestForm,UpdateReportStatusForm,Enable2FAForm,Disable2FAForm,RemovePassKeyForm, EventForm
@@ -86,7 +94,7 @@ app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config['RECAPTCHA_PUBLIC_KEY'] = '6LefCKcrAAAAAK-REXMG_5i6aqTW_ewYwRbEecB6'
 app.config['RECAPTCHA_PRIVATE_KEY'] = '6LefCKcrAAAAAGaO2Rac8zgqVqhjsy9oxp31fThl' #this in .env!
-
+app.config['GOOGLE_MAPS_API_KEY'] = os.getenv('GOOGLE_MAPS_API_KEY')
 # Database configuration
 DB_USER = os.getenv('MYSQL_USER', 'flaskuser')
 DB_PASSWORD = os.getenv('MYSQL_PASSWORD', 'password')
@@ -115,7 +123,21 @@ csrf = CSRFProtect(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'  # Redirect to login if user not authenticated
 
-# --- Context Processors ---
+# --FILE RELATED STUFF --
+ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png'}
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+UPLOAD_FOLDER = 'static/uploads'
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def validate_image(file_stream):
+    # Check file type using python-magic
+    mime = magic.from_buffer(file_stream.read(1024), mime=True)
+    file_stream.seek(0)  # Reset file pointer
+    return mime in ['image/jpeg', 'image/png']
+
+# -- Return container ID to templates --
 @app.context_processor
 def inject_container_id():
     return {"container_id": socket.gethostname()}
@@ -127,8 +149,10 @@ def load_user(user_id):
     """Loads a user from the database given their ID."""
     return db.session.get(User, int(user_id))
 
-
-# --- User Required Decorator ---
+# Add a template global to make it available in templates
+@app.template_global()
+def google_maps_api_key():
+    return app.config.get('GOOGLE_MAPS_API_KEY')
 
 
 
@@ -266,7 +290,6 @@ def get_fido2_server():
 def home():
     return render_template('UserHome.html')
 
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     form = LoginForm()
@@ -315,6 +338,9 @@ def login():
                     user.current_status = 'online'
                     user.last_active_at = datetime.utcnow()
                     db.session.commit()
+
+                    # ✅ Send event reminders on login
+                    send_user_event_reminders(user.user_id)
 
                     log_user_login_success(user.user_id, details="User logged in successfully with password only.")
                     next_page = request.args.get('next')
@@ -397,6 +423,10 @@ def verify_2fa():
         if totp.verify(code):
             login_user(user)
             session.pop('pending_2fa_user_id', None)
+            
+            # ✅ Send event reminders on successful 2FA login
+            send_user_event_reminders(user.user_id)
+            
             return redirect(url_for('home'))
     return render_template('UserVerify2FA.html', form=form)
 
@@ -1034,23 +1064,52 @@ def search_users():
 
 
 # --- Notifications ---
+# Find the notifications route (around lines 985-1020) and replace it:
+
 @app.route('/Notifications')
 @user_required
 def notifications():
     notifications = Notification.query.filter_by(user_id=current_user.user_id).order_by(Notification.created_at.desc()).all()
-    # Group notifications by type
+    
+    # Standardized notification grouping - 6 types only
     grouped = {
-        'like': [],
-        'comment': [],
         'friend_request': [],
-        'event_reminder': [],
+        'event_notification': [],
         'message': [],
+        'post_activity': [],
         'report_status': [],
-        'admin_override': []
+        'admin_notification': []
     }
+    
+    # Group notifications by standardized types - FIX THE LOGIC ORDER
     for n in notifications:
-        grouped[n.type].append(n)
+        notification_type = n.type
+        
+        # First check for current standardized types
+        if notification_type == 'friend_request':
+            grouped['friend_request'].append(n)
+        elif notification_type == 'event_notification':
+            grouped['event_notification'].append(n)
+        elif notification_type == 'message':
+            grouped['message'].append(n)
+        elif notification_type == 'post_activity':
+            grouped['post_activity'].append(n)
+        elif notification_type == 'report_status':
+            grouped['report_status'].append(n)
+        elif notification_type == 'admin_notification':
+            grouped['admin_notification'].append(n)
+        # Then map legacy types to standardized types
+        elif notification_type in ['event_reminder', 'event_join', 'event_cancelled']:
+            grouped['event_notification'].append(n)
+        elif notification_type in ['like', 'comment']:
+            grouped['post_activity'].append(n)
+        elif notification_type in ['admin_override', 'admin_action']:
+            grouped['admin_notification'].append(n)
+        else:
+            # Default unknown types to admin_notification
+            grouped['admin_notification'].append(n)
 
+    # Get friend request notifications with user details
     friend_request_notifs = (
         db.session.query(Notification, User)
         .join(Friendship, Notification.source_id == Friendship.friendship_id)
@@ -1062,19 +1121,138 @@ def notifications():
         .order_by(Notification.created_at.desc())
         .all()
     )
+    
+    # Get event notifications with event details
+    event_notifs_with_details = []
+    for notif in grouped['event_notification']:
+        event = Event.query.get(notif.source_id) if notif.source_id else None
+        event_notifs_with_details.append((notif, event))
+    
     form = FriendRequestForm()
+    
     return render_template('notifications.html',
             form=form,
             grouped=grouped,
             friend_request_notifs=friend_request_notifs,
+            event_notifs=event_notifs_with_details,
             message_notifs=grouped['message'],
-            like_notifs=grouped['like'],
-            comment_notifs=grouped['comment'],
-            event_reminder_notifs=grouped['event_reminder'],
+            post_activity_notifs=grouped['post_activity'],
             report_status_notifs=grouped['report_status'],
-            admin_override_notifs=grouped['admin_override']
+            admin_notifs=grouped['admin_notification']
         )
 
+@app.route('/delete_notification/<int:notification_id>', methods=['POST'])
+@user_required
+def delete_notification(notification_id):
+    """Delete a specific notification"""
+    notification = Notification.query.get_or_404(notification_id)
+    
+    # Check if user owns this notification
+    if notification.user_id != current_user.user_id:
+        abort(403)
+    
+    try:
+        db.session.delete(notification)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/delete_all_notifications/<notification_type>', methods=['POST'])
+@user_required
+def delete_all_notifications(notification_type):
+    """Delete all notifications of a specific type for the current user"""
+    
+    # Validate notification type
+    valid_types = [
+        'friend_request', 'event_notification', 'message', 
+        'post_activity', 'report_status', 'admin_notification'
+    ]
+    
+    if notification_type not in valid_types:
+        return jsonify({'success': False, 'error': 'Invalid notification type'}), 400
+    
+    try:
+        # Build query based on type (including legacy type mapping)
+        query = Notification.query.filter_by(user_id=current_user.user_id)
+        
+        if notification_type == 'event_notification':
+            # Include legacy event types
+            query = query.filter(Notification.type.in_(['event_notification', 'event_reminder', 'event_join', 'event_cancelled']))
+        elif notification_type == 'post_activity':
+            # Include legacy post types
+            query = query.filter(Notification.type.in_(['post_activity', 'like', 'comment']))
+        elif notification_type == 'admin_notification':
+            # Include legacy admin types
+            query = query.filter(Notification.type.in_(['admin_notification', 'admin_override', 'admin_action']))
+        else:
+            query = query.filter_by(type=notification_type)
+        
+        # Delete all matching notifications
+        deleted_count = query.delete()
+        db.session.commit()
+        
+        return jsonify({
+            'success': True, 
+            'deleted_count': deleted_count
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    
+@app.route('/mark_notification_read/<int:notification_id>', methods=['POST'])
+@user_required
+def mark_notification_read(notification_id):
+    """Mark a specific notification as read"""
+    notification = Notification.query.get_or_404(notification_id)
+    
+    # Check if user owns this notification
+    if notification.user_id != current_user.user_id:
+        abort(403)
+    
+    try:
+        notification.is_read = True
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+@app.route('/mark_all_notifications_read/<notification_type>', methods=['POST'])
+@user_required
+def mark_all_notifications_read(notification_type):
+    """Mark all notifications of a specific type as read for the current user"""
+    try:
+        # Get notification IDs from request body
+        data = request.get_json()
+        notification_ids = data.get('notification_ids', [])
+        
+        if not notification_ids:
+            return jsonify({'success': False, 'error': 'No notification IDs provided'}), 400
+        
+        # Update all specified notifications to read status
+        updated_count = Notification.query.filter(
+            Notification.notification_id.in_(notification_ids),
+            Notification.user_id == current_user.user_id,
+            Notification.is_read == False
+        ).update(
+            {Notification.is_read: True},
+            synchronize_session=False
+        )
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True, 
+            'message': f'Marked {updated_count} notifications as read',
+            'updated_count': updated_count
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error marking notifications as read: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # -- Friends Management --
 @app.route('/send_friend_request/<int:target_user_id>', methods=['POST'])
@@ -1685,6 +1863,8 @@ def manage_reports():
         rejected_reports=rejected_reports
     )
 
+# Find the manage_report route (around line 1600) and replace the POST handling section:
+
 @app.route('/manage_report/<int:report_id>', methods=['GET', 'POST'])
 @admin_required
 def manage_report(report_id):
@@ -1706,12 +1886,39 @@ def manage_report(report_id):
     if request.method == 'POST':
         new_status = request.form.get('status')
         admin_notes = request.form.get('admin_notes')
+        
         if new_status in ['open', 'in_review', 'action_taken', 'rejected']:
+            old_status = report.status
             report.status = new_status
             report.admin_notes = admin_notes
             report.resolved_at = datetime.utcnow() if new_status in ['action_taken', 'rejected'] else None
+            
+            # ✅ CREATE NOTIFICATION FOR THE REPORTER
+            if report.reporter_id:  # Make sure reporter exists
+                # Create user-friendly status messages
+                status_messages = {
+                    'open': 'reopened',
+                    'in_review': 'under review',
+                    'action_taken': 'resolved with action taken',
+                    'rejected': 'closed without action'
+                }
+                
+                status_display = status_messages.get(new_status, new_status)
+                
+                notification = Notification(
+                    user_id=report.reporter_id,
+                    type='report_status',
+                    source_id=report.report_id,
+                    message=f"Your report against {reported_username} has been {status_display}.",
+                    created_at=datetime.utcnow(),
+                    is_read=False
+                )
+                
+                db.session.add(notification)
+                print(f"DEBUG: Created report status notification for user {report.reporter_id}")
+            
             db.session.commit()
-            flash(f"Report {report.report_id} updated successfully.", "success")
+            flash(f"Report {report.report_id} updated from '{old_status}' to '{new_status}' and reporter notified.", "success")
         else:
             flash("Invalid status.", "danger")
         return redirect(url_for('manage_reports'))
@@ -1723,7 +1930,6 @@ def manage_report(report_id):
         reported_username=reported_username,
         form=form
     )
-
 @app.route('/manage_ModSecLogs', methods=['GET'])
 @admin_required
 def admin_modsec_logs():
@@ -2022,6 +2228,237 @@ def internal_server_error(error):
     return render_template('500_error.html'), 500
 
 
+
+# --- create, edit, and delete routes for Creating Posts ---
+@app.route('/create_post', methods=['GET', 'POST'])
+@login_required
+def create_post():
+    form = CreatePostForm()
+    if form.validate_on_submit():
+        try:
+            # Sanitize the post content
+            clean_content = bleach.clean(
+                form.post_content.data,
+                tags=[],  # No HTML tags allowed
+                strip=True
+            )
+
+            post = Post(
+                user_id=current_user.user_id,
+                post_content=clean_content,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            db.session.add(post)
+            db.session.commit()
+
+            if form.image.data:
+                file = form.image.data
+                if file and allowed_file(file.filename):
+                    # Validate file size
+                    file.seek(0, os.SEEK_END)
+                    size = file.tell()
+                    file.seek(0)
+                    
+                    if size > MAX_FILE_SIZE:
+                        flash('File size too large', 'danger')
+                        return redirect(url_for('create_post'))
+
+                    # Validate image content
+                    if not validate_image(file):
+                        flash('Invalid image file', 'danger')
+                        return redirect(url_for('create_post'))
+
+                    # Secure the filename
+                    filename = secure_filename(f"{post.post_id}_{file.filename}")
+                    
+                    # Ensure upload directory exists
+                    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+                    
+                    # Create safe file path
+                    file_path = os.path.join(UPLOAD_FOLDER, filename)
+                    file_path = os.path.abspath(file_path)
+                    
+                    # Verify the path is within UPLOAD_FOLDER
+                    if not file_path.startswith(os.path.abspath(UPLOAD_FOLDER)):
+                        flash('Invalid file path', 'danger')
+                        return redirect(url_for('create_post'))
+
+                    file.save(file_path)
+                    rel_path = os.path.relpath(file_path, 'static').replace("\\", "/")
+                    post_image = PostImage(post_id=post.post_id, image_url=rel_path)
+                    db.session.add(post_image)
+                    db.session.commit()
+
+            flash('Post created successfully!', 'success')
+            return redirect(url_for('account'))
+
+        except Exception as e:
+            db.session.rollback()
+            flash('An error occurred while creating the post', 'danger')
+            return redirect(url_for('create_post'))
+
+    return render_template('create_post.html', form=form)
+
+class CreatePostForm(FlaskForm):
+    post_content = TextAreaField('Content', validators=[DataRequired(), Length(max=300)])
+    image = FileField('Image', validators=[Optional(), FileAllowed(['jpg', 'png', 'jpeg'], 'Images only!')])
+    submit = SubmitField('Submit')
+
+class EditProfileForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired(), Length(min=2, max=50)])
+    profile_pic = FileField('Profile Picture', validators=[FileAllowed(['jpg', 'jpeg', 'png'], 'Images only!')])
+    submit = SubmitField('Save Changes')
+
+@app.route('/edit_post/<int:post_id>', methods=['GET', 'POST'])
+@login_required
+def edit_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    
+    # Security check: Ensure user owns the post
+    if post.user_id != current_user.user_id:
+        abort(403)
+        
+    form = CreatePostForm(obj=post)
+    
+    if form.validate_on_submit():
+        try:
+            # Sanitize input
+            sanitized_content = bleach.clean(form.post_content.data)
+            
+            post.post_content = sanitized_content
+            post.updated_at = datetime.utcnow()
+            
+            db.session.commit()
+            flash('Post updated successfully!', 'success')
+            return redirect(url_for('account'))
+            
+        except SQLAlchemyError:
+            db.session.rollback()
+            flash('An error occurred while updating the post.', 'danger')
+            return redirect(url_for('edit_post', post_id=post_id))
+            
+    return render_template('edit_post.html', form=form, post=post)
+
+
+@app.route('/delete_post/<int:post_id>', methods=['POST'])
+@login_required
+def delete_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    
+    # Security check: Ensure user owns the post
+    if post.user_id != current_user.user_id:
+        abort(403)
+    
+    try:
+        # Delete associated images first
+        for image in post.images:
+            # Delete image file from filesystem
+            image_path = os.path.join(app.config['UPLOAD_FOLDER'], image.image_url)
+            if os.path.exists(image_path):
+                os.remove(image_path)
+                
+        # Delete the post and commit transaction
+        db.session.delete(post)
+        db.session.commit()
+        
+        flash('Post deleted successfully!', 'success')
+        
+    except OSError:
+        db.session.rollback()
+        flash('Error deleting post images.', 'danger')
+        
+    except SQLAlchemyError:
+        db.session.rollback()
+        flash('Error deleting post.', 'danger')
+        
+    return redirect(url_for('account'))
+
+
+# --- user account/profile page ---
+@app.route('/account', methods=['GET', 'POST'])
+@login_required
+def account():
+    try:
+        user = current_user
+        posts = Post.query.filter_by(user_id=user.user_id)\
+                         .order_by(Post.created_at.desc())\
+                         .all()
+                         
+        return render_template('UserProfilePage.html', 
+                             user=user, 
+                             posts=posts)
+                             
+    except SQLAlchemyError:
+        flash('Error loading profile data.', 'danger')
+        return redirect(url_for('home'))
+
+
+# --- Edit Profile ---
+@app.route('/edit_profile', methods=['GET', 'POST'])
+@login_required
+def edit_profile():
+    form = EditProfileForm(obj=current_user)
+    if form.validate_on_submit():
+        try:
+            # Sanitize and validate username
+            clean_username = bleach.clean(form.username.data, tags=[], strip=True)
+            if not re.match(r'^[a-zA-Z0-9_]{3,20}$', clean_username):
+                flash('Invalid username format', 'danger')
+                return redirect(url_for('edit_profile'))
+
+            # Check username uniqueness
+            existing_user = User.query.filter(
+                User.username == clean_username,
+                User.user_id != current_user.user_id
+            ).first()
+            if existing_user:
+                flash('Username already taken', 'danger')
+                return redirect(url_for('edit_profile'))
+
+            current_user.username = clean_username
+
+            if form.profile_pic.data:
+                file = form.profile_pic.data
+                if file and allowed_file(file.filename):
+                    # Validate file size
+                    file.seek(0, os.SEEK_END)
+                    size = file.tell()
+                    file.seek(0)
+                    
+                    if size > MAX_FILE_SIZE:
+                        flash('File size too large', 'danger')
+                        return redirect(url_for('edit_profile'))
+
+                    # Validate image content
+                    if not validate_image(file):
+                        flash('Invalid image file', 'danger')
+                        return redirect(url_for('edit_profile'))
+
+                    # Secure the filename and create unique name
+                    filename = f"profile_{current_user.user_id}_{int(datetime.utcnow().timestamp())}.png"
+                    filename = secure_filename(filename)
+                    
+                    # Save to uploads folder
+                    upload_path = os.path.join('static', 'uploads')
+                    os.makedirs(upload_path, exist_ok=True)
+                    file_path = os.path.join(upload_path, filename)
+                    
+                    # Save file and update database
+                    file.save(file_path)
+                    current_user.profile_pic_url = f'uploads/{filename}'
+
+            db.session.commit()
+            flash('Profile updated successfully!', 'success')
+            return redirect(url_for('account'))
+
+        except Exception as e:
+            db.session.rollback()
+            flash('An error occurred while updating the profile', 'danger')
+            return redirect(url_for('edit_profile'))
+
+    return render_template('EditProfile.html', form=form, user=current_user)
+
 # -- Events 
 
 
@@ -2042,14 +2479,24 @@ def create_event():
     
     if form.validate_on_submit():
         try:
+            # Get coordinates from form data
+            latitude = request.form.get('latitude')
+            longitude = request.form.get('longitude')
+            
+            # Convert to float if provided
+            lat = float(latitude) if latitude else None
+            lng = float(longitude) if longitude else None
+            
             # Create new event
             new_event = Event(
-                user_id=current_user.user_id,  # Creator of the event
+                user_id=current_user.user_id,
                 title=form.title.data,
                 description=form.description.data,
                 event_datetime=form.event_datetime.data,
                 location=form.location.data,
-                is_reminder=False,  # Always False since this only creates events
+                latitude=lat,
+                longitude=lng,
+                is_reminder=False,
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow()
             )
@@ -2064,15 +2511,7 @@ def create_event():
             db.session.rollback()
             print(f"Error creating event: {str(e)}")
             flash('An error occurred while creating the event. Please try again.', 'danger')
-            
-    else:
-        # Debug form errors
-        if form.errors:
-            print(f"Form validation errors: {form.errors}")
-            for field, errors in form.errors.items():
-                for error in errors:
-                    flash(f"{field}: {error}", 'error')
-            
+    
     return render_template('create_event.html', form=form)
 
 # Events Dashboard Route
@@ -2122,7 +2561,7 @@ def discover_events():
                          events=public_events, 
                          participated_event_ids=participated_event_ids)
 
-# Join Event Route
+# JOIN event
 @app.route('/join_event/<int:event_id>', methods=['POST'])
 @user_required
 def join_event(event_id):
@@ -2133,41 +2572,70 @@ def join_event(event_id):
         flash("You cannot join your own event.", 'warning')
         return redirect(url_for('discover_events'))
     
-    # Check if user is already participating
+    # Check if user is already participating with 'joined' status
     existing_participation = EventParticipant.query.filter_by(
         user_id=current_user.user_id,
-        event_id=event_id
+        event_id=event_id,
+        status='joined'
     ).first()
+    
+    print(f"DEBUG: User {current_user.user_id} attempting to join event {event_id}")
+    print(f"DEBUG: Existing participation: {existing_participation}")
     
     if existing_participation:
         flash('You are already participating in this event!', 'warning')
-    else:
-        try:
-            # Create new participation
-            new_participation = EventParticipant(
-                user_id=current_user.user_id,
-                event_id=event_id,
-                status='joined',
-                joined_at=datetime.utcnow()
-            )
-            db.session.add(new_participation)
-            db.session.commit()
-            
-            # Create notification for event creator
-            creator_notification = Notification(
-                user_id=event.user_id,
-                type='event_reminder',
-                source_id=event_id,
-                message=f"{current_user.username} joined your event '{event.title}'"
-            )
-            db.session.add(creator_notification)
-            db.session.commit()
-            
-            flash(f'Successfully joined "{event.title}"!', 'success')
-            
-        except Exception as e:
-            db.session.rollback()
-            flash('An error occurred while joining the event.', 'danger')
+        return redirect(url_for('discover_events'))
+    
+    try:
+        # Create new participation record
+        new_participation = EventParticipant(
+            user_id=current_user.user_id,
+            event_id=event_id,
+            status='joined',
+            joined_at=datetime.utcnow()
+        )
+        
+        print(f"DEBUG: Creating participation record: user_id={current_user.user_id}, event_id={event_id}")
+        
+        db.session.add(new_participation)
+        db.session.flush()  # Flush to get any constraint errors before notification
+        
+        print(f"DEBUG: Participation record created successfully")
+        
+        # Create notification for event creator using standardized type
+        creator_notification = Notification(
+            user_id=event.user_id,
+            type='event_notification',
+            source_id=event_id,
+            message=f"{current_user.username} joined your event '{event.title}'",
+            created_at=datetime.utcnow(),
+            is_read=False
+        )
+        
+        print(f"DEBUG: Creating notification for user {event.user_id}")
+        
+        db.session.add(creator_notification)
+        db.session.commit()
+        
+        print(f"DEBUG: Successfully joined event and created notification")
+        
+        flash(f'Successfully joined "{event.title}"!', 'success')
+        
+    except IntegrityError as ie:
+        db.session.rollback()
+        print(f"ERROR: IntegrityError joining event: {str(ie)}")
+        # Check if it's a duplicate key error
+        if "Duplicate entry" in str(ie) or "UNIQUE constraint" in str(ie):
+            flash('You are already participating in this event!', 'warning')
+        else:
+            flash('A database constraint error occurred. Please try again.', 'danger')
+    except Exception as e:
+        db.session.rollback()
+        print(f"ERROR: Exception joining event: {str(e)}")
+        print(f"ERROR: Exception type: {type(e)}")
+        import traceback
+        traceback.print_exc()
+        flash('An error occurred while joining the event. Please try again.', 'danger')
     
     return redirect(url_for('discover_events'))
 
@@ -2201,7 +2669,8 @@ def leave_event(event_id):
     else:
         return redirect(url_for('events_dashboard'))
 
-# Delete Event Route
+
+
 @app.route('/delete_event/<int:event_id>', methods=['POST'])
 @user_required
 def delete_event(event_id):
@@ -2222,9 +2691,11 @@ def delete_event(event_id):
         for participant in participants:
             notif = Notification(
                 user_id=participant.user_id,
-                type='event_reminder',
+                type='event_notification',  # ✅ Standardized type
                 source_id=event_id,
-                message=f"The event '{event.title}' you joined has been cancelled."
+                message=f"The event '{event.title}' you joined has been cancelled.",
+                created_at=datetime.utcnow(),
+                is_read=False
             )
             db.session.add(notif)
         
@@ -2239,13 +2710,12 @@ def delete_event(event_id):
         
     except Exception as e:
         db.session.rollback()
+        print(f"Error deleting event: {str(e)}")
         flash('An error occurred while deleting the event.', 'danger')
         
     return redirect(url_for('events_dashboard'))
 
 
-
-# Event Reminder Scheduler Function
 def send_event_reminders():
     """Send notifications for events happening tomorrow"""
     tomorrow = datetime.utcnow().date() + timedelta(days=1)
@@ -2263,17 +2733,18 @@ def send_event_reminders():
         # Notify event creator
         creator_notif_exists = Notification.query.filter_by(
             user_id=event.user_id,
-            type='event_reminder',
-            source_id=event.event_id,
-            message=f"Reminder: Your event '{event.title}' is happening tomorrow!"
-        ).first()
+            type='event_notification',  # ✅ Standardized type
+            source_id=event.event_id
+        ).filter(Notification.message.like(f"%Your event '{event.title}' is happening tomorrow%")).first()
         
         if not creator_notif_exists:
             creator_notif = Notification(
                 user_id=event.user_id,
-                type='event_reminder',
+                type='event_notification',  # ✅ Standardized type
                 source_id=event.event_id,
-                message=f"Reminder: Your event '{event.title}' is happening tomorrow!"
+                message=f"Reminder: Your event '{event.title}' is happening tomorrow!",
+                created_at=datetime.utcnow(),
+                is_read=False
             )
             db.session.add(creator_notif)
         
@@ -2286,22 +2757,121 @@ def send_event_reminders():
         for participant in participants:
             participant_notif_exists = Notification.query.filter_by(
                 user_id=participant.user_id,
-                type='event_reminder',
-                source_id=event.event_id,
-                message=f"Reminder: '{event.title}' you joined is happening tomorrow!"
-            ).first()
+                type='event_notification',  # ✅ Standardized type
+                source_id=event.event_id
+            ).filter(Notification.message.like(f"%'{event.title}' you joined is happening tomorrow%")).first()
             
             if not participant_notif_exists:
                 participant_notif = Notification(
                     user_id=participant.user_id,
-                    type='event_reminder',
+                    type='event_notification',  # ✅ Standardized type
                     source_id=event.event_id,
-                    message=f"Reminder: '{event.title}' you joined is happening tomorrow!"
+                    message=f"Reminder: '{event.title}' you joined is happening tomorrow!",
+                    created_at=datetime.utcnow(),
+                    is_read=False
                 )
                 db.session.add(participant_notif)
     
     db.session.commit()
 
+# Add this function after the existing send_event_reminders() function (around line 2307):
+
+def send_user_event_reminders(user_id):
+    """Send event reminder notifications to a specific user for events happening in the next 24 hours"""
+    try:
+        # Get events happening in the next 24 hours
+        now = datetime.utcnow()
+        next_24_hours = now + timedelta(hours=24)
+        
+        # Find events user created that are happening in next 24 hours
+        user_created_events = Event.query.filter(
+            Event.user_id == user_id,
+            Event.event_datetime >= now,
+            Event.event_datetime <= next_24_hours,
+            Event.is_reminder == False
+        ).all()
+        
+        # Find events user joined that are happening in next 24 hours
+        user_joined_events = (
+            db.session.query(Event)
+            .join(EventParticipant, Event.event_id == EventParticipant.event_id)
+            .filter(
+                EventParticipant.user_id == user_id,
+                EventParticipant.status == 'joined',
+                Event.event_datetime >= now,
+                Event.event_datetime <= next_24_hours,
+                Event.is_reminder == False
+            )
+            .all()
+        )
+        
+        # Send reminders for events user created
+        for event in user_created_events:
+            # Check if reminder already exists
+            existing_notif = Notification.query.filter_by(
+                user_id=user_id,
+                type='event_notification',
+                source_id=event.event_id
+            ).filter(
+                Notification.message.like(f"%Your event '{event.title}' is happening%"),
+                Notification.created_at >= now - timedelta(hours=1)  # Don't spam - only if no recent reminder
+            ).first()
+            
+            if not existing_notif:
+                hours_until = int((event.event_datetime - now).total_seconds() / 3600)
+                if hours_until <= 1:
+                    time_msg = "very soon"
+                elif hours_until <= 6:
+                    time_msg = f"in {hours_until} hours"
+                else:
+                    time_msg = "within 24 hours"
+                
+                notification = Notification(
+                    user_id=user_id,
+                    type='event_notification',
+                    source_id=event.event_id,
+                    message=f"Reminder: Your event '{event.title}' is happening {time_msg}!",
+                    created_at=datetime.utcnow(),
+                    is_read=False
+                )
+                db.session.add(notification)
+        
+        # Send reminders for events user joined
+        for event in user_joined_events:
+            # Check if reminder already exists
+            existing_notif = Notification.query.filter_by(
+                user_id=user_id,
+                type='event_notification',
+                source_id=event.event_id
+            ).filter(
+                Notification.message.like(f"%'{event.title}' you joined is happening%"),
+                Notification.created_at >= now - timedelta(hours=1)  # Don't spam
+            ).first()
+            
+            if not existing_notif:
+                hours_until = int((event.event_datetime - now).total_seconds() / 3600)
+                if hours_until <= 1:
+                    time_msg = "very soon"
+                elif hours_until <= 6:
+                    time_msg = f"in {hours_until} hours"
+                else:
+                    time_msg = "within 24 hours"
+                
+                notification = Notification(
+                    user_id=user_id,
+                    type='event_notification',
+                    source_id=event.event_id,
+                    message=f"Reminder: '{event.title}' you joined is happening {time_msg}!",
+                    created_at=datetime.utcnow(),
+                    is_read=False
+                )
+                db.session.add(notification)
+        
+        db.session.commit()
+        
+    except Exception as e:
+        print(f"Error sending user event reminders: {e}")
+        db.session.rollback()
 # Initialize scheduler for event reminders
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=send_event_reminders, trigger="interval", hours=24)

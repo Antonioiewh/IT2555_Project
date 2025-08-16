@@ -1,75 +1,1068 @@
 {% extends "UserBase.html" %}
+{% block title %}Edit Profile{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<style>
+/* Google-style base styling */
+.google-container {
+    font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #f8f9fa;
+    min-height: 100vh;
+    padding: 0;
+}
+
+.google-header {
+    background: #fff;
+    border-bottom: 1px solid #e8eaed;
+    padding: 24px 40px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 1px 2px rgba(60,64,67,0.1);
+}
+
+.google-header-content {
+    max-width: 800px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.google-back-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    color: #5f6368;
+    transition: background-color 0.15s;
+}
+
+.google-back-button:hover {
+    background: #f1f3f4;
+}
+
+.google-title {
+    font-size: 22px;
+    font-weight: 400;
+    color: #202124;
+    margin: 0;
+}
+
+.google-main {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 32px 40px;
+}
+
+.google-card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 2px rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
+    overflow: hidden;
+}
+
+.google-card-header {
+    padding: 24px 24px 16px;
+    border-bottom: 1px solid #e8eaed;
+}
+
+.google-card-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: #3c4043;
+    margin: 0;
+}
+
+.google-card-body {
+    padding: 24px;
+}
+
+.google-form-group {
+    margin-bottom: 24px;
+}
+
+.google-form-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    color: #3c4043;
+    margin-bottom: 8px;
+}
+
+.google-form-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    font-size: 16px;
+    color: #3c4043;
+    background: #fff;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    font-family: inherit;
+}
+
+.google-form-input:focus {
+    outline: none;
+    border-color: #4285f4;
+    box-shadow: 0 0 0 2px rgba(66,133,244,0.2);
+}
+
+.google-form-input.error {
+    border-color: #ea4335;
+}
+
+.google-error-text {
+    color: #ea4335;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+/* Profile Picture Section */
+.profile-section {
+    text-align: center;
+}
+
+.current-profile-container {
+    margin-bottom: 24px;
+}
+
+.current-profile-pic {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #e8eaed;
+    box-shadow: 0 2px 4px rgba(60,64,67,0.1);
+    transition: transform 0.15s;
+}
+
+.current-profile-pic:hover {
+    transform: scale(1.05);
+}
+
+.upload-section {
+    margin-bottom: 16px;
+}
+
+.google-upload-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    background: #4285f4;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s, box-shadow 0.15s;
+    font-family: inherit;
+}
+
+.google-upload-button:hover {
+    background: #3367d6;
+    box-shadow: 0 1px 2px rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
+}
+
+.upload-instructions {
+    font-size: 12px;
+    color: #5f6368;
+    margin-top: 8px;
+}
+
+.hidden-file-input {
+    position: absolute;
+    left: -9999px;
+    opacity: 0;
+}
+
+/* Google-style Crop Modal */
+.crop-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 9999;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.crop-modal-overlay.show {
+    display: flex;
+    opacity: 1;
+}
+
+.crop-modal {
+    background: #202124;
+    border-radius: 8px;
+    width: 90vw;
+    height: 90vh;
+    max-width: 600px;
+    max-height: 700px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: scale(0.9);
+    transition: transform 0.3s ease;
+}
+
+.crop-modal-overlay.show .crop-modal {
+    transform: scale(1);
+}
+
+.crop-modal-header {
+    display: flex;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid #3c4043;
+    background: #202124;
+}
+
+.crop-modal-back-btn {
+    background: none;
+    border: none;
+    color: #e8eaed;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    margin-right: 16px;
+    transition: background-color 0.15s;
+}
+
+.crop-modal-back-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.crop-modal-title {
+    color: #e8eaed;
+    font-size: 20px;
+    font-weight: 400;
+    margin: 0;
+    flex: 1;
+}
+
+.crop-modal-menu-btn {
+    background: none;
+    border: none;
+    color: #e8eaed;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    transition: background-color 0.15s;
+}
+
+.crop-modal-menu-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.crop-modal-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #202124;
+    position: relative;
+    overflow: hidden;
+}
+
+.crop-image-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    position: relative;
+}
+
+.crop-preview-image {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 4px;
+}
+
+.crop-rotate-controls {
+    position: absolute;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 24px;
+    padding: 8px;
+    gap: 8px;
+}
+
+.crop-rotate-btn {
+    background: none;
+    border: none;
+    color: #e8eaed;
+    cursor: pointer;
+    padding: 12px;
+    border-radius: 50%;
+    transition: background-color 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.crop-rotate-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.crop-rotate-label {
+    color: #e8eaed;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 0 8px;
+}
+
+.crop-modal-footer {
+    padding: 16px 20px;
+    background: #202124;
+    border-top: 1px solid #3c4043;
+    display: flex;
+    justify-content: center;
+}
+
+.crop-next-btn {
+    background: #8ab4f8;
+    color: #202124;
+    border: none;
+    border-radius: 20px;
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+}
+
+.crop-next-btn:hover {
+    background: #669df6;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.crop-next-btn:disabled {
+    background: #5f6368;
+    color: #9aa0a6;
+    cursor: not-allowed;
+}
+
+/* Preview Modal */
+.preview-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.9);
+    z-index: 10000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.preview-modal-overlay.show {
+    display: flex;
+    opacity: 1;
+}
+
+.preview-modal {
+    background: #202124;
+    border-radius: 8px;
+    width: 90vw;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: scale(0.9);
+    transition: transform 0.3s ease;
+}
+
+.preview-modal-overlay.show .preview-modal {
+    transform: scale(1);
+}
+
+.preview-modal-header {
+    display: flex;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid #3c4043;
+}
+
+.preview-modal-back-btn {
+    background: none;
+    border: none;
+    color: #e8eaed;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    margin-right: 16px;
+    transition: background-color 0.15s;
+}
+
+.preview-modal-back-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.preview-modal-title {
+    color: #e8eaed;
+    font-size: 20px;
+    font-weight: 400;
+    margin: 0;
+    flex: 1;
+}
+
+.preview-modal-body {
+    padding: 32px;
+    text-align: center;
+}
+
+.preview-title {
+    color: #e8eaed;
+    font-size: 24px;
+    font-weight: 400;
+    margin-bottom: 16px;
+}
+
+.preview-subtitle {
+    color: #9aa0a6;
+    font-size: 14px;
+    margin-bottom: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.preview-circle {
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    margin: 0 auto 32px;
+    overflow: hidden;
+    border: 3px solid #5f6368;
+}
+
+.preview-circle img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.preview-info {
+    color: #9aa0a6;
+    font-size: 12px;
+    margin-bottom: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.preview-actions {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+}
+
+.preview-cancel-btn {
+    background: none;
+    color: #8ab4f8;
+    border: none;
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.15s;
+    font-family: inherit;
+}
+
+.preview-cancel-btn:hover {
+    background: rgba(138, 180, 248, 0.1);
+}
+
+.preview-save-btn {
+    background: #8ab4f8;
+    color: #202124;
+    border: none;
+    border-radius: 20px;
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+}
+
+.preview-save-btn:hover {
+    background: #669df6;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Form Actions */
+.google-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 16px 24px;
+    background: #f8f9fa;
+    border-top: 1px solid #e8eaed;
+}
+
+.google-btn-text {
+    background: none;
+    color: #5f6368;
+    border: none;
+    padding: 10px 16px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s;
+    font-family: inherit;
+}
+
+.google-btn-text:hover {
+    background: #f1f3f4;
+    text-decoration: none;
+    color: #5f6368;
+}
+
+.google-btn-primary {
+    background: #4285f4;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.google-btn-primary:hover {
+    background: #3367d6;
+    box-shadow: 0 1px 2px rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .google-main {
+        padding: 16px 20px;
+        max-width: 100%;
+    }
+    
+    .google-header {
+        padding: 16px 20px;
+    }
+    
+    .google-card-body {
+        padding: 16px;
+    }
+    
+    .crop-modal {
+        width: 95vw;
+        height: 95vh;
+    }
+    
+    .preview-modal {
+        width: 95vw;
+    }
+    
+    .google-form-actions {
+        flex-direction: column-reverse;
+        padding: 16px;
+    }
+    
+    .google-btn-text,
+    .google-btn-primary {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .google-main {
+        padding: 12px 16px;
+    }
+    
+    .google-header {
+        padding: 12px 16px;
+    }
+    
+    .google-card-body {
+        padding: 12px;
+    }
+    
+    .current-profile-pic {
+        width: 100px;
+        height: 100px;
+    }
+    
+    .preview-circle {
+        width: 120px;
+        height: 120px;
+    }
+}
+
+/* Material Icons sizing */
+.material-icons {
+    font-size: 20px;
+    vertical-align: middle;
+}
+
+/* Loading states */
+.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border: 2px solid #8ab4f8;
+    border-top: 2px solid transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-    <h2>Edit Profile</h2>
-    <form method="POST" enctype="multipart/form-data" onsubmit="return validateForm()">
-        {{ form.hidden_tag() }}
-        <div class="mb-3">
-            <label for="username" class="form-label">Username</label>
-            {{ form.username(class="form-control", value=user.username|e, pattern="^[a-zA-Z0-9_]{3,20}$", 
-               title="Username must be 3-20 characters long and contain only letters, numbers, and underscores") }}
+<div class="google-container">
+    <!-- Header -->
+    <div class="google-header">
+        <div class="google-header-content">
+            <button class="google-back-button" onclick="goBack()">
+                <span class="material-icons">arrow_back</span>
+            </button>
+            <h1 class="google-title">Edit Profile</h1>
         </div>
-        <div class="mb-3">
-            <label for="profile_pic" class="form-label">Profile Picture</label><br>
-            <img id="preview-image" 
-                 src="{{ url_for('static', filename=user.profile_pic_url) if user.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}" 
-                 alt="Profile Picture" 
-                 class="rounded-circle mb-2" 
-                 width="100" 
-                 height="100"><br>
-            {{ form.profile_pic(class="form-control", accept="image/jpeg,image/png", onchange="previewImage(event)") }}
-            <small class="text-muted">Maximum file size: 5MB. Allowed formats: JPG, PNG</small>
+    </div>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div style="max-width: 800px; margin: 0 auto; padding: 16px 40px 0;">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <div class="google-main">
+        <div class="google-card">
+            <div class="google-card-header">
+                <h2 class="google-card-title">Profile Information</h2>
+            </div>
+            
+            <form id="editProfileForm" method="POST" enctype="multipart/form-data">
+                {{ form.hidden_tag() }}
+                
+                <div class="google-card-body">
+                    <!-- Username Field -->
+                    <div class="google-form-group">
+                        <label for="username" class="google-form-label">Username</label>
+                        {{ form.username(class="google-form-input" + (" error" if form.username.errors else "")) }}
+                        {% if form.username.errors %}
+                            <div class="google-error-text">
+                                {% for error in form.username.errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Profile Picture Section -->
+                    <div class="google-form-group">
+                        <label class="google-form-label">Profile Picture</label>
+                        
+                        <div class="profile-section">
+                            <!-- Current Profile Picture -->
+                            <div class="current-profile-container">
+                                <img src="{{ url_for('static', filename='uploads/' + current_user.profile_pic_url) if current_user.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}" 
+                                    alt="Current Profile Picture" 
+                                    class="current-profile-pic">
+                            </div>
+
+                            <!-- File Upload Button -->
+                            <div class="upload-section">
+                                <button type="button" class="google-upload-button" onclick="document.getElementById('profile_pic').click()">
+                                    <span class="material-icons">photo_camera</span>
+                                    Choose New Picture
+                                </button>
+                                <input type="file" id="profile_pic" name="profile_pic" accept="image/*" class="hidden-file-input">
+                                <div class="upload-instructions">
+                                    Maximum file size: 5MB • Supported formats: JPG, PNG
+                                </div>
+                            </div>
+
+                            <!-- Hidden input for cropped image data -->
+                            <input type="hidden" id="cropped_image_data" name="cropped_image_data">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Form Actions -->
+                <div class="google-form-actions">
+                    <button type="button" class="google-btn-text" onclick="goBack()">Cancel</button>
+                    <button type="submit" class="google-btn-primary">
+                        <span class="material-icons">save</span>
+                        Save Changes
+                    </button>
+                </div>
+            </form>
         </div>
-        <button type="submit" class="btn btn-success">Save Changes</button>
-        <a href="{{ url_for('account') }}" class="btn btn-secondary">Cancel</a>
-    </form>
+    </div>
+</div>
+
+<!-- Crop Modal -->
+<div class="crop-modal-overlay" id="cropModalOverlay">
+    <div class="crop-modal">
+        <div class="crop-modal-header">
+            <button class="crop-modal-back-btn" onclick="closeCropModal()">
+                <span class="material-icons">arrow_back</span>
+            </button>
+            <h2 class="crop-modal-title">Crop and rotate</h2>
+            <button class="crop-modal-menu-btn">
+                <span class="material-icons">more_vert</span>
+            </button>
+        </div>
+        
+        <div class="crop-modal-body">
+            <div class="crop-image-container">
+                <img id="cropImage" class="crop-preview-image" src="#" alt="Crop Preview">
+            </div>
+            
+            <div class="crop-rotate-controls">
+                <button class="crop-rotate-btn" onclick="rotateCropper(-90)">
+                    <span class="material-icons">rotate_left</span>
+                </button>
+                <span class="crop-rotate-label">Rotate</span>
+                <button class="crop-rotate-btn" onclick="rotateCropper(90)">
+                    <span class="material-icons">rotate_right</span>
+                </button>
+            </div>
+        </div>
+        
+        <div class="crop-modal-footer">
+            <button class="crop-next-btn" onclick="showPreviewModal()">Next</button>
+        </div>
+    </div>
+</div>
+
+<!-- Preview Modal -->
+<div class="preview-modal-overlay" id="previewModalOverlay">
+    <div class="preview-modal">
+        <div class="preview-modal-header">
+            <button class="preview-modal-back-btn" onclick="backToImputText()">
+                <span class="material-icons">arrow_back</span>
+            </button>
+            <h2 class="preview-modal-title">Crop and rotate</h2>
+        </div>
+        
+        <div class="preview-modal-body">
+            <h3 class="preview-title">Your new profile picture</h3>
+            
+            <div class="preview-subtitle">
+                <span class="material-icons" style="font-size: 16px;">public</span>
+                Visible to anyone
+            </div>
+            
+            <div class="preview-circle">
+                <img id="previewImage" src="#" alt="Preview">
+            </div>
+            
+            <div class="preview-info">
+                <span class="material-icons" style="font-size: 16px;">info</span>
+                It could take a day or two to see the change across all of your Google services
+            </div>
+            
+            <div class="preview-actions">
+                <button class="preview-cancel-btn" onclick="closePreviewModal()">Cancel</button>
+                <button class="preview-save-btn" onclick="applyCrop()">Save as profile picture</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
-function previewImage(event) {
-    const file = event.target.files[0];
+let cropper;
+let originalFile;
+
+// Back button functionality
+function goBack() {
+    window.history.back();
+}
+
+document.getElementById('profile_pic').addEventListener('change', function(e) {
+    const file = e.target.files[0];
     if (!file) return;
 
     // Validate file type
-    const allowedTypes = ['image/jpeg', 'image/png'];
-    if (!allowedTypes.includes(file.type)) {
-        alert('Please upload only JPG or PNG images.');
-        event.target.value = '';
+    if (!file.type.match('image.*')) {
+        showError('Please select an image file.');
         return;
     }
 
-    // Validate file size (max 5MB)
+    // Validate file size (5MB)
     if (file.size > 5 * 1024 * 1024) {
-        alert('File size must be less than 5MB');
-        event.target.value = '';
+        showError('File size must be less than 5MB.');
         return;
     }
 
-    // Show preview
+    originalFile = file;
+    
+    // Read file and show crop modal
     const reader = new FileReader();
-    reader.onload = function(e) {
-        document.getElementById('preview-image').src = e.target.result;
-    }
+    reader.onload = function(event) {
+        const cropImage = document.getElementById('cropImage');
+        cropImage.src = event.target.result;
+        
+        // Show crop modal
+        showCropModal();
+        
+        // Initialize cropper after modal is shown
+        setTimeout(() => {
+            if (cropper) {
+                cropper.destroy();
+            }
+            
+            cropper = new Cropper(cropImage, {
+                aspectRatio: 1,
+                viewMode: 1,
+                dragMode: 'move',
+                cropBoxMovable: true,
+                cropBoxResizable: true,
+                toggleDragModeOnDblclick: false,
+                responsive: true,
+                restore: false,
+                checkOrientation: false,
+                modal: true,
+                guides: true,
+                center: true,
+                highlight: true,
+                background: true,
+                autoCrop: true,
+                autoCropArea: 0.8,
+                movable: true,
+                rotatable: true,
+                scalable: true,
+                zoomable: true,
+                zoomOnTouch: true,
+                zoomOnWheel: true,
+                wheelZoomRatio: 0.1,
+                cropBoxResizable: true
+            });
+        }, 300);
+    };
+    
     reader.readAsDataURL(file);
+});
+
+function showCropModal() {
+    const overlay = document.getElementById('cropModalOverlay');
+    overlay.classList.add('show');
+    document.body.style.overflow = 'hidden';
 }
 
-function validateForm() {
-    const usernameInput = document.getElementById('username');
-    const username = usernameInput.value;
-
-    // Validate username
-    const usernamePattern = /^[a-zA-Z0-9_]{3,20}$/;
-    if (!usernamePattern.test(username)) {
-        alert('Username must be 3-20 characters long and contain only letters, numbers, and underscores');
-        return false;
+function closeCropModal() {
+    const overlay = document.getElementById('cropModalOverlay');
+    overlay.classList.remove('show');
+    document.body.style.overflow = '';
+    
+    // Clear file input
+    document.getElementById('profile_pic').value = '';
+    
+    // Destroy cropper
+    if (cropper) {
+        cropper.destroy();
+        cropper = null;
     }
-
-    return true;
 }
 
-// Prevent XSS in username input
-document.getElementById('username').addEventListener('input', function(e) {
-    this.value = this.value.replace(/[<>]/g, '');
+function showPreviewModal() {
+    if (!cropper) return;
+    
+    // Generate preview
+    const canvas = cropper.getCroppedCanvas({
+        width: 150,
+        height: 150,
+    });
+    
+    const previewImage = document.getElementById('previewImage');
+    previewImage.src = canvas.toDataURL();
+    
+    // Hide crop modal and show preview modal
+    document.getElementById('cropModalOverlay').classList.remove('show');
+    document.getElementById('previewModalOverlay').classList.add('show');
+}
+
+function backToImputText() {
+    document.getElementById('previewModalOverlay').classList.remove('show');
+    document.getElementById('cropModalOverlay').classList.add('show');
+}
+
+function closePreviewModal() {
+    const overlay = document.getElementById('previewModalOverlay');
+    overlay.classList.remove('show');
+    document.body.style.overflow = '';
+    
+    // Also close crop modal
+    closeCropModal();
+}
+
+function rotateCropper(degrees) {
+    if (cropper) {
+        cropper.rotate(degrees);
+    }
+}
+
+function applyCrop() {
+    if (!cropper) return;
+    
+    // Add loading state
+    const saveBtn = document.querySelector('.preview-save-btn');
+    const originalText = saveBtn.textContent;
+    saveBtn.textContent = 'Saving...';
+    saveBtn.disabled = true;
+    
+    // Get cropped canvas
+    const canvas = cropper.getCroppedCanvas({
+        width: 400,
+        height: 400,
+        minWidth: 256,
+        minHeight: 256,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        fillColor: '#fff',
+        imageSmoothingEnabled: true,
+        imageSmoothingQuality: 'high',
+    });
+    
+    // Convert to blob and then to base64
+    canvas.toBlob(function(blob) {
+        const reader = new FileReader();
+        reader.onload = function() {
+            // Store the cropped image data
+            document.getElementById('cropped_image_data').value = reader.result;
+            
+            // Close modals
+            closePreviewModal();
+            
+            // Reset button
+            saveBtn.textContent = originalText;
+            saveBtn.disabled = false;
+            
+            // Show success feedback
+            showSuccess('Image cropped successfully! Click "Save Changes" to apply.');
+        };
+        reader.readAsDataURL(blob);
+    }, 'image/jpeg', 0.9);
+}
+
+// Handle form submission
+document.getElementById('editProfileForm').addEventListener('submit', function(e) {
+    // Add loading state to submit button
+    const submitBtn = this.querySelector('button[type="submit"]');
+    submitBtn.innerHTML = '<span class="material-icons">hourglass_empty</span>Saving...';
+    submitBtn.disabled = true;
+});
+
+// Utility functions for notifications
+function showError(message) {
+    const notification = document.createElement('div');
+    notification.className = 'alert alert-danger alert-dismissible fade show';
+    notification.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 99999; max-width: 300px;';
+    notification.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
+    `;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.remove();
+        }
+    }, 5000);
+}
+
+function showSuccess(message) {
+    const notification = document.createElement('div');
+    notification.className = 'alert alert-success alert-dismissible fade show';
+    notification.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 99999; max-width: 300px;';
+    notification.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
+    `;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.remove();
+        }
+    }, 3000);
+}
+
+// Close modals when clicking outside
+document.getElementById('cropModalOverlay').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeCropModal();
+    }
+});
+
+document.getElementById('previewModalOverlay').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closePreviewModal();
+    }
+});
+
+// Handle escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        if (document.getElementById('previewModalOverlay').classList.contains('show')) {
+            closePreviewModal();
+        } else if (document.getElementById('cropModalOverlay').classList.contains('show')) {
+            closeCropModal();
+        }
+    }
 });
 </script>
 {% endblock %}

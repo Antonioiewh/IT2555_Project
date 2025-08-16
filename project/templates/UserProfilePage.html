@@ -1,100 +1,1722 @@
 {% extends "UserBase.html" %}
+
+{% block head %}
+<style>
+    /* Instagram-inspired profile page styling with Google UI elements - Elderly-friendly version */
+    .profile-container {
+        max-width: 1200px; /* Increased from 935px */
+        margin: 0 auto;
+        padding: 40px 30px; /* Increased padding */
+        font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    .profile-header {
+        display: flex;
+        align-items: center;
+        padding: 60px 0; /* Increased from 50px */
+        border-bottom: 2px solid #dbdbdb; /* Thicker border */
+        margin-bottom: 50px; /* Increased margin */
+    }
+
+    .profile-avatar {
+        width: 180px; /* Increased from 150px */
+        height: 180px;
+        border-radius: 50%;
+        margin-right: 100px; /* Increased from 80px */
+        border: 4px solid #e1e5e9; /* Thicker border */
+        object-fit: cover;
+        flex-shrink: 0;
+    }
+
+    .profile-info {
+        flex: 1;
+    }
+
+    .profile-username {
+        display: flex;
+        align-items: center;
+        margin-bottom: 30px; /* Increased from 20px */
+    }
+
+    .username {
+        font-size: 36px; /* Increased from 28px */
+        font-weight: 400; /* Slightly bolder */
+        color: #262626;
+        margin-right: 30px; /* Increased from 20px */
+        margin-bottom: 0;
+    }
+
+    .edit-profile-btn {
+        background: #ffffff;
+        border: 2px solid #dbdbdb; /* Thicker border */
+        border-radius: 8px; /* More rounded */
+        color: #262626;
+        font-weight: 600;
+        font-size: 16px; /* Increased from 14px */
+        padding: 12px 20px; /* Increased padding */
+        text-decoration: none;
+        transition: all 0.2s ease;
+        min-height: 48px; /* Minimum touch target */
+    }
+
+    .edit-profile-btn:hover {
+        background: #f8f9fa;
+        border-color: #c7c7c7;
+        color: #262626;
+        text-decoration: none;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .profile-stats {
+        display: flex;
+        margin-bottom: 30px; /* Increased from 20px */
+    }
+
+    .stat-item {
+        margin-right: 50px; /* Increased from 40px */
+        color: #262626;
+        text-decoration: none;
+        font-size: 18px; /* Increased font size */
+    }
+
+    .stat-item:hover {
+        color: #262626;
+        text-decoration: none;
+    }
+
+    .stat-number {
+        font-weight: 700; /* Bolder */
+        margin-right: 8px; /* Increased spacing */
+        font-size: 20px; /* Larger numbers */
+    }
+
+    .profile-bio {
+        color: #262626;
+        font-size: 18px; /* Increased from 16px */
+        line-height: 28px; /* Increased line height */
+        font-weight: 500;
+    }
+
+    /* Posts section */
+    .posts-section {
+        margin-top: 50px; /* Increased from 40px */
+    }
+
+    .posts-header {
+        display: flex;
+        justify-content: center;
+        border-top: 2px solid #dbdbdb; /* Thicker border */
+        margin-bottom: 40px; /* Increased from 28px */
+        position: relative;
+    }
+
+    .posts-tabs {
+        display: flex;
+        gap: 40px;
+    }
+
+    .posts-tab {
+        display: flex;
+        align-items: center;
+        color: #8e8e8e;
+        font-size: 16px; /* Increased from 12px */
+        font-weight: 600;
+        letter-spacing: 1px;
+        padding: 20px 0; /* Increased from 16px */
+        text-decoration: none;
+        text-transform: uppercase;
+        border-top: 3px solid transparent; /* Thicker border */
+        margin-top: -2px;
+        min-height: 48px; /* Touch target */
+        cursor: pointer;
+        background: none;
+        border-left: none;
+        border-right: none;
+        border-bottom: none;
+        transition: all 0.2s ease;
+    }
+
+    .posts-tab.active {
+        color: #262626;
+        border-top-color: #262626;
+    }
+
+    .posts-tab:hover:not(.active) {
+        color: #5a5a5a;
+    }
+
+    .posts-tab i {
+        margin-right: 10px; /* Increased from 6px */
+        font-size: 18px; /* Increased from 12px */
+    }
+
+    /* View Toggle Buttons - Gestalt Principle: Proximity & Similarity */
+    .view-toggle {
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        display: flex;
+        background: #f8f9fa;
+        border-radius: 12px; /* More rounded for elderly users */
+        padding: 6px; /* Increased padding */
+        border: 2px solid #e1e5e9; /* Thicker border */
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05); /* Subtle shadow for depth */
+    }
+
+    .view-btn {
+        background: none;
+        border: none;
+        padding: 12px 16px; /* Increased padding */
+        border-radius: 8px;
+        color: #8e8e8e;
+        cursor: pointer;
+        transition: all 0.3s ease; /* Slower transition for elderly */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 48px; /* Larger touch target */
+        min-height: 48px;
+        position: relative;
+    }
+
+    .view-btn.active {
+        background: white;
+        color: #262626;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        transform: translateY(-1px); /* Subtle elevation */
+    }
+
+    .view-btn:hover:not(.active) {
+        color: #5a5a5a;
+        background: rgba(255,255,255,0.7);
+        transform: translateY(-1px);
+    }
+
+    .view-btn i {
+        font-size: 18px; /* Larger icons */
+    }
+
+    /* Tooltip for elderly users - Gestalt Principle: Good Figure */
+    .view-btn::after {
+        content: attr(title);
+        position: absolute;
+        bottom: -35px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0,0,0,0.8);
+        color: white;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+        z-index: 1000;
+    }
+
+    .view-btn:hover::after {
+        opacity: 1;
+    }
+
+    /* Grid View (Normal) - Gestalt Principle: Similarity */
+    .posts-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 24px; /* Consistent spacing */
+    }
+
+    /* Compact Grid View - Gestalt Principle: Proximity */
+    .posts-grid.compact {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px; /* Closer proximity */
+    }
+
+    /* Ultra Compact View - Gestalt Principle: Closure & Continuity */
+    .posts-grid.ultra-compact {
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 8px; /* Very close proximity for grouping */
+    }
+
+    .post-item {
+        position: relative;
+        aspect-ratio: 1;
+        background: #f8f9fa;
+        border-radius: 12px;
+        overflow: hidden;
+        cursor: pointer;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        border: 2px solid #e1e5e9;
+        min-height: 200px;
+    }
+
+    /* Gestalt Principle: Figure-Ground relationship */
+    .posts-grid.compact .post-item {
+        min-height: 150px;
+        border-radius: 10px;
+        border-width: 1.5px;
+    }
+
+    .posts-grid.ultra-compact .post-item {
+        min-height: 80px;
+        border-radius: 8px;
+        border-width: 1px;
+    }
+
+    .post-item:hover {
+        transform: scale(1.03);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        z-index: 10; /* Bring to front - Figure-Ground */
+    }
+
+    .posts-grid.ultra-compact .post-item:hover {
+        transform: scale(1.1); /* More pronounced for small items */
+        box-shadow: 0 12px 32px rgba(0,0,0,0.2);
+    }
+
+    .post-image {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .post-placeholder {
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(45deg, #f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 32px;
+    }
+
+    /* Gestalt Principle: Common Fate - overlay animations */
+    .post-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        color: white;
+    }
+
+    .post-item:hover .post-overlay {
+        opacity: 1;
+    }
+
+    .post-stats {
+        display: flex;
+        align-items: center;
+        gap: 30px;
+        font-weight: 600;
+        font-size: 18px;
+    }
+
+    .posts-grid.compact .post-stats {
+        gap: 20px;
+        font-size: 14px;
+    }
+
+    .posts-grid.ultra-compact .post-stats {
+        gap: 12px;
+        font-size: 12px;
+        flex-direction: column; /* Stack vertically for space */
+    }
+
+    .post-stat {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .posts-grid.compact .post-stat {
+        gap: 8px;
+    }
+
+    .posts-grid.ultra-compact .post-stat {
+        gap: 4px;
+    }
+
+    .post-stat i {
+        font-size: 24px;
+    }
+
+    .posts-grid.compact .post-stat i {
+        font-size: 16px;
+    }
+
+    .posts-grid.ultra-compact .post-stat i {
+        font-size: 12px;
+    }
+
+    /* List View (Full Width) - Gestalt Principle: Good Continuation */
+    .posts-list {
+        display: none;
+        flex-direction: column;
+        gap: 30px;
+    }
+
+    .posts-list.active {
+        display: flex;
+    }
+
+    .post-list-item {
+        background: white;
+        border: 2px solid #e1e5e9;
+        border-radius: 16px;
+        overflow: hidden;
+        transition: box-shadow 0.3s ease, transform 0.3s ease;
+        cursor: pointer;
+    }
+
+    .post-list-item:hover {
+        box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+        transform: translateY(-2px); /* Subtle lift */
+    }
+
+    .post-list-header {
+        padding: 20px;
+        border-bottom: 1px solid #efefef;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: #fafbfc; /* Subtle background for grouping */
+    }
+
+    .post-list-user {
+        display: flex;
+        align-items: center;
+    }
+
+    .post-list-avatar {
+        width: 44px; /* Larger for elderly */
+        height: 44px;
+        border-radius: 50%;
+        margin-right: 16px;
+        object-fit: cover;
+        border: 2px solid #e1e5e9; /* Border for definition */
+    }
+
+    .post-list-username {
+        font-weight: 600;
+        color: #262626;
+        text-decoration: none;
+        font-size: 16px;
+    }
+
+    .post-list-date {
+        color: #8e8e8e;
+        font-size: 14px;
+        font-weight: 500; /* Slightly bolder for readability */
+    }
+
+    .post-list-image {
+        width: 100%;
+        max-height: 600px;
+        object-fit: cover;
+        display: block;
+    }
+
+    .post-list-content {
+        padding: 24px; /* Increased padding */
+    }
+
+    /* Gestalt Principle: Proximity - group related actions */
+    .post-list-actions {
+        display: flex;
+        align-items: center;
+        gap: 24px; /* Increased spacing */
+        margin-bottom: 16px;
+        padding: 8px 0;
+        border-bottom: 1px solid #f0f0f0; /* Subtle separator */
+    }
+
+    .post-action-btn {
+        background: none;
+        border: none;
+        color: #262626;
+        cursor: pointer;
+        font-size: 26px; /* Larger for elderly */
+        padding: 12px; /* Larger touch area */
+        border-radius: 50%;
+        transition: all 0.3s ease;
+        min-width: 48px;
+        min-height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .post-action-btn:hover {
+        background: #f8f9fa;
+        transform: scale(1.1);
+        color: #0095f6;
+    }
+
+    .post-list-text {
+        color: #262626;
+        font-size: 16px;
+        line-height: 26px; /* Increased line height for readability */
+        margin-bottom: 12px;
+    }
+
+    .post-list-meta {
+        color: #8e8e8e;
+        font-size: 13px; /* Slightly larger */
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 500;
+    }
+
+    /* No Posts State - Gestalt Principle: Symmetry */
+    .no-posts {
+        text-align: center;
+        padding: 80px 30px;
+        color: #8e8e8e;
+    }
+
+    .no-posts-icon {
+        width: 80px;
+        height: 80px;
+        border: 3px solid #262626;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 24px;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); /* Subtle gradient */
+    }
+
+    .no-posts-icon i {
+        font-size: 32px;
+        color: #262626;
+    }
+
+    .no-posts h3 {
+        font-size: 36px;
+        font-weight: 400;
+        color: #262626;
+        margin-bottom: 16px;
+    }
+
+    .no-posts p {
+        font-size: 18px;
+        margin-bottom: 30px;
+        line-height: 26px;
+    }
+
+    .create-post-btn {
+        background: linear-gradient(135deg, #0095f6 0%, #1877f2 100%); /* Gradient for visual appeal */
+        border: none;
+        border-radius: 12px; /* More rounded */
+        color: white;
+        font-weight: 600;
+        font-size: 18px;
+        padding: 16px 24px;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        min-height: 48px;
+        box-shadow: 0 4px 12px rgba(0,149,246,0.2);
+    }
+
+    .create-post-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0,149,246,0.3);
+        color: white;
+        text-decoration: none;
+    }
+
+    /* Post Modal - Enhanced for elderly users */
+    .post-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.85); /* Darker for better contrast */
+        z-index: 1050;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .post-modal.active {
+        display: flex;
+    }
+
+    .post-modal-content {
+        background: white;
+        border-radius: 20px; /* More rounded */
+        max-width: 95vw;
+        max-height: 95vh;
+        display: flex;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+
+    .post-modal-image {
+        flex: 1;
+        max-width: 700px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #000;
+    }
+
+    .post-modal-image img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+
+    .post-modal-sidebar {
+        width: 400px;
+        display: flex;
+        flex-direction: column;
+        border-left: 2px solid #efefef;
+    }
+
+    .post-modal-header {
+        padding: 24px; /* Increased */
+        border-bottom: 2px solid #efefef;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: #fafbfc; /* Subtle background */
+    }
+
+    .post-modal-user {
+        display: flex;
+        align-items: center;
+    }
+
+    .post-modal-avatar {
+        width: 44px; /* Larger */
+        height: 44px;
+        border-radius: 50%;
+        margin-right: 16px;
+        object-fit: cover;
+        border: 2px solid #e1e5e9;
+    }
+
+    .post-modal-username {
+        font-weight: 600;
+        color: #262626;
+        text-decoration: none;
+        font-size: 16px;
+    }
+
+    .post-modal-options {
+        background: none;
+        border: none;
+        padding: 16px; /* Larger touch area */
+        cursor: pointer;
+        color: #8e8e8e;
+        border-radius: 12px;
+        min-height: 48px;
+        min-width: 48px;
+        transition: all 0.3s ease;
+    }
+
+    .post-modal-options:hover {
+        background: #f8f9fa;
+        transform: scale(1.05);
+    }
+
+    .post-modal-options i {
+        font-size: 20px;
+    }
+
+    .post-modal-content-area {
+        flex: 1;
+        padding: 24px; /* Increased */
+        overflow-y: auto;
+    }
+
+    .post-modal-text {
+        color: #262626;
+        font-size: 16px;
+        line-height: 26px; /* Better readability */
+        margin-bottom: 20px;
+    }
+
+    .post-modal-date {
+        color: #8e8e8e;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.2px;
+        font-weight: 500;
+    }
+
+    .post-modal-close {
+        position: absolute;
+        top: 24px; /* Adjusted position */
+        right: 24px;
+        background: rgba(0,0,0,0.8);
+        border: none;
+        color: white;
+        font-size: 30px; /* Larger */
+        cursor: pointer;
+        z-index: 1051;
+        width: 48px; /* Larger touch area */
+        height: 48px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+    }
+
+    .post-modal-close:hover {
+        background: rgba(0,0,0,0.9);
+        transform: scale(1.1);
+    }
+
+    /* Responsive design with Gestalt principles */
+    @media (max-width: 1024px) {
+        .profile-container {
+            max-width: 100%;
+            padding: 30px 20px;
+        }
+        
+        .posts-grid {
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .posts-grid.compact {
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+        }
+
+        .posts-grid.ultra-compact {
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 8px;
+        }
+
+        .view-toggle {
+            position: relative;
+            transform: none;
+            margin-top: 20px;
+        }
+
+        .posts-header {
+            flex-direction: column;
+            align-items: center;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .profile-container {
+            padding: 20px 16px;
+        }
+
+        .profile-header {
+            padding: 40px 0;
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .profile-avatar {
+            width: 120px;
+            height: 120px;
+            margin-right: 0;
+            margin-bottom: 20px;
+        }
+
+        .profile-username {
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .username {
+            font-size: 28px;
+            margin-right: 0;
+        }
+
+        .stat-item {
+            margin-right: 30px;
+        }
+
+        .posts-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .posts-grid.compact {
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .posts-grid.ultra-compact {
+            grid-template-columns: repeat(4, 1fr);
+            gap: 4px;
+        }
+
+        .post-item {
+            border-radius: 8px;
+            min-height: 120px;
+        }
+
+        .posts-grid.compact .post-item {
+            min-height: 100px;
+        }
+
+        .posts-grid.ultra-compact .post-item {
+            min-height: 80px;
+        }
+
+        .post-modal-content {
+            flex-direction: column;
+            max-width: 95vw;
+            max-height: 95vh;
+        }
+
+        .post-modal-sidebar {
+            width: 100%;
+            max-height: 300px;
+        }
+
+        .posts-tabs {
+            gap: 20px;
+        }
+    }
+
+    /* Custom scrollbar following Gestalt principles */
+    ::-webkit-scrollbar {
+        width: 14px; /* Wider for elderly users */
+    }
+
+    ::-webkit-scrollbar-track {
+        background: #f1f3f4;
+        border-radius: 8px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(to bottom, #c1c7cd, #a8b0b8);
+        border-radius: 8px;
+        border: 2px solid #f1f3f4; /* Create visual separation */
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(to bottom, #a8b0b8, #9aa2aa);
+    }
+
+    /* Accessibility enhancements */
+    @media (prefers-reduced-motion: reduce) {
+        .post-item,
+        .view-btn,
+        .post-action-btn,
+        .create-post-btn {
+            transition: none;
+        }
+        
+        .post-item:hover {
+            transform: none;
+        }
+    }
+
+    /* High contrast mode support */
+    @media (prefers-contrast: high) {
+        .post-item {
+            border-width: 3px;
+            border-color: #000;
+        }
+        
+        .view-btn {
+            border: 2px solid #000;
+        }
+        
+        .posts-tab {
+            border-top-width: 4px;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-    <div class="card mb-4">
-        <div class="card-body text-center">
-            <img src="{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') if not user.profile_pic_url else user.profile_pic_url }}" 
-                 alt="Profile Picture" class="rounded-circle" width="150" height="150">
-            <h3 class="mt-3">{{ user.username }}</h3>
-            <a href="/edit_profile" class="btn btn-primary mt-2">Edit Profile</a>
+<div class="profile-container">
+    <!-- Profile Header -->
+    <div class="profile-header">
+        <img src="{% if current_user.profile_pic_url %}{{ url_for('static', filename='uploads/' + current_user.profile_pic_url) }}{% else %}{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}{% endif %}" 
+             alt="Profile Picture" class="profile-avatar" onerror="handleImageError(this)">
+        
+        <div class="profile-info">
+            <div class="profile-username">
+                <h1 class="username">{{ user.username }}</h1>
+                <a href="/edit_profile" class="edit-profile-btn">Edit profile</a>
+            </div>
+            
+            <div class="profile-stats">
+                <div class="stat-item">
+                    <span class="stat-number">{{ posts|length }}</span>
+                    <span>posts</span>
+                </div>
+            </div>
+            
+            <div class="profile-bio">
+                <strong>{{ user.username }}</strong><br>
+                Member since {{ user.created_at.strftime('%B %Y') if user.created_at else 'Unknown' }}
+            </div>
         </div>
     </div>
-    <h4>Your Posts</h4>
-    {% for post in posts %}
-        <div class="card mb-3 post-card">
-    <div class="card-body">
-        <div class="d-flex justify-content-between align-items-start">
-            <div class="flex-grow-1">
-                <p class="post-content">{{ post.post_content }}</p>
-                {% for img in post.images %}
-                    <img src="{{ url_for('static', filename=img.image_url) }}" alt="Post Image" class="img-fluid mb-2" style="max-width:200px;">
-                {% endfor %}
-                <small class="text-muted">Posted on {{ post.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
-            </div>
-            {% if post.user_id == current_user.user_id %}
-            <div class="dropdown post-dropdown">
-                <button class="btn btn-link" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="fas fa-ellipsis-v fa-lg"></i>
+
+    <!-- Posts Section -->
+    <div class="posts-section">
+        <div class="posts-header">
+            <div class="posts-tabs">
+                <button class="posts-tab active" data-view="grid">
+                    <i class="bi bi-grid-3x3"></i>
+                    Posts
                 </button>
-                <ul class="dropdown-menu dropdown-menu-end">
-                    <li>
-                        <a class="dropdown-item" href="{{ url_for('edit_post', post_id=post.post_id) }}">
-                            <i class="fas fa-edit me-2"></i>Edit Post
-                        </a>
-                    </li>
-                    <li><hr class="dropdown-divider"></li>
-                    <li>
-                        <form action="{{ url_for('delete_post', post_id=post.post_id) }}" method="POST" style="display: inline;">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="button" class="dropdown-item text-danger" onclick="confirmDelete(this.form)">
-                                <i class="fas fa-trash-alt me-2"></i>Delete Post
-                            </button>
-                        </form>
-                    </li>
-                </ul>
+                <button class="posts-tab" data-view="list">
+                    <i class="bi bi-list-ul"></i>
+                    Feed View
+                </button>
             </div>
-            {% endif %}
+            
+            <!-- View Toggle for Grid -->
+            <div class="view-toggle" id="viewToggle">
+                <button class="view-btn active" data-size="normal" title="Large Grid - Easy to see">
+                    <i class="bi bi-grid-3x3"></i>
+                </button>
+                <button class="view-btn" data-size="compact" title="Medium Grid - More posts">
+                    <i class="bi bi-grid-3x3-gap"></i>
+                </button>
+                <button class="view-btn" data-size="ultra-compact" title="Small Grid - All posts visible">
+                    <i class="bi bi-grid"></i>
+                </button>
+            </div>
+        </div>
+
+        {% if posts %}
+        <!-- Grid View -->
+        <div class="posts-grid active" id="postsGrid">
+            {% for post in posts %}
+            <div class="post-item" data-post-id="{{ post.post_id }}" onclick="openPostModal({{ post.post_id }})">
+                {% if post.images %}
+                    <img src="{{ url_for('static', filename=post.images[0].image_url) }}" alt="Post" class="post-image" onerror="handleImageError(this, true)">
+                {% else %}
+                    <div class="post-placeholder">
+                        <i class="bi bi-chat-quote"></i>
+                    </div>
+                {% endif %}
+                
+                <div class="post-overlay">
+                    <div class="post-stats">
+                        <div class="post-stat" onclick="toggleLike({{ post.post_id }}, event)">
+                            <i class="bi bi-heart{{ '-fill' if post.is_liked_by_user(current_user.user_id) else '' }} like-icon {{ 'liked' if post.is_liked_by_user(current_user.user_id) else '' }}" 
+                            style="color: {{ '#ed4956' if post.is_liked_by_user(current_user.user_id) else 'white' }}"></i>
+                            <span class="like-count">{{ post.get_like_count() }}</span>
+                        </div>
+                        <div class="post-stat">
+                            <i class="bi bi-chat-fill"></i>
+                            <span>0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- List View -->
+        <div class="posts-list" id="postsList">
+            {% for post in posts %}
+            <div class="post-list-item" data-list-post-id="{{ post.post_id }}" onclick="openPostModal({{ post.post_id }})">
+                <div class="post-list-header">
+                    <div class="post-list-user">
+                        <img src="{% if current_user.profile_pic_url %}{{ url_for('static', filename='uploads/' + current_user.profile_pic_url) }}{% else %}{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}{% endif %}" 
+                            alt="Profile" class="post-list-avatar" onerror="handleImageError(this)">
+                        <div>
+                            <a href="/account" class="post-list-username">{{ user.username }}</a>
+                        </div>
+                    </div>
+                    <div class="post-list-date">{{ post.created_at.strftime('%B %d, %Y') }}</div>
+                </div>
+                
+                {% if post.images %}
+                <img src="{{ url_for('static', filename=post.images[0].image_url) }}" alt="Post" class="post-list-image" onerror="handleImageError(this, true)">
+                {% endif %}
+                <div class="post-list-content">
+                    <div class="post-list-actions">
+                        <button class="post-action-btn {{ 'liked' if post.is_liked_by_user(current_user.user_id) else '' }}" 
+                                title="Like this post" 
+                                onclick="toggleLike({{ post.post_id }}, event)">
+                            <i class="bi bi-heart{{ '-fill' if post.is_liked_by_user(current_user.user_id) else '' }} list-like-icon" 
+                            style="color: {{ '#ed4956' if post.is_liked_by_user(current_user.user_id) else '#262626' }}"></i>
+                        </button>
+                        <button class="post-action-btn" title="Comment on post">
+                            <i class="bi bi-chat"></i>
+                        </button>
+                        <button class="post-action-btn" title="Share this post">
+                            <i class="bi bi-share"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="post-likes-info" style="margin-bottom: 8px; color: #262626; font-weight: 600;">
+                        <span class="list-like-count">{{ post.get_like_count() }}</span> likes
+                    </div>
+                    
+                    <div class="post-list-text">
+                        <strong>{{ user.username }}</strong> {{ post.post_content }}
+                    </div>
+                    
+                    <div class="post-list-meta">
+                        {{ post.created_at.strftime('%B %d, %Y at %I:%M %p') }}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="no-posts">
+            <div class="no-posts-icon">
+                <i class="bi bi-camera"></i>
+            </div>
+            <h3>Share Photos</h3>
+            <p>When you share photos, they will appear on your profile.</p>
+            <a href="/create_post" class="create-post-btn">Share your first photo</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Post Modal - Fixed element IDs and structure -->
+<div class="post-modal" id="postModal">
+    <button class="post-modal-close" onclick="closePostModal()" title="Close modal">&times;</button>
+    <div class="post-modal-content">
+        <div class="post-modal-image" id="modalImageContainer" style="display: flex;">
+            <img id="modalImage" src="" alt="Post" style="max-width: 100%; max-height: 100%; object-fit: contain;">
+        </div>
+        <div class="post-modal-sidebar">
+            <div class="post-modal-header">
+                <div class="post-modal-user">
+                    <img src="{% if current_user.profile_pic_url %}{{ url_for('static', filename='uploads/' + current_user.profile_pic_url) }}{% else %}{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}{% endif %}" 
+                         alt="Profile" class="post-modal-avatar" onerror="handleImageError(this)">
+                    <a href="/account" class="post-modal-username">{{ user.username }}</a>
+                </div>
+                <div class="dropdown">
+                    <button class="post-modal-options" data-bs-toggle="dropdown" aria-expanded="false" title="Post options">
+                        <i class="bi bi-three-dots"></i>
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#" onclick="editPost()">Edit</a></li>
+                        <li><a class="dropdown-item text-danger" href="#" onclick="deletePost()">Delete</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="post-modal-content-area">
+                <div class="post-modal-actions" style="padding-bottom: 16px; border-bottom: 1px solid #efefef; margin-bottom: 16px;">
+                    <button class="post-action-btn" title="Like this post" onclick="toggleLike(currentPostId, event)">
+                        <i id="modalLikeIcon" class="bi bi-heart"></i>
+                    </button>
+                    <button class="post-action-btn" title="Comment on post">
+                        <i class="bi bi-chat"></i>
+                    </button>
+                    <button class="post-action-btn" title="Share this post">
+                        <i class="bi bi-share"></i>
+                    </button>
+                </div>
+                
+                <div class="post-modal-likes" style="margin-bottom: 12px; color: #262626; font-weight: 600;">
+                    <span id="modalLikeCount">0</span> likes
+                </div>
+                
+                <div class="post-modal-text" id="modalText"></div>
+                <div class="post-modal-date" id="modalDate"></div>
+            </div>
         </div>
     </div>
 </div>
-    {% else %}
-        <p>You have not posted anything yet.</p>
-    {% endfor %}
-</div>
+
 
 <!-- Delete Confirmation Modal -->
 <div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-body text-center p-4">
-                <h5>Are you sure you want to delete this post?</h5>
-                <p class="text-muted">This action cannot be undone and the post will be deleted permanently!</p>
+        <div class="modal-content" style="border-radius: 20px; border: none;">
+            <div class="modal-body text-center p-5">
+                <h5 style="color: #262626; font-weight: 600; font-size: 20px;">Delete post?</h5>
+                <p class="text-muted" style="font-size: 16px; margin-top: 12px;">Are you sure you want to delete this post?</p>
                 <div class="mt-4">
                     <form id="deletePostForm" method="POST">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn btn-danger mb-2 w-100">Delete post</button>
+                        <button type="submit" class="btn btn-danger mb-3 w-100" style="border-radius: 12px; font-weight: 600; font-size: 16px; padding: 12px;">Delete</button>
                     </form>
-                    <button type="button" class="btn btn-secondary w-100" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-light w-100" data-bs-dismiss="modal" style="border-radius: 12px; color: #262626; font-size: 16px; padding: 12px;">Cancel</button>
                 </div>
             </div>
         </div>
     </div>
 </div>
-
 {% endblock %}
 
 {% block scripts %}
 {{ super() }}
 <script>
+// Store posts data for modal with like information
+const postsData = {
+    {% for post in posts %}
+    {{ post.post_id }}: {
+        content: {{ post.post_content|tojson }},
+        date: "{{ post.created_at.strftime('%B %d, %Y') }}",
+        images: [
+                {% for img in post.images %}
+                "{{ url_for('static', filename=img.image_url) }}"{% if not loop.last %},{% endif %}
+                {% endfor %}
+        ],
+        editUrl: "{{ url_for('edit_post', post_id=post.post_id) }}",
+        deleteUrl: "{{ url_for('delete_post', post_id=post.post_id) }}",
+        likeCount: {{ post.get_like_count() }},
+        isLiked: {{ 'true' if post.is_liked_by_user(current_user.user_id) else 'false' }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+};
+
+let currentPostId = null;
+
+// Add this function to handle image loading errors
+function handleImageError(img, isPostImage = false) {
+    img.onerror = null; // Prevent infinite loop
+    
+    if (isPostImage) {
+        // For post images, replace with placeholder
+        const placeholder = document.createElement('div');
+        placeholder.className = 'post-placeholder';
+        placeholder.innerHTML = '<i class="bi bi-image"></i>';
+        img.parentNode.replaceChild(placeholder, img);
+    } else {
+        // For profile images, use default
+        img.src = "{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}";
+    }
+}
+
+// Like/Unlike functionality
+async function toggleLike(postId, event) {
+    event.stopPropagation(); // Prevent modal from opening
+    
+    try {
+        const response = await fetch(`/api/like_post/${postId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrf_token]').value
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Update like count in grid view
+            const postItem = document.querySelector(`[data-post-id="${postId}"]`);
+            if (postItem) {
+                const likeCount = postItem.querySelector('.like-count');
+                const likeIcon = postItem.querySelector('.like-icon');
+                
+                if (likeCount) likeCount.textContent = data.like_count;
+                if (likeIcon) {
+                    likeIcon.className = data.is_liked ? 'bi bi-heart-fill like-icon liked' : 'bi bi-heart like-icon';
+                    likeIcon.style.color = data.is_liked ? '#ed4956' : 'white';
+                }
+            }
+            
+            // Update like count in list view
+            const listItem = document.querySelector(`[data-list-post-id="${postId}"]`);
+            if (listItem) {
+                const listLikeCount = listItem.querySelector('.list-like-count');
+                const listLikeIcon = listItem.querySelector('.list-like-icon');
+                const listLikeBtn = listItem.querySelector('.post-action-btn');
+                
+                if (listLikeCount) listLikeCount.textContent = data.like_count;
+                if (listLikeIcon) {
+                    listLikeIcon.className = data.is_liked ? 'bi bi-heart-fill list-like-icon liked' : 'bi bi-heart list-like-icon';
+                    listLikeIcon.style.color = data.is_liked ? '#ed4956' : '#262626';
+                }
+                if (listLikeBtn) {
+                    listLikeBtn.className = data.is_liked ? 'post-action-btn liked' : 'post-action-btn';
+                }
+            }
+            
+            // Update modal if open
+            if (currentPostId === postId) {
+                const modalLikeCount = document.querySelector('#modalLikeCount');
+                const modalLikeIcon = document.querySelector('#modalLikeIcon');
+                const modalLikeBtn = modalLikeIcon?.closest('.post-action-btn');
+                
+                if (modalLikeCount) modalLikeCount.textContent = data.like_count;
+                if (modalLikeIcon) {
+                    modalLikeIcon.className = data.is_liked ? 'bi bi-heart-fill liked' : 'bi bi-heart';
+                    modalLikeIcon.style.color = data.is_liked ? '#ed4956' : '#262626';
+                }
+                if (modalLikeBtn) {
+                    modalLikeBtn.className = data.is_liked ? 'post-action-btn liked' : 'post-action-btn';
+                }
+            }
+            
+            // Update local data
+            postsData[postId].likeCount = data.like_count;
+            postsData[postId].isLiked = data.is_liked;
+            
+            // Show feedback
+            showLikeFeedback(data.action === 'liked');
+            
+        } else {
+            console.error('Error toggling like:', data.message);
+            showToast('Error updating like', 'error');
+        }
+    } catch (error) {
+        console.error('Error toggling like:', error);
+        showToast('Error updating like', 'error');
+    }
+}
+
+// Show like feedback animation
+function showLikeFeedback(isLiked) {
+    const feedback = document.createElement('div');
+    feedback.className = 'like-feedback';
+    feedback.innerHTML = isLiked ? '❤️' : '💔';
+    feedback.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 48px;
+        z-index: 9999;
+        pointer-events: none;
+        animation: likeFeedback 0.6s ease-out;
+    `;
+    
+    document.body.appendChild(feedback);
+    
+    setTimeout(() => {
+        document.body.removeChild(feedback);
+    }, 600);
+}
+
+// Show toast notification
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast-notification toast-${type}`;
+    toast.textContent = message;
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'error' ? '#dc3545' : '#28a745'};
+        color: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        z-index: 9999;
+        animation: slideIn 0.3s ease-out;
+    `;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease-in';
+        setTimeout(() => {
+            document.body.removeChild(toast);
+        }, 300);
+    }, 3000);
+}
+
+// View switching functionality with Gestalt principles
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize all dropdowns
-    var dropdownElementList = [].slice.call(document.querySelectorAll('[data-bs-toggle="dropdown"]'))
-    var dropdownList = dropdownElementList.map(function (dropdownToggleEl) {
-        return new bootstrap.Dropdown(dropdownToggleEl)
+    const postsTabs = document.querySelectorAll('.posts-tab');
+    const postsGrid = document.getElementById('postsGrid');
+    const postsList = document.getElementById('postsList');
+    const viewToggle = document.getElementById('viewToggle');
+    const viewBtns = document.querySelectorAll('.view-btn');
+
+    // Tab switching - Common Fate principle
+    postsTabs.forEach(tab => {
+        tab.addEventListener('click', function() {
+            const viewType = this.dataset.view;
+            
+            // Update active tab with visual feedback
+            postsTabs.forEach(t => {
+                t.classList.remove('active');
+                t.style.transform = 'scale(1)';
+            });
+            this.classList.add('active');
+            this.style.transform = 'scale(1.02)';
+            
+            // Show/hide appropriate view with smooth transition
+            if (viewType === 'grid') {
+                postsGrid.style.display = 'grid';
+                postsList.classList.remove('active');
+                viewToggle.style.display = 'flex';
+                
+                // Animate grid items - Common Fate
+                const gridItems = postsGrid.querySelectorAll('.post-item');
+                gridItems.forEach((item, index) => {
+                    setTimeout(() => {
+                        item.style.opacity = '0';
+                        item.style.transform = 'scale(0.8)';
+                        setTimeout(() => {
+                            item.style.opacity = '1';
+                            item.style.transform = 'scale(1)';
+                        }, 50);
+                    }, index * 30);
+                });
+            } else {
+                postsGrid.style.display = 'none';
+                postsList.classList.add('active');
+                viewToggle.style.display = 'none';
+                
+                // Animate list items - Good Continuation
+                const listItems = postsList.querySelectorAll('.post-list-item');
+                listItems.forEach((item, index) => {
+                    setTimeout(() => {
+                        item.style.opacity = '0';
+                        item.style.transform = 'translateY(20px)';
+                        setTimeout(() => {
+                            item.style.opacity = '1';
+                            item.style.transform = 'translateY(0)';
+                        }, 50);
+                    }, index * 100);
+                });
+            }
+            
+            // Reset tab scale after animation
+            setTimeout(() => {
+                this.style.transform = 'scale(1)';
+            }, 200);
+        });
     });
 
-    // Delete confirmation function
-    window.confirmDelete = function(form) {
-        const modal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
-        const deleteForm = document.getElementById('deletePostForm');
-        deleteForm.action = form.action;
+    // Grid size switching - Similarity principle
+    viewBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const size = this.dataset.size;
+            
+            // Update active button with enhanced feedback
+            viewBtns.forEach(b => {
+                b.classList.remove('active');
+                b.style.transform = 'scale(1)';
+            });
+            this.classList.add('active');
+            this.style.transform = 'scale(1.05)';
+            
+            // Update grid class with transition
+            postsGrid.style.transition = 'all 0.3s ease';
+            postsGrid.classList.remove('compact', 'ultra-compact');
+            
+            if (size === 'compact') {
+                postsGrid.classList.add('compact');
+            } else if (size === 'ultra-compact') {
+                postsGrid.classList.add('ultra-compact');
+            }
+            
+            // Animate grid reorganization - Closure principle
+            const gridItems = postsGrid.querySelectorAll('.post-item');
+            gridItems.forEach((item, index) => {
+                setTimeout(() => {
+                    item.style.transform = 'scale(0.9)';
+                    setTimeout(() => {
+                        item.style.transform = 'scale(1)';
+                    }, 100);
+                }, index * 20);
+            });
+            
+            // Reset button scale
+            setTimeout(() => {
+                this.style.transform = 'scale(1)';
+            }, 200);
+        });
+    });
+
+    // Add initial transition styles
+    const allItems = document.querySelectorAll('.post-item, .post-list-item');
+    allItems.forEach(item => {
+        item.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+    });
+
+    // Setup image error handling
+    const profileImages = document.querySelectorAll('.profile-avatar, .post-modal-avatar, .post-list-avatar');
+    profileImages.forEach(img => {
+        img.onerror = function() {
+            handleImageError(this);
+        };
+    });
+    
+    // Handle post images
+    const postImages = document.querySelectorAll('.post-image');
+    postImages.forEach(img => {
+        img.onerror = function() {
+            handleImageError(this, true);
+        };
+    });
+
+    // Add focus styles for better accessibility
+    const postItems = document.querySelectorAll('.post-item');
+    postItems.forEach(item => {
+        item.setAttribute('tabindex', '0');
+        item.addEventListener('focus', function() {
+            this.style.outline = '3px solid #0095f6';
+            this.style.outlineOffset = '2px';
+        });
+        item.addEventListener('blur', function() {
+            this.style.outline = 'none';
+        });
+    });
+
+    // Initialize dropdowns with enhanced styling
+    var dropdownElementList = [].slice.call(document.querySelectorAll('[data-bs-toggle="dropdown"]'));
+    var dropdownList = dropdownElementList.map(function (dropdownToggleEl) {
+        return new bootstrap.Dropdown(dropdownToggleEl);
+    });
+});
+
+// Update the openPostModal function with like information
+function openPostModal(postId) {
+    console.log('Opening modal for post:', postId);
+    console.log('Posts data:', postsData);
+    
+    const post = postsData[postId];
+    if (!post) {
+        console.error('Post not found:', postId);
+        return;
+    }
+    
+    console.log('Post data:', post);
+    
+    currentPostId = postId;
+    
+    // Get modal elements with error checking
+    const modal = document.getElementById('postModal');
+    const modalText = document.getElementById('modalText');
+    const modalDate = document.getElementById('modalDate');
+    const modalLikeCount = document.getElementById('modalLikeCount');
+    const modalImage = document.getElementById('modalImage');
+    const imageContainer = document.getElementById('modalImageContainer');
+    const modalLikeIcon = document.getElementById('modalLikeIcon');
+    
+    // Check if required elements exist
+    if (!modal || !modalImage || !imageContainer) {
+        console.error('Required modal elements not found!');
+        console.log('modal:', modal);
+        console.log('modalImage:', modalImage);
+        console.log('imageContainer:', imageContainer);
+        return;
+    }
+    
+    // Set modal content with null checks
+    if (modalText) modalText.textContent = post.content;
+    if (modalDate) modalDate.textContent = post.date.toUpperCase();
+    if (modalLikeCount) modalLikeCount.textContent = post.likeCount;
+    
+    // Set like button state
+    if (modalLikeIcon) {
+        modalLikeIcon.className = post.isLiked ? 'bi bi-heart-fill liked' : 'bi bi-heart';
+        modalLikeIcon.style.color = post.isLiked ? '#ed4956' : '#262626';
         
-        document.querySelector('#deleteConfirmModal .btn-danger').onclick = function() {
-            form.submit();
+        const modalLikeBtn = modalLikeIcon.closest('.post-action-btn');
+        if (modalLikeBtn) {
+            modalLikeBtn.className = post.isLiked ? 'post-action-btn liked' : 'post-action-btn';
+        }
+    }
+    
+    // Handle image display
+    console.log('Post images:', post.images);
+    
+    if (post.images && post.images.length > 0) {
+        console.log('Setting modal image to:', post.images[0]);
+        
+        // Clear any previous error handlers
+        modalImage.onerror = null;
+        modalImage.onload = null;
+        
+        // Set up new handlers
+        modalImage.onload = function() {
+            console.log('Modal image loaded successfully');
+            imageContainer.style.display = 'flex';
         };
         
+        modalImage.onerror = function() {
+            console.error('Failed to load modal image:', post.images[0]);
+            console.log('Image URL:', this.src);
+            
+            // Try to show a placeholder instead
+            imageContainer.innerHTML = `
+                <div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 400px; background: #f8f9fa; color: #666;">
+                    <div style="text-align: center;">
+                        <i class="bi bi-image" style="font-size: 48px; margin-bottom: 16px;"></i>
+                        <br>Image could not be loaded
+                    </div>
+                </div>
+            `;
+            imageContainer.style.display = 'flex';
+        };
+        
+        // Set the image source
+        modalImage.src = post.images[0];
+        
+    } else {
+        console.log('No images for this post, hiding image container');
+        imageContainer.style.display = 'none';
+    }
+    
+    // Show modal with animation
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    
+    // Animate modal appearance
+    const modalContent = modal.querySelector('.post-modal-content');
+    if (modalContent) {
+        modalContent.style.transform = 'scale(0.8)';
+        modalContent.style.opacity = '0';
+        modalContent.style.transition = 'all 0.3s ease';
+        
+        // Force reflow
+        modalContent.offsetHeight;
+        
+        setTimeout(() => {
+            modalContent.style.transform = 'scale(1)';
+            modalContent.style.opacity = '1';
+        }, 10);
+    }
+}
+
+function closePostModal() {
+    const modal = document.getElementById('postModal');
+    const modalContent = modal.querySelector('.post-modal-content');
+    
+    // Animate modal disappearance
+    modalContent.style.transform = 'scale(0.8)';
+    modalContent.style.opacity = '0';
+    
+    setTimeout(() => {
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+        currentPostId = null;
+    }, 300);
+}
+
+function editPost() {
+    if (currentPostId && postsData[currentPostId]) {
+        window.location.href = postsData[currentPostId].editUrl;
+    }
+}
+
+function deletePost() {
+    if (currentPostId && postsData[currentPostId]) {
+        const modal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+        const deleteForm = document.getElementById('deletePostForm');
+        deleteForm.action = postsData[currentPostId].deleteUrl;
+        
+        closePostModal();
         modal.show();
     }
+}
+
+// Enhanced keyboard navigation for accessibility
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closePostModal();
+    }
+    
+    // Arrow key navigation in grid view
+    if (document.getElementById('postsGrid').style.display !== 'none') {
+        const focusedElement = document.activeElement;
+        const postItems = Array.from(document.querySelectorAll('.post-item'));
+        const currentIndex = postItems.indexOf(focusedElement);
+        
+        if (currentIndex !== -1) {
+            let newIndex = currentIndex;
+            
+            switch(e.key) {
+                case 'ArrowRight':
+                    newIndex = Math.min(currentIndex + 1, postItems.length - 1);
+                    break;
+                case 'ArrowLeft':
+                    newIndex = Math.max(currentIndex - 1, 0);
+                    break;
+                case 'ArrowDown':
+                    // Calculate grid columns dynamically
+                    const gridStyle = window.getComputedStyle(document.getElementById('postsGrid'));
+                    const columns = gridStyle.gridTemplateColumns.split(' ').length;
+                    newIndex = Math.min(currentIndex + columns, postItems.length - 1);
+                    break;
+                case 'ArrowUp':
+                    const gridStyleUp = window.getComputedStyle(document.getElementById('postsGrid'));
+                    const columnsUp = gridStyleUp.gridTemplateColumns.split(' ').length;
+                    newIndex = Math.max(currentIndex - columnsUp, 0);
+                    break;
+            }
+            
+            if (newIndex !== currentIndex) {
+                e.preventDefault();
+                postItems[newIndex].focus();
+            }
+        }
+    }
 });
+
+// Close modal on backdrop click with visual feedback
+document.getElementById('postModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        // Add visual feedback before closing
+        const modalContent = this.querySelector('.post-modal-content');
+        modalContent.style.transform = 'scale(0.95)';
+        setTimeout(() => {
+            modalContent.style.transform = 'scale(1)';
+            closePostModal();
+        }, 100);
+    }
+});
+
+// Intersection Observer for progressive loading animation - Good Continuation
+if ('IntersectionObserver' in window) {
+    const observerOptions = {
+        threshold: 0.1,
+        rootMargin: '50px'
+    };
+    
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.style.opacity = '1';
+                entry.target.style.transform = 'translateY(0)';
+                observer.unobserve(entry.target);
+            }
+        });
+    }, observerOptions);
+    
+    // Observe all post items for progressive animation
+    document.addEventListener('DOMContentLoaded', function() {
+        const allPostItems = document.querySelectorAll('.post-item, .post-list-item');
+        allPostItems.forEach(item => {
+            item.style.opacity = '0';
+            item.style.transform = 'translateY(20px)';
+            item.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+            observer.observe(item);
+        });
+    });
+}
+
+// Add CSS for like animations and toast notifications
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes likeFeedback {
+        0% {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.5);
+        }
+        50% {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1.2);
+        }
+        100% {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(1);
+        }
+    }
+    
+    .like-icon.liked,
+    .list-like-icon.liked {
+        color: #ed4956 !important;
+        animation: heartBeat 0.3s ease-in-out;
+    }
+    
+    @keyframes heartBeat {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.2); }
+        100% { transform: scale(1); }
+    }
+    
+    .post-action-btn.liked {
+        color: #ed4956 !important;
+    }
+    
+    .post-action-btn.liked i {
+        animation: heartBeat 0.3s ease-in-out;
+    }
+    
+    @keyframes slideIn {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+    
+    @keyframes slideOut {
+        from {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+    }
+    
+    /* Hover effects for like buttons */
+    .post-stat:hover .like-icon {
+        transform: scale(1.1);
+        transition: transform 0.2s ease;
+    }
+    
+    .post-action-btn:hover i {
+        transform: scale(1.1);
+        transition: transform 0.2s ease;
+    }
+    
+    /* Loading state for like buttons */
+    .like-loading {
+        opacity: 0.6;
+        pointer-events: none;
+    }
+    
+    /* Enhanced focus styles for accessibility */
+    .post-stat:focus,
+    .post-action-btn:focus {
+        outline: 3px solid #0095f6;
+        outline-offset: 2px;
+        border-radius: 4px;
+    }
+    
+    /* High contrast mode support */
+    @media (prefers-contrast: high) {
+        .like-icon.liked,
+        .list-like-icon.liked {
+            color: #ff0000 !important;
+        }
+        
+        .post-action-btn.liked {
+            color: #ff0000 !important;
+            background: rgba(255, 0, 0, 0.1);
+        }
+    }
+    
+    /* Reduced motion support */
+    @media (prefers-reduced-motion: reduce) {
+        .like-icon.liked,
+        .list-like-icon.liked,
+        .post-action-btn.liked i {
+            animation: none;
+        }
+        
+        .like-feedback {
+            animation: none !important;
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+    }
+`;
+document.head.appendChild(style);
 </script>
 {% endblock %}

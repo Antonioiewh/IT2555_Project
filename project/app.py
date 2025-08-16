@@ -7,6 +7,8 @@ import base64
 from io import BytesIO
 from datetime import datetime, timedelta
 from functools import wraps
+import random
+import string
 
 # --- Flask Core Imports ---
 from flask import Flask, render_template, redirect, url_for, flash, request, current_app, abort, jsonify, session
@@ -53,10 +55,9 @@ import cbor2
 
 # Models
 from models import (
-    db, User, Role, Permission, Event, EventParticipant, Post, PostImage, 
+    db, User, Role, Permission, Event, EventParticipant, Post, PostImage, PostLike,
     Notification, Report, Chat, ChatParticipant, Message, 
     Friendship, AdminAction, UserLog, ModSecLog, ErrorLog, 
-
     WebAuthnCredential, user_role_assignments,Event,FriendChatMap
 
 )
@@ -73,7 +74,7 @@ from filters import (
 from forms import (
     SignupForm, LoginForm, ReportForm, UpdateUserStatusForm,
     FriendRequestForm, UpdateReportStatusForm, Enable2FAForm,
-    Disable2FAForm, RemovePassKeyForm
+    Disable2FAForm, RemovePassKeyForm, CreatePostForm,EditProfileForm
 )
 
 # Custom logging utilities
@@ -103,6 +104,9 @@ DB_HOST = os.getenv('MYSQL_HOST', 'mysql')  # 'mysql' is the service name in doc
 app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'a_very_secret_key_for_dev')  # Change in production!
+# -- img
+app.config['UPLOAD_FOLDER'] = 'static/uploads'
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # Initialize database
 db.init_app(app)
@@ -114,7 +118,11 @@ socketio = SocketIO(app, cors_allowed_origins=[
     "http://127.0.0.1",
     ""
 ])
-
+def allowed_file(filename):
+    """Check if file extension is allowed"""
+    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 # --- Initialize Extensions ---
 # CSRF protection
 csrf = CSRFProtect(app)
@@ -2232,86 +2240,113 @@ def internal_server_error(error):
 
 
 
-# --- create, edit, and delete routes for Creating Posts ---
 @app.route('/create_post', methods=['GET', 'POST'])
 @login_required
 def create_post():
     form = CreatePostForm()
-    if form.validate_on_submit():
+    
+    if request.method == 'POST':
         try:
-            # Sanitize the post content
-            clean_content = bleach.clean(
-                form.post_content.data,
-                tags=[],  # No HTML tags allowed
-                strip=True
-            )
-
-            post = Post(
+            # Get form data
+            post_content = request.form.get('post_content', '').strip()
+            
+            # Validate content
+            if not post_content:
+                flash('Post content cannot be empty.', 'error')
+                return render_template('create_post.html', form=form)
+            
+            print(f"DEBUG: Creating post with content: {post_content}")
+            
+            # Create the post object
+            new_post = Post(
                 user_id=current_user.user_id,
-                post_content=clean_content,
+                post_content=post_content,
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow()
             )
-            db.session.add(post)
+            
+            # Add to session and flush to get the post_id
+            db.session.add(new_post)
+            db.session.flush()
+            
+            print(f"DEBUG: Post created with ID: {new_post.post_id}")
+            
+            # Handle uploaded files
+            uploaded_files = request.files.getlist('image')
+            print(f"DEBUG: Number of uploaded files: {len(uploaded_files)}")
+            
+            valid_files = []
+            
+            for i, file in enumerate(uploaded_files):
+                print(f"DEBUG: Processing file {i}: {file.filename}")
+                
+                if file and file.filename:
+                    # Check if file is allowed
+                    if allowed_file(file.filename):
+                        print(f"DEBUG: File {file.filename} is allowed")
+                        
+                        # Generate unique filename
+                        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                        random_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+                        filename = f"{new_post.post_id}_{timestamp}_{random_suffix}_{secure_filename(file.filename)}"
+                        
+                        print(f"DEBUG: Generated filename: {filename}")
+                        
+                        # Create full file path
+                        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                        print(f"DEBUG: Full file path: {file_path}")
+                        
+                        # Ensure upload directory exists
+                        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+                        print(f"DEBUG: Upload directory exists: {os.path.exists(app.config['UPLOAD_FOLDER'])}")
+                        
+                        # Save the file
+                        file.save(file_path)
+                        print(f"DEBUG: File saved to: {file_path}")
+                        
+                        # Verify file was saved
+                        if os.path.exists(file_path):
+                            print(f"DEBUG: File successfully saved, size: {os.path.getsize(file_path)} bytes")
+                        else:
+                            print(f"ERROR: File was not saved!")
+                            continue
+                        
+                        # Create PostImage object
+                        post_image = PostImage(
+                            post_id=new_post.post_id,
+                            image_url=f"uploads/{filename}",  # Store the full path
+                            order_index=0,
+                            created_at=datetime.utcnow()
+                        )
+                        
+                        db.session.add(post_image)
+                        valid_files.append(filename)
+                        
+                        print(f"DEBUG: Added PostImage to database for file: {filename}")
+                    else:
+                        print(f"DEBUG: File {file.filename} is not allowed")
+                        flash(f'Invalid file type: {file.filename}', 'warning')
+                else:
+                    print(f"DEBUG: File {i} is empty or has no filename")
+            
+            # Commit all changes
             db.session.commit()
-
-            if form.image.data:
-                file = form.image.data
-                if file and allowed_file(file.filename):
-                    # Validate file size
-                    file.seek(0, os.SEEK_END)
-                    size = file.tell()
-                    file.seek(0)
-                    
-                    if size > MAX_FILE_SIZE:
-                        flash('File size too large', 'danger')
-                        return redirect(url_for('create_post'))
-
-                    # Validate image content
-                    if not validate_image(file):
-                        flash('Invalid image file', 'danger')
-                        return redirect(url_for('create_post'))
-
-                    # Secure the filename
-                    filename = secure_filename(f"{post.post_id}_{file.filename}")
-                    
-                    # Ensure upload directory exists
-                    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-                    
-                    # Create safe file path
-                    file_path = os.path.join(UPLOAD_FOLDER, filename)
-                    file_path = os.path.abspath(file_path)
-                    
-                    # Verify the path is within UPLOAD_FOLDER
-                    if not file_path.startswith(os.path.abspath(UPLOAD_FOLDER)):
-                        flash('Invalid file path', 'danger')
-                        return redirect(url_for('create_post'))
-
-                    file.save(file_path)
-                    rel_path = os.path.relpath(file_path, 'static').replace("\\", "/")
-                    post_image = PostImage(post_id=post.post_id, image_url=rel_path)
-                    db.session.add(post_image)
-                    db.session.commit()
-
-            flash('Post created successfully!', 'success')
+            print(f"DEBUG: Database committed successfully")
+            
+            flash(f'Post created successfully with {len(valid_files)} images!', 'success')
             return redirect(url_for('account'))
-
+            
         except Exception as e:
             db.session.rollback()
-            flash('An error occurred while creating the post', 'danger')
-            return redirect(url_for('create_post'))
+            print(f"ERROR: Exception in create_post: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            flash('An error occurred while creating the post.', 'error')
+            return render_template('create_post.html', form=form)
 
+    # GET request
     return render_template('create_post.html', form=form)
 
-class CreatePostForm(FlaskForm):
-    post_content = TextAreaField('Content', validators=[DataRequired(), Length(max=300)])
-    image = FileField('Image', validators=[Optional(), FileAllowed(['jpg', 'png', 'jpeg'], 'Images only!')])
-    submit = SubmitField('Submit')
-
-class EditProfileForm(FlaskForm):
-    username = StringField('Username', validators=[DataRequired(), Length(min=2, max=50)])
-    profile_pic = FileField('Profile Picture', validators=[FileAllowed(['jpg', 'jpeg', 'png'], 'Images only!')])
-    submit = SubmitField('Save Changes')
 
 @app.route('/edit_post/<int:post_id>', methods=['GET', 'POST'])
 @login_required
@@ -2347,37 +2382,112 @@ def edit_post(post_id):
 @app.route('/delete_post/<int:post_id>', methods=['POST'])
 @login_required
 def delete_post(post_id):
-    post = Post.query.get_or_404(post_id)
-    
-    # Security check: Ensure user owns the post
-    if post.user_id != current_user.user_id:
-        abort(403)
-    
+    """Delete a post and its associated images"""
     try:
-        # Delete associated images first
+        # Get the post
+        post = Post.query.filter_by(post_id=post_id).first()
+        
+        if not post:
+            flash('Post not found.', 'error')
+            return redirect(url_for('account'))
+        
+        # Check if the current user owns the post
+        if post.user_id != current_user.user_id:
+            flash('You can only delete your own posts.', 'error')
+            return redirect(url_for('account'))
+        
+        # Delete associated images from filesystem
         for image in post.images:
-            # Delete image file from filesystem
-            image_path = os.path.join(app.config['UPLOAD_FOLDER'], image.image_url)
-            if os.path.exists(image_path):
-                os.remove(image_path)
-                
-        # Delete the post and commit transaction
+            try:
+                image_path = os.path.join(app.config['UPLOAD_FOLDER'], image.image_url)
+                if os.path.exists(image_path):
+                    os.remove(image_path)
+                    app.logger.info(f"Deleted image file: {image_path}")
+            except Exception as e:
+                app.logger.error(f"Error deleting image file {image.image_url}: {str(e)}")
+        
+        # Delete the post (cascade will delete images and likes)
         db.session.delete(post)
         db.session.commit()
         
+        # Log the action (if function exists)
+        try:
+            from user_actions import log_user_action
+            log_user_action(
+                current_user.user_id,
+                'delete_post',
+                f'Deleted post {post_id}',
+                request.remote_addr,
+                request.headers.get('User-Agent', 'Unknown')
+            )
+        except ImportError:
+            pass  # Skip logging if function doesn't exist
+        
         flash('Post deleted successfully!', 'success')
+        app.logger.info(f"User {current_user.user_id} deleted post {post_id}")
         
-    except OSError:
+    except Exception as e:
         db.session.rollback()
-        flash('Error deleting post images.', 'danger')
-        
-    except SQLAlchemyError:
-        db.session.rollback()
-        flash('Error deleting post.', 'danger')
-        
+        app.logger.error(f"Error deleting post {post_id}: {str(e)}")
+        flash('An error occurred while deleting the post.', 'error')
+    
     return redirect(url_for('account'))
 
-
+@app.route('/api/like_post/<int:post_id>', methods=['POST'])
+@login_required
+def like_post(post_id):
+    """Like or unlike a post"""
+    try:
+        # Check if post exists
+        post = Post.query.filter_by(post_id=post_id).first()
+        if not post:
+            return jsonify({'success': False, 'message': 'Post not found'}), 404
+        
+        # Check if user already liked this post
+        existing_like = PostLike.query.filter_by(
+            user_id=current_user.user_id,
+            post_id=post_id
+        ).first()
+        
+        if existing_like:
+            # Unlike the post
+            db.session.delete(existing_like)
+            db.session.commit()
+            
+            
+            like_count = post.get_like_count()
+            return jsonify({
+                'success': True,
+                'action': 'unliked',
+                'like_count': like_count,
+                'is_liked': False
+            })
+        else:
+            # Like the post
+            new_like = PostLike(
+                user_id=current_user.user_id,
+                post_id=post_id
+            )
+            db.session.add(new_like)
+            db.session.commit()
+            
+            
+            like_count = post.get_like_count()
+            return jsonify({
+                'success': True,
+                'action': 'liked',
+                'like_count': like_count,
+                'is_liked': True
+            })
+            
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': 'Database error'}), 500
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error in like_post: {str(e)}")
+        return jsonify({'success': False, 'message': 'An error occurred'}), 500
+    
 # --- user account/profile page ---
 @app.route('/account', methods=['GET', 'POST'])
 @login_required
@@ -2398,69 +2508,145 @@ def account():
 
 
 # --- Edit Profile ---
+
 @app.route('/edit_profile', methods=['GET', 'POST'])
-@login_required
+@user_required
 def edit_profile():
-    form = EditProfileForm(obj=current_user)
+    form = EditProfileForm()
+    
     if form.validate_on_submit():
         try:
-            # Sanitize and validate username
-            clean_username = bleach.clean(form.username.data, tags=[], strip=True)
-            if not re.match(r'^[a-zA-Z0-9_]{3,20}$', clean_username):
-                flash('Invalid username format', 'danger')
-                return redirect(url_for('edit_profile'))
+            # Update username if changed
+            if form.username.data != current_user.username:
+                # Check if username is already taken
+                existing_user = User.query.filter_by(username=form.username.data).first()
+                if existing_user:
+                    flash('Username already taken. Please choose a different one.', 'danger')
+                    return render_template('EditProfile.html', form=form)
+                
+                current_user.username = form.username.data
 
-            # Check username uniqueness
-            existing_user = User.query.filter(
-                User.username == clean_username,
-                User.user_id != current_user.user_id
-            ).first()
-            if existing_user:
-                flash('Username already taken', 'danger')
-                return redirect(url_for('edit_profile'))
-
-            current_user.username = clean_username
-
-            if form.profile_pic.data:
+            # Handle profile picture update
+            cropped_image_data = request.form.get('cropped_image_data')
+            
+            if cropped_image_data:
+                # Process cropped image data
+                try:
+                    # Remove data URL prefix
+                    if cropped_image_data.startswith('data:image'):
+                        header, encoded = cropped_image_data.split(',', 1)
+                        image_data = base64.b64decode(encoded)
+                    else:
+                        raise ValueError("Invalid image data format")
+                    
+                    # Create a BytesIO object from the decoded data
+                    image_stream = BytesIO(image_data)
+                    
+                    # Open with PIL to ensure it's a valid image
+                    from PIL import Image
+                    image = Image.open(image_stream)
+                    
+                    # Convert to RGB if necessary (handles PNG with transparency)
+                    if image.mode in ('RGBA', 'LA', 'P'):
+                        # Create white background
+                        background = Image.new('RGB', image.size, (255, 255, 255))
+                        if image.mode == 'P':
+                            image = image.convert('RGBA')
+                        background.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
+                        image = background
+                    
+                    # Generate unique filename
+                    filename = f"profile_{current_user.user_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+                    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                    
+                    # Ensure upload directory exists
+                    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+                    
+                    # Save the processed image
+                    image.save(filepath, 'JPEG', quality=95, optimize=True)
+                    
+                    # Delete old profile picture if it exists and is not the default
+                    # CHANGE: Use profile_pic_url instead of profile_pic
+                    if current_user.profile_pic_url and current_user.profile_pic_url != 'blank-profile-picture-973460_1280.webp':
+                        old_filepath = os.path.join(app.config['UPLOAD_FOLDER'], current_user.profile_pic_url)
+                        if os.path.exists(old_filepath):
+                            try:
+                                os.remove(old_filepath)
+                            except OSError:
+                                pass  # If file can't be deleted, continue anyway
+                    
+                    # Update user profile picture
+                    # CHANGE: Use profile_pic_url instead of profile_pic
+                    current_user.profile_pic_url = filename
+                    
+                except Exception as e:
+                    print(f"Error processing cropped image: {str(e)}")
+                    flash('Error processing the cropped image. Please try again.', 'danger')
+                    return render_template('EditProfile.html', form=form)
+            
+            elif form.profile_pic.data:
+                # Handle regular file upload (fallback)
                 file = form.profile_pic.data
-                if file and allowed_file(file.filename):
-                    # Validate file size
-                    file.seek(0, os.SEEK_END)
-                    size = file.tell()
-                    file.seek(0)
+                
+                # Validate file
+                if not file_validate.validate_image(file):
+                    flash('Invalid image file. Please upload a JPG or PNG image under 5MB.', 'danger')
+                    return render_template('EditProfile.html', form=form)
+                
+                # Generate unique filename
+                filename = f"profile_{current_user.user_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                
+                # Process and save the image
+                try:
+                    from PIL import Image
+                    image = Image.open(file.stream)
                     
-                    if size > MAX_FILE_SIZE:
-                        flash('File size too large', 'danger')
-                        return redirect(url_for('edit_profile'))
-
-                    # Validate image content
-                    if not validate_image(file):
-                        flash('Invalid image file', 'danger')
-                        return redirect(url_for('edit_profile'))
-
-                    # Secure the filename and create unique name
-                    filename = f"profile_{current_user.user_id}_{int(datetime.utcnow().timestamp())}.png"
-                    filename = secure_filename(filename)
+                    # Convert to RGB if necessary
+                    if image.mode in ('RGBA', 'LA', 'P'):
+                        background = Image.new('RGB', image.size, (255, 255, 255))
+                        if image.mode == 'P':
+                            image = image.convert('RGBA')
+                        background.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
+                        image = background
                     
-                    # Save to uploads folder
-                    upload_path = os.path.join('static', 'uploads')
-                    os.makedirs(upload_path, exist_ok=True)
-                    file_path = os.path.join(upload_path, filename)
+                    # Resize to reasonable size if too large
+                    max_size = (1024, 1024)
+                    if image.size[0] > max_size[0] or image.size[1] > max_size[1]:
+                        image.thumbnail(max_size, Image.Resampling.LANCZOS)
                     
-                    # Save file and update database
-                    file.save(file_path)
-                    current_user.profile_pic_url = f'uploads/{filename}'
+                    # Save the image
+                    image.save(filepath, 'JPEG', quality=95, optimize=True)
+                    
+                    # Delete old profile picture
+                    # CHANGE: Use profile_pic_url instead of profile_pic
+                    if current_user.profile_pic_url and current_user.profile_pic_url != 'blank-profile-picture-973460_1280.webp':
+                        old_filepath = os.path.join(app.config['UPLOAD_FOLDER'], current_user.profile_pic_url)
+                        if os.path.exists(old_filepath):
+                            try:
+                                os.remove(old_filepath)
+                            except OSError:
+                                pass
+                    
+                    # CHANGE: Use profile_pic_url instead of profile_pic
+                    current_user.profile_pic_url = filename
+                    
+                except Exception as e:
+                    print(f"Error processing uploaded image: {str(e)}")
+                    flash('Error processing the uploaded image. Please try again.', 'danger')
+                    return render_template('EditProfile.html', form=form)
 
+            # Save changes to database
             db.session.commit()
             flash('Profile updated successfully!', 'success')
-            return redirect(url_for('account'))
-
+            return redirect(url_for('profile', user_id=current_user.user_id))
+            
         except Exception as e:
             db.session.rollback()
-            flash('An error occurred while updating the profile', 'danger')
-            return redirect(url_for('edit_profile'))
+            print(f"Error updating profile: {str(e)}")
+            flash('An error occurred while updating your profile. Please try again.', 'danger')
 
-    return render_template('EditProfile.html', form=form, user=current_user)
+    return render_template('EditProfile.html', form=form)
 
 # -- Events 
 

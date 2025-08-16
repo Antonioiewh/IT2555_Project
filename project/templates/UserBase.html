@@ -263,19 +263,41 @@
         contain: layout style;
     }
 
+    /* UPDATED: User avatar styling to support profile pictures */
     .user-avatar {
-        width: 32px;
-        height: 32px;
+        width: 40px;
+        height: 40px;
         border-radius: 50%;
         background: #1a73e8;
         display: flex;
         align-items: center;
         justify-content: center;
         color: white;
-        font-size: 14px;
+        font-size: 16px;
         font-weight: 500;
         margin-right: 12px;
         flex-shrink: 0;
+        overflow: hidden;
+        position: relative;
+    }
+
+    /* NEW: Profile picture styling within avatar */
+    .user-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 50%;
+    }
+
+    /* NEW: Fallback text styling when no profile picture */
+    .user-avatar-text {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 16px;
+        font-weight: 500;
+        color: white;
     }
 
     .user-details {
@@ -627,12 +649,19 @@
                 {% endif %}
             </div>
             
-            <!-- User Info Section - Now always visible at bottom -->
+            <!-- UPDATED: User Info Section with Profile Picture Support -->
             {% if current_user.is_authenticated %}
             <div class="user-info">
                 <div style="display: flex; align-items: center;">
                     <div class="user-avatar">
-                        {{ current_user.username[0].upper() }}
+                        {% if current_user.profile_pic_url %}
+                            <img src="{{ url_for('static', filename='uploads/' + current_user.profile_pic_url) }}" 
+                                 alt="Profile Picture"
+                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                            <span class="user-avatar-text" style="display: none;">{{ current_user.username[0].upper() }}</span>
+                        {% else %}
+                            <span class="user-avatar-text">{{ current_user.username[0].upper() }}</span>
+                        {% endif %}
                     </div>
                     <div class="user-details">
                         <div class="user-name">{{ current_user.username }}</div>

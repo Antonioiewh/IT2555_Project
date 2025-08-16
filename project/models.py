@@ -45,11 +45,10 @@ class User(UserMixin, db.Model):
     roles = db.relationship('Role', secondary=user_role_assignments,
                             backref=db.backref('users', lazy='dynamic'), lazy='dynamic')
     
-    # FIX: Remove the conflicting 'events' relationship and keep only 'created_events'
-    # events = db.relationship('Event', backref='user', lazy=True)  # REMOVE THIS LINE
+    
     created_events = db.relationship('Event', backref='creator', lazy=True, overlaps="user")
     
-    posts = db.relationship('Post', backref='user', lazy=True)
+    posts = db.relationship('Post', back_populates='user', lazy=True)
     notifications = db.relationship('Notification', backref='user', lazy=True)
     submitted_reports = db.relationship(
         'Report',
@@ -70,7 +69,7 @@ class User(UserMixin, db.Model):
     admin_actions_targeted = db.relationship('AdminAction', foreign_keys='AdminAction.target_user_id', backref='target_user', lazy=True)
     user_logs = db.relationship('UserLog', backref='user', lazy=True)
     notifications = db.relationship('Notification', backref='user', lazy=True, cascade='all, delete-orphan')
-
+    likes = db.relationship("PostLike", back_populates="user", cascade="all, delete-orphan")
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
@@ -162,27 +161,108 @@ class Event(db.Model):
 # **************************************
 class Post(db.Model):
     __tablename__ = 'posts'
-    post_id = db.Column(db.Integer, primary_key=True)
+    
+    post_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     post_content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    images = db.relationship('PostImage', backref='post', lazy=True)
-
+    
+    # Relationships
+    user = db.relationship("User", back_populates="posts")
+    images = db.relationship("PostImage", back_populates="post", cascade="all, delete-orphan")
+    likes = db.relationship("PostLike", back_populates="post", cascade="all, delete-orphan")
+    
+    def get_like_count(self):
+        """Get the number of likes for this post"""
+        return len(self.likes)
+    
+    def is_liked_by_user(self, user_id):
+        """Check if a specific user has liked this post"""
+        if not user_id:
+            return False
+        return any(like.user_id == user_id for like in self.likes)
+    
+    def to_dict(self, current_user_id=None):
+        """Convert post to dictionary with like information"""
+        return {
+            'post_id': self.post_id,
+            'user_id': self.user_id,
+            'post_content': self.post_content,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'like_count': self.get_like_count(),
+            'is_liked': self.is_liked_by_user(current_user_id) if current_user_id else False,
+            'user': {
+                'user_id': self.user.user_id,
+                'username': self.user.username,
+                'profile_pic_url': self.user.profile_pic_url
+            } if self.user else None,
+            'images': [img.to_dict() if hasattr(img, 'to_dict') else {
+                'image_id': img.image_id,
+                'image_url': img.image_url,
+                'order_index': img.order_index
+            } for img in self.images] if self.images else []
+        }
+    
     def __repr__(self):
         return f"<Post {self.post_id} by User {self.user_id}>"
-
+    
 class PostImage(db.Model):
     __tablename__ = 'post_images'
-    image_id = db.Column(db.Integer, primary_key=True)
+    
+    image_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     post_id = db.Column(db.Integer, db.ForeignKey('posts.post_id'), nullable=False)
     image_url = db.Column(db.String(255), nullable=False)
     order_index = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-
+    
+    # Relationships
+    post = db.relationship("Post", back_populates="images")
+    
+    def to_dict(self):
+        return {
+            'image_id': self.image_id,
+            'post_id': self.post_id,
+            'image_url': self.image_url,
+            'order_index': self.order_index,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+    
     def __repr__(self):
-        return f"<PostImage {self.image_url[:20]}...>"
+        return f"<PostImage {self.image_id} for Post {self.post_id}>"
+class PostLike(db.Model):
+    __tablename__ = 'post_likes'
+    
+    like_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id', ondelete='CASCADE'), nullable=False)
+    post_id = db.Column(db.Integer, db.ForeignKey('posts.post_id', ondelete='CASCADE'), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    
+    # Relationships
+    user = db.relationship("User", back_populates="likes")
+    post = db.relationship("Post", back_populates="likes")
+    
+    # Ensure unique likes per user per post
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'post_id', name='unique_user_post_like'),
+    )
+    
+    def to_dict(self):
+        return {
+            'like_id': self.like_id,
+            'user_id': self.user_id,
+            'post_id': self.post_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'user': {
+                'user_id': self.user.user_id,
+                'username': self.user.username,
+                'profile_pic_url': self.user.profile_pic_url
+            } if self.user else None
+        }
+    
+    def __repr__(self):
+        return f"<PostLike User:{self.user_id} Post:{self.post_id}>"
 
 # **************************************
 # 5. Notifications

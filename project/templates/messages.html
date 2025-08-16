@@ -288,12 +288,7 @@
         </li>
       {% endfor %}
     </ul>
-    <!-- test code-->
-    {% for friend in friends %}
-    <li class="friend-link" data-user-id="{{ friend.user_id }}" data-chat-id="{{ friend_chat_ids[friend.user_id] }}">
-        {{ friend.username }} (chat_id: {{ friend_chat_ids[friend.user_id] }})
-    </li>
-    {% endfor %}
+    
   </div>
 
   <!-- Main Chat Container -->
@@ -400,20 +395,18 @@ socket.on('receive_message', function(data) {
     console.log('Sending to chat:', currentChatId);
     console.log('Received for chat:', data.chat_id, 'Current:', currentChatId);
     console.log('[receive_message] Got data:', data);
-    
-    if (data.chat_id != currentChatId) {
-        // Optionally, show badge/highlight for this chat in the sidebar
+
+    if (data.chat_id == currentChatId) {
+        let bytes = CryptoJS.AES.decrypt(data.message_text, secretKey);
+        let plaintext = bytes.toString(CryptoJS.enc.Utf8);
+        appendMessage(data.sender_id == myUserId ? 'me' : 'friend', plaintext, data.sent_at, data.message_id, false);
+    } else {
+       
         let friendLi = document.querySelector(`.friend-link[data-chat-id="${data.chat_id}"]`);
         if (friendLi) friendLi.classList.add('has-unread');
-        return;
     }
-    console.log('LIVE MESSAGE:', data);
-    let bytes = CryptoJS.AES.decrypt(data.message_text, secretKey);
-    let plaintext = bytes.toString(CryptoJS.enc.Utf8);
-    appendMessage(data.sender_id == myUserId ? 'me' : 'friend', plaintext, data.sent_at, null, false);
-});
 
-// messsage delete handler 
+// message delete handler
 socket.on('message_deleted', function(data) {
   // Find the message bubble by message_id and update its text
   let bubbles = document.querySelectorAll('.message-bubble');
@@ -668,6 +661,7 @@ function showPlaceholder() {
 
 console.log('openChat called');
 function openChat(link) {
+    console.log('openChat called for', link.dataset.userId, link.dataset.chatId);
     showChat(); // Always hide placeholder and show chat when opening a chat
 
     const friendUserId = link.dataset.userId;

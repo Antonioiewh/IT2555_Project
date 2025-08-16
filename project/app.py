@@ -1444,27 +1444,15 @@ def handle_send_message(data):
     chat_id = int(data['chat_id'])
     chat = Chat.query.get(chat_id)
     participants = [cp.user_id for cp in chat.participants]
-
-    if len(participants) < 2 or current_user.user_id not in participants:
-        print("One of the users has deleted the chat. Message not sent.")
+    if current_user.user_id not in participants:
         return
-    # check if the friendship is blocked
+
+    other_user_id = [uid for uid in participants if uid != current_user.user_id][0]
     user1, user2 = sorted(participants)
     friendship = Friendship.query.filter_by(user_id1=user1, user_id2=user2).first()
-    if friendship and friendship.status == 'blocked':
-        print("Message blocked: friendship is blocked.")
-        # Optionally emit an error event to the sender
-        emit('message_blocked', {'reason': 'User is blocked.'}, room=request.sid)
-        return
-    
-    other_user_id = [uid for uid in participants if uid != current_user.user_id]
-    if not other_user_id or other_user_id[0] not in participants:
-        print("Other user is not a participant. Message not sent.")
-        return
 
     encrypted_message = data['message']
     sender_id = current_user.user_id
-
     msg = Message(chat_id=chat_id, sender_id=sender_id, message_text=encrypted_message)
     db.session.add(msg)
     db.session.commit()
@@ -1475,7 +1463,16 @@ def handle_send_message(data):
         'sender_id': sender_id,
         'message_text': encrypted_message,
         'sent_at': msg.sent_at.strftime('%H:%M')
-    }, to=str(chat_id))
+    }, room=request.sid)
+
+    if not (friendship and friendship.status == 'blocked'):
+        emit('receive_message', {
+            'message_id': msg.message_id,
+            'chat_id': chat_id,
+            'sender_id': sender_id,
+            'message_text': encrypted_message,
+            'sent_at': msg.sent_at.strftime('%H:%M')
+        }, room=str(chat_id), include_self= False)
 
 def is_blocked(user_id1, user_id2):
     user1, user2 = sorted([user_id1, user_id2])

@@ -14,8 +14,11 @@ DROP TABLE IF EXISTS notifications; -- Assuming notifications exists
 DROP TABLE IF EXISTS reports;       -- Assuming reports exists
 DROP TABLE IF EXISTS messages;      -- Assuming messages exists
 DROP TABLE IF EXISTS chat_participants; -- Assuming chat_participants exists
+DROP TABLE IF EXISTS blocked_users; -- Assuming blocked_users exists
 DROP TABLE IF EXISTS friend_chat_map; -- Assuming friend_chat_map exists
 DROP TABLE IF EXISTS chats;         -- Assuming chats exists
+DROP TABLE IF EXISTS user_public_keys; -- Assuming user_public_keys exists
+DROP TABLE IF EXISTS chat_key_envelopes; -- Assuming chat_key_envelopes exists
 DROP TABLE IF EXISTS friendships;   -- Assuming friendships exists
 DROP TABLE IF EXISTS admin_actions; -- Assuming admin_actions exists
 DROP TABLE IF EXISTS user_logs;     -- Assuming user_logs exists
@@ -188,9 +191,11 @@ CREATE TABLE chat_participants (
     chat_id INT NOT NULL,
     user_id INT NOT NULL,
     cleared_at DATETIME NULL,
+    is_in_chat BOOLEAN NOT NULL DEFAULT TRUE,
     UNIQUE (chat_id, user_id),
     FOREIGN KEY (chat_id) REFERENCES chats(chat_id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+
 );
 
 CREATE TABLE friend_chat_map (
@@ -217,6 +222,44 @@ CREATE TABLE messages (
     FOREIGN KEY (sender_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
+CREATE TABLE blocked_users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    blocker_id INT NOT NULL,
+    blocked_id INT NOT NULL,
+    chat_id INT NULL,
+    reason VARCHAR(255) DEFAULT NULL,
+    active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    removed_at DATETIME NULL,
+    UNIQUE KEY uq_blocker_blocked (blocker_id, blocked_id),
+    INDEX idx_blocker (blocker_id),
+    INDEX idx_blocked (blocked_id),
+    FOREIGN KEY (blocker_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (blocked_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (chat_id) REFERENCES chats(chat_id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE user_public_keys (
+  user_id INT NOT NULL PRIMARY KEY,
+  alg VARCHAR(32) NOT NULL DEFAULT 'P-256',
+  public_key_spki_b64 LONGTEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_upk_user FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+
+CREATE TABLE chat_key_envelopes (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  chat_id INT NOT NULL,
+  user_id INT NOT NULL,
+  key_version INT NOT NULL DEFAULT 1,
+  envelope_b64 LONGTEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_chat_user_version (chat_id, user_id, key_version),
+  CONSTRAINT fk_cke_chat FOREIGN KEY (chat_id) REFERENCES chats(chat_id),
+  CONSTRAINT fk_cke_user FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
 -- **************************************
 -- 8. Friend System
 -- **************************************
@@ -225,7 +268,7 @@ CREATE TABLE friendships (
     user_id1 INT NOT NULL,
     user_id2 INT NOT NULL,
     status ENUM('pending', 'accepted', 'blocked') NOT NULL DEFAULT 'pending',
-    action_user_id INT NOT NULL, -- User who initiated the last status change
+    action_user_id INT NULL, -- User who initiated the last status change
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE (user_id1, user_id2), -- Ensures no duplicate friendship entries (enforce user_id1 < user_id2 in application logic)

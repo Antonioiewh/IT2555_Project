@@ -29,6 +29,7 @@ from forms import SignupForm,LoginForm,ReportForm,UpdateUserStatusForm,FriendReq
 # No clue but seems important
 from sqlalchemy.dialects.mysql import ENUM
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy import func
 
 # --- Forms & Validation Imports ---
 from wtforms import StringField, PasswordField, SubmitField, TextAreaField, SelectField, ValidationError
@@ -57,7 +58,7 @@ from models import (
     Notification, Report, Chat, ChatParticipant, Message, 
     Friendship, AdminAction, UserLog, ModSecLog, ErrorLog, 
 
-    WebAuthnCredential, user_role_assignments,Event,FriendChatMap
+    WebAuthnCredential, user_role_assignments,Event,FriendChatMap,BlockedUser,UserPublicKey, ChatKeyEnvelope
 
 )
 from decorators import user_required, admin_required, editor_required, role_required, admin_or_editor_required
@@ -103,6 +104,7 @@ DB_HOST = os.getenv('MYSQL_HOST', 'mysql')  # 'mysql' is the service name in doc
 app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'a_very_secret_key_for_dev')  # Change in production!
+REDIS_URL = os.getenv('REDIS_URL', 'redis://redis:6379/0')
 
 # Initialize database
 db.init_app(app)
@@ -113,7 +115,43 @@ socketio = SocketIO(app, cors_allowed_origins=[
     "https://localhost",
     "http://127.0.0.1",
     ""
-])
+    ],message_queue=REDIS_URL,async_mode='eventlet')
+    
+
+connected_sids = {}
+
+@socketio.on('connect')
+def _on_connect(auth):
+    """Socket.IO connect handler. Accept `auth` (Socket.IO passes it) and guard DB/current_user access
+    so a DB outage won't crash the connect flow."""
+    try:
+        # current_user may trigger DB access via the login manager; guard it
+        if getattr(current_user, 'is_authenticated', False):
+            s = connected_sids.setdefault(current_user.user_id, set())
+            s.add(request.sid)
+            print(f"Socket connected: user {current_user.user_id} -> sid {request.sid}")
+        else:
+            # unauthenticated connects still allowed; log for debug if desired
+            print(f"Socket connected: anonymous sid {request.sid}")
+    except Exception as e:
+        # Don't raise here — if DB is down or user load fails, allow socket connection to continue.
+        print(f"Warning in _on_connect: could not access current_user or DB ({e}). sid={getattr(request, 'sid', request.sid)}")
+
+@socketio.on('disconnect')
+def _on_disconnect():
+    try:
+        if getattr(current_user, 'is_authenticated', False):
+            s = connected_sids.get(current_user.user_id)
+            if s:
+                s.discard(request.sid)
+                if not s:
+                    connected_sids.pop(current_user.user_id, None)
+            print(f"Socket disconnected: user {current_user.user_id} sid {request.sid}")
+        else:
+            print(f"Socket disconnected: anonymous sid {request.sid}")
+    except Exception as e:
+        # swallow disconnect errors as well
+        print(f"Warning in _on_disconnect: {e} (sid={getattr(request, 'sid', request.sid)})")
 
 # --- Initialize Extensions ---
 # CSRF protection
@@ -913,6 +951,12 @@ def report_user():
     report_submitted = False
     reported_username = None
 
+    # this is name fill for report user from message should not cause issue.
+    if request.method == 'GET':
+        q_username = request.args.get('username')
+        if q_username:
+            form.reported_username.data = q_username
+
     if form.validate_on_submit():
         try:
             # Lookup user by username
@@ -966,7 +1010,9 @@ def user_friends():
                 'is_online': friend_user.current_status == 'online',
                 'bio': friend_user.bio,
                 'friendship_id': f.friendship_id,
-                'status': f.status
+                'status': f.status,
+                'action_user_id': f.action_user_id,               # <-- added
+                'blocked_by_me': (f.action_user_id == current_user.user_id) if f.status == 'blocked' else False
             })
     form = FriendRequestForm()
     return render_template('userfriends.html', friends=friends_info, form=form)
@@ -1325,9 +1371,25 @@ def respond_friend_request(friendship_id, action):
                     db.session.add(FriendChatMap(user_id=uid, friend_id=fid, chat_id=chat.chat_id))
             db.session.commit()
     elif action == 'decline':
+        # treat decline as a block from the current user to the requester (directional)
+        user_ids = [friendship.user_id1, friendship.user_id2]
+        other_id = user_ids[0] if user_ids[1] == current_user.user_id else user_ids[1]
+
+        # create BlockedUser record or reactivate existing
+        block = BlockedUser.query.filter_by(blocker_id=current_user.user_id, blocked_id=other_id).first()
+        if not block:
+            block = BlockedUser(blocker_id=current_user.user_id, blocked_id=other_id, chat_id=None, active=True, created_at=datetime.utcnow())
+            db.session.add(block)
+        else:
+            block.active = True
+            block.removed_at = None
+            block.chat_id = None
+
+        # keep friendship.status for UI/history but do not rely on it for message delivery
         friendship.status = 'blocked'
-    friendship.action_user_id = current_user.user_id
-    db.session.commit()
+        friendship.action_user_id = current_user.user_id
+
+        db.session.commit()
     notif = Notification.query.filter_by(user_id=current_user.user_id, source_id=friendship_id, type='friend_request').first()
     if notif:
         notif.is_read = True
@@ -1364,18 +1426,99 @@ def unfriend(friendship_id):
     
     return redirect(request.referrer or url_for('friends'))
 
+
+def set_block(blocker_id, blocked_id, chat_id=None):
+    """Create or reactivate a BlockedUser record and set friendship.status='blocked'."""
+    block = BlockedUser.query.filter_by(blocker_id=blocker_id, blocked_id=blocked_id).first()
+    if not block:
+        block = BlockedUser(blocker_id=blocker_id, blocked_id=blocked_id, chat_id=chat_id, active=True, created_at=datetime.utcnow())
+        db.session.add(block)
+    else:
+        block.active = True
+        block.chat_id = chat_id
+        block.removed_at = None
+
+    user1, user2 = sorted([blocker_id, blocked_id])
+    friendship = Friendship.query.filter_by(user_id1=user1, user_id2=user2).first()
+    if friendship:
+        friendship.status = 'blocked'
+        friendship.action_user_id = blocker_id
+    db.session.commit()
+
+    # notify both parties (if connected) so clients update UI / leave rooms if needed
+    try:
+        other_sid = connected_sids.get(blocked_id)
+        if other_sid:
+            socketio.emit('blocked', {'chat_id': chat_id, 'by': blocker_id}, room=other_sid)
+        my_sid = connected_sids.get(blocker_id)
+        if my_sid:
+            socketio.emit('blocked', {'chat_id': chat_id, 'by': blocker_id}, room=my_sid)
+    except Exception:
+        db.session.rollback()
+
+def clear_block(blocker_id, blocked_id, chat_id=None):
+    """Clear an active BlockedUser record and notify both parties."""
+    try:
+        block = BlockedUser.query.filter_by(blocker_id=blocker_id, blocked_id=blocked_id, active=True).first()
+        if not block:
+            return False
+
+        block.active = False
+        block.removed_at = datetime.utcnow()
+        db.session.commit()
+
+        # If friendship row exists and was 'blocked', restore to 'accepted' (safe default)
+        user1, user2 = sorted([blocker_id, blocked_id])
+        friendship = Friendship.query.filter_by(user_id1=user1, user_id2=user2).first()
+        if friendship and friendship.status == 'blocked':
+            friendship.status = 'accepted'
+            friendship.action_user_id = None
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+
+        # Notify both users so clients can re-join rooms / update UI
+        try:
+            # use emit_to_user helper if present (safely fall back to socketio.emit)
+            try:
+                emit_to_user(blocker_id, 'unblocked', {'chat_id': chat_id, 'by': blocker_id, 'unblocked_id': blocked_id})
+                emit_to_user(blocked_id, 'unblocked', {'chat_id': chat_id, 'by': blocker_id, 'unblocked_id': blocked_id})
+            except NameError:
+                # emit_to_user not defined yet — fall back
+                socketio.emit('unblocked', {'chat_id': chat_id, 'by': blocker_id, 'unblocked_id': blocked_id}, room=connected_sids.get(blocker_id))
+                socketio.emit('unblocked', {'chat_id': chat_id, 'by': blocker_id, 'unblocked_id': blocked_id}, room=connected_sids.get(blocked_id))
+        except Exception:
+            # don't let notification failure break flow
+            pass
+
+        return True
+    except Exception:
+        db.session.rollback()
+        return False
+
 @app.route('/unblock_user_friend/<int:friend_id>', methods=['POST'])
 @user_required
 def unblock_user_friend(friend_id):
     user1, user2 = sorted([current_user.user_id, friend_id])
     friendship = Friendship.query.filter_by(user_id1=user1, user_id2=user2).first()
-    if friendship and friendship.status == 'blocked':
-        friendship.status = 'accepted'
-        friendship.action_user_id = current_user.user_id
-        db.session.commit()
-        # --- Ensure chat exists and both users are mapped ---
-        chat = get_strict_pair_chat(user1, user2)
-        if not chat:
+    if not friendship or friendship.status != 'blocked':
+        flash('No blocked friendship found.', 'warning')
+        return redirect(url_for('user_friends'))
+    if friendship.action_user_id != current_user.user_id:
+        flash('Only the user who blocked can unblock.', 'danger')
+        return redirect(url_for('user_friends'))
+
+    # find chat
+    chat = get_strict_pair_chat(user1, user2)
+    chat_id = chat.chat_id if chat else None
+
+    # clear block using centralized helper
+    clear_block(current_user.user_id, friend_id, chat_id=chat_id)
+
+    # ensure chat and mappings same as before (existing code)
+    if not chat:
+        try:
             chat = Chat()
             db.session.add(chat)
             db.session.commit()
@@ -1385,18 +1528,12 @@ def unblock_user_friend(friend_id):
             ])
             db.session.commit()
             add_friend_chat_map(user1, user2, chat.chat_id)
-        else:
-            for uid, fid in [(user1, user2), (user2, user1)]:
-                cp = ChatParticipant.query.filter_by(chat_id=chat.chat_id, user_id=uid).first()
-                if not cp:
-                    db.session.add(ChatParticipant(chat_id=chat.chat_id, user_id=uid))
-                mapping = FriendChatMap.query.filter_by(user_id=uid, friend_id=fid, chat_id=chat.chat_id).first()
-                if not mapping:
-                    db.session.add(FriendChatMap(user_id=uid, friend_id=fid, chat_id=chat.chat_id))
-            db.session.commit()
-        flash('User unblocked and added back as friend.', 'success')
-    else:
-        flash('No blocked friendship found.', 'warning')
+        except Exception:
+            db.session.rollback()
+            flash('Could not create chat after unblock.', 'warning')
+            return redirect(url_for('user_friends'))
+
+    flash('User unblocked and added back as friend.', 'success')
     return redirect(url_for('user_friends'))
 
 
@@ -1406,17 +1543,12 @@ def block_user(chat_id):
     chat = Chat.query.get(chat_id)
     if not chat:
         return 'Chat not found', 404
-    cp = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=current_user.user_id).first()
     other_cp = ChatParticipant.query.filter(ChatParticipant.chat_id == chat_id, ChatParticipant.user_id != current_user.user_id).first()
     if not other_cp:
-        return 'Chat participant not found', 404
-    user1, user2 = sorted([current_user.user_id, other_cp.user_id])
-    friendship = Friendship.query.filter_by(user_id1=user1, user_id2=user2).first()
-    if friendship:
-        friendship.status = 'blocked'
-        db.session.commit()
-        return '', 204
-    return 'Friendship not found', 404
+        return 'Other participant not found', 404
+    set_block(current_user.user_id, other_cp.user_id, chat_id=chat_id)
+    return '', 204
+
 
 @app.route('/is_blocked/<int:chat_id>')
 @user_required
@@ -1424,25 +1556,48 @@ def is_blocked_route(chat_id):
     cp = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=current_user.user_id).first()
     other_cp = ChatParticipant.query.filter(ChatParticipant.chat_id == chat_id, ChatParticipant.user_id != current_user.user_id).first()
     if not other_cp:
-        return jsonify({'is_blocked': False})
-    user1, user2 = sorted([current_user.user_id, other_cp.user_id])
-    friendship = Friendship.query.filter_by(user_id1=user1, user_id2=user2).first()
-    return jsonify({'is_blocked': friendship and friendship.status == 'blocked'})
+        return jsonify({'is_blocked': False, 'blocked_by_me': False})
+    # check blocked_users in both directions
+    b1 = BlockedUser.query.filter_by(blocker_id=current_user.user_id, blocked_id=other_cp.user_id, active=True).first()
+    b2 = BlockedUser.query.filter_by(blocker_id=other_cp.user_id, blocked_id=current_user.user_id, active=True).first()
+    if b1:
+        return jsonify({'is_blocked': True, 'blocked_by_me': True})
+    if b2:
+        return jsonify({'is_blocked': True, 'blocked_by_me': False})
+    return jsonify({'is_blocked': False, 'blocked_by_me': False})
+
+def is_blocked_by(blocker_id, blocked_id):
+    """Return True if blocker_id has an active block against blocked_id (blocker -> blocked)."""
+    return BlockedUser.query.filter_by(blocker_id=blocker_id, blocked_id=blocked_id, active=True).first() is not None
+
+def is_any_active_block_between(user_a, user_b):
+    """Return True if either user has an active block against the other."""
+    return BlockedUser.query.filter(
+        db.or_(
+            db.and_(BlockedUser.blocker_id == user_a, BlockedUser.blocked_id == user_b),
+            db.and_(BlockedUser.blocker_id == user_b, BlockedUser.blocked_id == user_a)
+        ),
+        BlockedUser.active == True
+    ).first() is not None
 
 
 @app.route('/unblock_user/<int:chat_id>', methods=['POST'])
 @user_required
 def unblock_user(chat_id):
     chat = Chat.query.get(chat_id)
-    cp = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=current_user.user_id).first()
+    if not chat:
+        return jsonify({'error': 'Chat not found'}), 404
     other_cp = ChatParticipant.query.filter(ChatParticipant.chat_id == chat_id, ChatParticipant.user_id != current_user.user_id).first()
-    user1, user2 = sorted([current_user.user_id, other_cp.user_id])
-    friendship = Friendship.query.filter_by(user_id1=user1, user_id2=user2).first()
-    if friendship:
-        friendship.status = 'accepted'
-        friendship.action_user_id = current_user.user_id
-        db.session.commit()
+    if not other_cp:
+        return jsonify({'error': 'Other participant not found'}), 404
+    # only allow the original blocker to clear their block
+    block = BlockedUser.query.filter_by(blocker_id=current_user.user_id, blocked_id=other_cp.user_id, active=True).first()
+    if not block:
+        return jsonify({'error': 'No active block by you'}), 403
+    clear_block(current_user.user_id, other_cp.user_id, chat_id=chat_id)
     return '', 204
+
+
 
 def get_strict_pair_chat(current_user_id, friend_id):
     """Finds chat with exactly two participants: current user and friend, and no one else."""
@@ -1479,14 +1634,99 @@ def get_loose_pair_chat(current_user_id, friend_id):
     return chat
 
 def add_friend_chat_map(user_id, friend_id, chat_id):
-    # Add both directions for easy lookup
-    for uid, fid in [(user_id, friend_id), (friend_id, user_id)]:
-        exists = FriendChatMap.query.filter_by(user_id=uid, friend_id=fid, chat_id=chat_id).first()
-        if not exists:
-            db.session.add(FriendChatMap(user_id=uid, friend_id=fid, chat_id=chat_id))
-    db.session.commit()
-
+    
+    try:
+        for uid, fid in [(user_id, friend_id), (friend_id, user_id)]:
+            mapping = FriendChatMap.query.filter_by(user_id=uid, friend_id=fid).first()
+            if mapping:
+                if mapping.chat_id != chat_id:
+                    mapping.chat_id = chat_id
+                    db.session.add(mapping)
+            else:
+                db.session.add(FriendChatMap(user_id=uid, friend_id=fid, chat_id=chat_id))
+        db.session.commit()
+    except IntegrityError:
+        # Concurrent insert race — rollback and try update path
+        db.session.rollback()
+        try:
+            for uid, fid in [(user_id, friend_id), (friend_id, user_id)]:
+                mapping = FriendChatMap.query.filter_by(user_id=uid, friend_id=fid).first()
+                if mapping:
+                    if mapping.chat_id != chat_id:
+                        mapping.chat_id = chat_id
+                        db.session.add(mapping)
+                else:
+                    db.session.add(FriendChatMap(user_id=uid, friend_id=fid, chat_id=chat_id))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+    except Exception:
+        db.session.rollback()
 # --- Messaging ---
+@app.route('/api/me/pubkey', methods=['POST'])
+@user_required
+def api_set_user_pubkey():
+    data = request.get_json(silent=True) or {}
+    spki_b64 = (data.get('spki_b64') or '').strip()
+    alg = (data.get('alg') or 'P-256').strip()
+    if not spki_b64:
+        return jsonify({'ok': False, 'error': 'missing_key'}), 400
+
+    row = UserPublicKey.query.get(current_user.user_id)
+    if row:
+        row.public_key_spki_b64 = spki_b64
+        row.alg = alg
+    else:
+        row = UserPublicKey(user_id=current_user.user_id, public_key_spki_b64=spki_b64, alg=alg)
+        db.session.add(row)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+@app.route('/api/users/<int:user_id>/pubkey', methods=['GET'])
+@user_required
+def api_get_user_pubkey(user_id):
+    row = UserPublicKey.query.get(user_id)
+    if not row:
+        return jsonify({'ok': False, 'error': 'no_key'}), 404
+    return jsonify({'ok': True, 'alg': row.alg, 'spki_b64': row.public_key_spki_b64})
+
+@app.route('/api/chats/<int:chat_id>/key_envelope', methods=['POST'])
+@user_required
+def api_put_chat_envelope(chat_id):
+    data = request.get_json(silent=True) or {}
+    envelope_b64 = (data.get('envelope_b64') or '').strip()
+    key_version = int(data.get('key_version') or 1)
+    if not envelope_b64:
+        return jsonify({'ok': False, 'error': 'missing_envelope'}), 400
+
+    # authorize: must be a participant
+    cp = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=current_user.user_id, is_in_chat=True).first()
+    if not cp:
+        return jsonify({'ok': False, 'error': 'not_in_chat'}), 403
+
+    row = ChatKeyEnvelope.query.filter_by(chat_id=chat_id, user_id=current_user.user_id, key_version=key_version).first()
+    if row:
+        row.envelope_b64 = envelope_b64
+    else:
+        row = ChatKeyEnvelope(chat_id=chat_id, user_id=current_user.user_id, key_version=key_version, envelope_b64=envelope_b64)
+        db.session.add(row)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+@app.route('/api/chats/<int:chat_id>/key_envelope', methods=['GET'])
+@user_required
+def api_get_chat_envelope(chat_id):
+    key_version = request.args.get('version', type=int)
+    q = ChatKeyEnvelope.query.filter_by(chat_id=chat_id, user_id=current_user.user_id)
+    if key_version:
+        q = q.filter_by(key_version=key_version)
+    row = q.order_by(ChatKeyEnvelope.key_version.desc()).first()
+    if not row:
+        return jsonify({'ok': False, 'error': 'no_envelope'}), 404
+    return jsonify({'ok': True, 'key_version': row.key_version, 'envelope_b64': row.envelope_b64})
+
+
+
 @app.route('/messages', methods=['GET'])
 @user_required
 def messages():
@@ -1511,7 +1751,7 @@ def messages():
     # Get all accepted friendships involving the current user
     friendships = Friendship.query.filter(
         ((Friendship.user_id1 == current_user.user_id) | (Friendship.user_id2 == current_user.user_id)),
-        Friendship.status == 'accepted'
+        Friendship.status.in_(['accepted', 'blocked'])
     ).all()
 
         # Get friend user IDs
@@ -1520,55 +1760,74 @@ def messages():
         for f in friendships
     ]
     friends = User.query.filter(User.user_id.in_(friend_ids)).all()
-
-
-    # Build sidebar list from chat participants, not all friends
-    sidebar_friends = []
-    for friend in friends:
-        mapping = FriendChatMap.query.filter_by(user_id=current_user.user_id, friend_id=friend.user_id).first()
-        if mapping:
-            cp = ChatParticipant.query.filter_by(chat_id=mapping.chat_id, user_id=current_user.user_id).first()
-            if cp:
-                sidebar_friends.append(friend)
-
-    sidebar_friends_info = [
-        {
-            'user_id': f.user_id,
-            'username': f.username,
-            'profile_pic_url': f.profile_pic_url or url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp'),
-            'is_online': f.current_status == 'online',
-            'bio': f.bio
-        }
-        for f in sidebar_friends
-    ]
-
-    my_chat_ids = [c.chat_id for c in ChatParticipant.query.filter_by(user_id=current_user.user_id).all()]
-    friend_chat_ids = {}
-    for friend in friends:
-        mapping = FriendChatMap.query.filter_by(user_id=current_user.user_id, friend_id=friend.user_id).first()
-        if mapping and mapping.chat_id in my_chat_ids:
-            friend_chat_ids[friend.user_id] = mapping.chat_id
-        else:
-            friend_chat_ids[friend.user_id] = ''
-
     
+    # Build sidebar from active ChatParticipant rows for current user.
+    # This ensures deleted chats (no ChatParticipant for current user) do not reappear in the sidebar.
+    friend_chat_ids = {}
+    sidebar_friends_info = []
+    my_cps = ChatParticipant.query.filter_by(user_id=current_user.user_id, is_in_chat=True).all()
+
+    seen_friend_ids = set()
+    for cp in my_cps:
+        # find the other participant in the chat
+        other_cp = ChatParticipant.query.filter(
+            ChatParticipant.chat_id == cp.chat_id,
+            ChatParticipant.user_id != current_user.user_id
+        ).first()
+        if not other_cp:
+            continue
+        friend_user = User.query.get(other_cp.user_id)
+        if not friend_user:
+            continue
+
+        # Show only the canonical (mapped) chat for this pair.
+        mapping = FriendChatMap.query.filter_by(
+            user_id=current_user.user_id, friend_id=friend_user.user_id
+        ).first()
+        if mapping and mapping.chat_id and mapping.chat_id != cp.chat_id:
+            # This CP is not the mapped chat for this pair -> skip (prevents ghost entries)
+            continue
+
+        if friend_user.user_id in seen_friend_ids:
+            continue
+        seen_friend_ids.add(friend_user.user_id)
+
+        blocked_by_me = BlockedUser.query.filter_by(blocker_id=current_user.user_id, blocked_id=friend_user.user_id, active=True).first() is not None
+        blocked_by_other = BlockedUser.query.filter_by(blocker_id=friend_user.user_id, blocked_id=current_user.user_id, active=True).first() is not None
+
+        friend_chat_ids[friend_user.user_id] = cp.chat_id
+        sidebar_friends_info.append({
+            'user_id': friend_user.user_id,
+            'username': friend_user.username,
+            'profile_pic_url': friend_user.profile_pic_url or url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp'),
+            'is_online': friend_user.current_status == 'online',
+            'bio': friend_user.bio,
+            'chat_id': cp.chat_id,
+            'is_blocked': blocked_by_me or blocked_by_other,
+            'blocked_by_me': blocked_by_me,
+            'blocked_by_other': blocked_by_other
+       })
+        
     friends_to_readd = []
     for friend in friends:
-        mapping = FriendChatMap.query.filter_by(user_id=current_user.user_id, friend_id=friend.user_id).first()
-        if mapping:
-            cp = ChatParticipant.query.filter_by(chat_id=mapping.chat_id, user_id=current_user.user_id).first()
-            if not cp:
-                friends_to_readd.append(friend)
+        friend_chat_ids_sq = db.session.query(ChatParticipant.chat_id).filter_by(user_id=friend.user_id).subquery()
+        cp = ChatParticipant.query.filter(
+            ChatParticipant.user_id == current_user.user_id,
+            ChatParticipant.chat_id.in_(friend_chat_ids_sq)
+        ).first()
+        if not cp:
+            friends_to_readd.append(friend)
 
     friends_to_readd_info = [
-        {
-            'user_id': f.user_id,
-            'username': f.username,
-            'profile_pic_url': f.profile_pic_url or url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp')
-        }
-        for f in friends_to_readd
-    ]
+         {
+             'user_id': fr.user_id,
+             'username': fr.username,
+             'profile_pic_url': fr.profile_pic_url or url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp')
+         }
+         for fr in friends_to_readd
+     ]
 
+    
     print("friends_to_readd:", [f['username'] for f in friends_to_readd_info])
 
     my_chat_ids = list(friend_chat_ids.values())
@@ -1579,26 +1838,69 @@ def messages():
 @app.route('/create_chat/<int:friend_id>', methods=['POST'])
 @user_required
 def create_chat(friend_id):
-    chat_id = readd_friend_chat(current_user.user_id, friend_id)
-    return jsonify({'chat_id': chat_id})
+    try:
+        chat_id = readd_friend_chat(current_user.user_id, friend_id)
+        friend = User.query.get(friend_id)
+        return jsonify({
+            'chat_id': chat_id,
+            'friend': {
+                'user_id': friend.user_id,
+                'username': friend.username,
+                'profile_pic_url': friend.profile_pic_url or url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp')
+            }
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error in create_chat: {e}")
+        return jsonify({'error': 'internal'}), 500
+
 
 
 def readd_friend_chat(current_user_id, friend_id):
     mapping = FriendChatMap.query.filter_by(user_id=current_user_id, friend_id=friend_id).first()
     if mapping:
-        chat_id = mapping.chat_id
-        cp = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=current_user_id).first()
-        if not cp:
-            db.session.add(ChatParticipant(chat_id=chat_id, user_id=current_user_id, cleared_at=None))
-            db.session.commit()
-        return chat_id
+        # Validate that the chat actually exists
+        mapping = FriendChatMap.query.filter_by(user_id=current_user_id, friend_id=friend_id).first()
+        if mapping:
+            # If mapped chat exists and chat still exists, ensure participant exists for current user
+            chat = Chat.query.get(mapping.chat_id) if mapping.chat_id else None
+            if chat:
+                cp = ChatParticipant.query.filter_by(chat_id=chat.chat_id, user_id=current_user_id).first()
+                if not cp:
+                    # no participant row at all -> add one
+                    db.session.add(ChatParticipant(chat_id=chat.chat_id, user_id=current_user_id, cleared_at=func.now(), is_in_chat=True))
+                    db.session.commit()
+                else:
+                    # previously hidden: mark visible again and set cleared_at so old messages stay hidden
+                    if not getattr(cp, 'is_in_chat', True):
+                        cp.is_in_chat = True
+                        cp.cleared_at = func.now()
+                        db.session.add(cp)
+                        db.session.commit()
+                # ensure mapping for both directions is consistent
+                add_friend_chat_map(current_user_id, friend_id, chat.chat_id)
+                return chat.chat_id
+        # mapping pointed to missing chat -> create new chat and update existing mappings
+        new_chat = Chat()
+        db.session.add(new_chat)
+        db.session.commit()
+        db.session.add_all([
+            ChatParticipant(chat_id=new_chat.chat_id, user_id=current_user_id, cleared_at=None, is_in_chat=True),
+            ChatParticipant(chat_id=new_chat.chat_id, user_id=friend_id, cleared_at=None, is_in_chat=True)
+        ])
+        db.session.commit()
+        add_friend_chat_map(current_user_id, friend_id, new_chat.chat_id)
+        return new_chat.chat_id
     else:
-        # Create new chat and mapping
+        # No mapping exists -> create chat, participants and mapping (visible)
         chat = Chat()
         db.session.add(chat)
         db.session.commit()
-        db.session.add(ChatParticipant(chat_id=chat.chat_id, user_id=current_user_id, cleared_at=None))
-        db.session.add(ChatParticipant(chat_id=chat.chat_id, user_id=friend_id, cleared_at=None))
+        db.session.add_all([
+            ChatParticipant(chat_id=chat.chat_id, user_id=current_user_id, cleared_at=None, is_in_chat=True),
+            ChatParticipant(chat_id=chat.chat_id, user_id=friend_id, cleared_at=None, is_in_chat=True)
+        ])
         db.session.commit()
         add_friend_chat_map(current_user_id, friend_id, chat.chat_id)
         return chat.chat_id
@@ -1607,11 +1909,75 @@ def readd_friend_chat(current_user_id, friend_id):
 @socketio.on('join_chat')
 def handle_join_chat(data):
     if not current_user.is_authenticated:
-        print("Anonymous user tried to join chat.")
-        return  # Optionally emit an error event here
-    print(f"User {current_user.user_id} joined chat {data['chat_id']}")
-    chat_id = data['chat_id']
-    join_room(str(chat_id))
+        return
+
+    chat_id = data.get('chat_id')
+    friend_id = data.get('friend_id')
+
+    # If client supplied friend_id, resolve mapping but DO NOT auto-create/re-add participant
+    if not chat_id and friend_id:
+        mapping = FriendChatMap.query.filter_by(user_id=current_user.user_id, friend_id=int(friend_id)).first()
+        if mapping:
+            # only allow join if the current user is still a ChatParticipant
+            cp = ChatParticipant.query.filter_by(chat_id=mapping.chat_id, user_id=current_user.user_id).first()
+            if cp:
+                chat_id = mapping.chat_id
+            else:
+                emit('join_error', {'error': 'deleted_for_you', 'message': 'Chat removed on your side. Use Add-chat to re-create.'}, room=request.sid)
+                return
+        else:
+            emit('join_error', {'error': 'no_mapping', 'message': 'No chat mapping exists. Use Add-chat to create.'}, room=request.sid)
+            return
+
+    try:
+        chat_id = int(chat_id)
+    except Exception:
+        emit('join_error', {'error': 'invalid_chat_id'}, room=request.sid)
+        return
+
+    chat = Chat.query.get(chat_id)
+    if not chat:
+        emit('join_error', {'chat_id': chat_id, 'error': 'chat_not_found'}, room=request.sid)
+        return
+
+    cp = ChatParticipant.query.filter_by(chat_id=chat.chat_id, user_id=current_user.user_id).first()
+    if not cp or not getattr(cp, 'is_in_chat', True):
+         emit('join_error', {'chat_id': chat.chat_id, 'error': 'not_a_participant'}, room=request.sid)
+         return
+
+    join_room(str(chat.chat_id))
+    emit('joined_chat', {'chat_id': chat.chat_id}, room=request.sid)
+    print(f"User {current_user.user_id} joined room {chat.chat_id} (sid {request.sid})")
+
+@socketio.on('leave_chat')
+def handle_leave_chat(data):
+    if not current_user.is_authenticated:
+        return
+    try:
+        chat_id = int(data.get('chat_id'))
+    except Exception:
+        return
+    leave_room(str(chat_id))
+    emit('left_chat', {'chat_id': chat_id}, room=request.sid)
+    print(f"User {current_user.user_id} left room {chat_id} (sid {request.sid})")
+
+def emit_to_user(user_id, event, payload):
+    """Emit an event to all connected sids for a user (defensive)."""
+    sids = connected_sids.get(user_id)
+    if not sids:
+        return
+    # handle single-sid or set-of-sids
+    if isinstance(sids, (list, set)):
+        for sid in list(sids):
+            try:
+                socketio.emit(event, payload, room=sid)
+            except Exception:
+                continue
+    else:
+        try:
+            socketio.emit(event, payload, room=sids)
+        except Exception:
+            pass
 
 
 @socketio.on('send_message')
@@ -1619,38 +1985,61 @@ def handle_send_message(data):
     if not current_user.is_authenticated:
         print("Anonymous user tried to send a message.")
         return
-    chat_id = int(data['chat_id'])
+    
+    encrypted_message = data.get('message')
+    if not encrypted_message or (isinstance(encrypted_message, str) and encrypted_message.strip() == ""):
+        # Ignore empty messages
+        return
+    
+    try:
+        chat_id = int(data.get('chat_id'))
+    except Exception:
+        return
+
     chat = Chat.query.get(chat_id)
+    if not chat:
+        return
+
     participants = [cp.user_id for cp in chat.participants]
     if current_user.user_id not in participants:
         return
-
-    other_user_id = [uid for uid in participants if uid != current_user.user_id][0]
-    user1, user2 = sorted(participants)
-    friendship = Friendship.query.filter_by(user_id1=user1, user_id2=user2).first()
-
-    encrypted_message = data['message']
+    
     sender_id = current_user.user_id
+    other_user_id = next((uid for uid in participants if uid != current_user.user_id), None)
+    if other_user_id is None:
+        return
+    
+
+    # New: if either direction has an active block, silently drop for both ends
+    if is_any_active_block_between(sender_id, other_user_id):
+        msg = Message(
+            chat_id=chat_id,
+            sender_id=sender_id,
+            message_text=encrypted_message,
+            is_deleted_by_sender=True,
+            is_deleted_by_receiver=True
+        )
+        db.session.add(msg)
+        db.session.commit()
+        # Do not emit to sender or recipient
+        socketio.emit('send_error', {'chat_id': chat_id, 'reason': 'blocked'}, room=request.sid)
+        print(f"send_message: blocked {sender_id}<->{other_user_id} chat {chat_id}")
+        return
+
+    # No block: deliver normally
     msg = Message(chat_id=chat_id, sender_id=sender_id, message_text=encrypted_message)
     db.session.add(msg)
     db.session.commit()
 
-    emit('receive_message', {
+    payload = {
+        'chat_id': msg.chat_id,
         'message_id': msg.message_id,
-        'chat_id': chat_id,
-        'sender_id': sender_id,
-        'message_text': encrypted_message,
+        'sender_id': msg.sender_id,
+        'message_text': msg.message_text,
         'sent_at': msg.sent_at.strftime('%H:%M')
-    }, room=request.sid)
+    }
+    socketio.emit('receive_message', payload, room=str(msg.chat_id))
 
-    if not (friendship and friendship.status == 'blocked'):
-        emit('receive_message', {
-            'message_id': msg.message_id,
-            'chat_id': chat_id,
-            'sender_id': sender_id,
-            'message_text': encrypted_message,
-            'sent_at': msg.sent_at.strftime('%H:%M')
-        }, room=str(chat_id), include_self= False)
 
 def is_blocked(user_id1, user_id2):
     user1, user2 = sorted([user_id1, user_id2])
@@ -1659,19 +2048,51 @@ def is_blocked(user_id1, user_id2):
 
 @socketio.on('delete_message')
 def handle_delete_message(data):
-    message_id = data['message_id']
+    if not current_user.is_authenticated:
+        return
+    message_id = data.get('message_id')
     msg = Message.query.get(message_id)
-    if msg and current_user.is_authenticated:
-        # Mark as deleted for sender
-        if msg.sender_id != current_user.user_id:
-            return
+    if not msg:
+        return
+
+    # authorize: must be in the chat
+    cp = ChatParticipant.query.filter_by(chat_id=msg.chat_id, user_id=current_user.user_id, is_in_chat=True).first()
+    if not cp:
+        return
+
+    # Sender can delete for everyone; receiver deletes only for themselves.
+    if msg.sender_id == current_user.user_id:
+        # Delete for both sides
         msg.is_deleted_by_sender = True
         msg.is_deleted_by_receiver = True
-        msg.message_text = "Message deleted"  
+        msg.message_text = "Message deleted"
+        db.session.add(msg)
         db.session.commit()
-        emit('message_deleted', {'message_id': message_id}, room=str(msg.chat_id))
 
+        socketio.emit('message_deleted', {
+            'chat_id': msg.chat_id,
+            'message_id': msg.message_id,
+            'scope': 'everyone'
+        }, room=str(msg.chat_id))
+    else:
+        # Delete only for me (the receiver). Do NOT change message_text.
+        msg.is_deleted_by_receiver = True
+        db.session.add(msg)
+        db.session.commit()
 
+        # Notify only the deleting user’s sockets
+        try:
+            emit_to_user(current_user.user_id, 'message_deleted', {
+                'chat_id': msg.chat_id,
+                'message_id': msg.message_id,
+                'scope': 'me'
+            })
+        except NameError:
+            socketio.emit('message_deleted', {
+                'chat_id': msg.chat_id,
+                'message_id': msg.message_id,
+                'scope': 'me'
+            }, room=request.sid)
 
 
 @app.route('/get_chat_id/<int:friend_id>')
@@ -1680,47 +2101,55 @@ def get_chat_id(friend_id):
     # Try to find existing chat
     chat = get_strict_pair_chat(current_user.user_id, friend_id)
     if not chat:
-        # Create new chat
-        chat = Chat()
-        db.session.add(chat)
-        db.session.commit()
-        db.session.add_all([
-            ChatParticipant(chat_id=chat.chat_id, user_id=current_user.user_id),
-            ChatParticipant(chat_id=chat.chat_id, user_id=friend_id)
-        ])
-        db.session.commit()
+        # No active chat for current user — client should present "Add chat" option
+        return jsonify({'chat_id': None})
     return jsonify({'chat_id': chat.chat_id})
 
 
 @app.route('/chat_history/<int:friend_id>')
 @user_required
 def chat_history(friend_id):
-    # Find the chat_id for 2 users/ at least one participant so messages stay even when one user deletes the chat
-    chat = get_strict_pair_chat(current_user.user_id, friend_id)
+    me = current_user.user_id
+    chat = get_strict_pair_chat(me, friend_id)  # your helper
     if not chat:
         return jsonify([])
-    
-    # In chat_history, filter messages:
-    cp = ChatParticipant.query.filter_by(chat_id=chat.chat_id, user_id=current_user.user_id).first()
+
+    cp = ChatParticipant.query.filter_by(chat_id=chat.chat_id, user_id=me).first()
     cleared_at = cp.cleared_at if cp and cp.cleared_at else datetime.min
-    
-    messages = Message.query.filter(Message.chat_id == chat.chat_id, Message.sent_at > cleared_at).order_by(Message.sent_at).all()
-    return jsonify([{
-        'message_id': m.message_id,
-        'sender_id': m.sender_id,
-        'message_text': m.message_text,
-        'sent_at': m.sent_at.strftime('%H:%M'),
-        'is_deleted_by_sender': m.is_deleted_by_sender,
-        'is_deleted_by_receiver': m.is_deleted_by_receiver
-    } for m in messages])
+
+    messages = Message.query.filter(
+        Message.chat_id == chat.chat_id,
+        Message.sent_at >= cleared_at
+    ).order_by(Message.sent_at.asc()).all()
+
+    out = []
+    for m in messages:
+        i_am_sender = (m.sender_id == me)
+        deleted_for_everyone = (m.is_deleted_by_sender and m.is_deleted_by_receiver)
+        deleted_for_me = (
+            deleted_for_everyone or
+            (m.is_deleted_by_sender and i_am_sender) or
+            (m.is_deleted_by_receiver and not i_am_sender)
+        )
+        out.append({
+            'message_id': m.message_id,
+            'sender_id': m.sender_id,
+            'message_text': "Message deleted" if deleted_for_me else m.message_text,
+            'sent_at': m.sent_at.strftime('%H:%M'),
+            'is_deleted_by_sender': m.is_deleted_by_sender,
+            'is_deleted_by_receiver': m.is_deleted_by_receiver,
+            'deleted_for_me': deleted_for_me
+        })
+    return jsonify(out)
 
 
 @app.route('/clear_chat/<int:chat_id>', methods=['POST'])
 @user_required
 def clear_chat(chat_id):
-    cp = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=current_user.user_id).first()
-    if cp:
-        cp.cleared_at = datetime.utcnow()
+    updated = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=current_user.user_id).update(
+        { ChatParticipant.cleared_at: func.now() }
+    )
+    if updated:
         db.session.commit()
     return '', 204
 
@@ -1728,16 +2157,41 @@ def clear_chat(chat_id):
 @app.route('/delete_chat/<int:chat_id>', methods=['POST'])
 @user_required
 def delete_chat(chat_id):
-    cp = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=current_user.user_id).first()
-    if cp:
-        db.session.delete(cp)
+    try:
+        cp = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=current_user.user_id).first()
+        if not cp:
+            print(f"DEBUG delete_chat: no ChatParticipant for user {current_user.user_id} chat {chat_id}")
+            return '', 204
+
+        # Soft-hide for current user: mark not in-chat and update cleared_at so history is hidden
+        cp.is_in_chat = False
+        cp.cleared_at = func.now()
+        db.session.add(cp)
         db.session.commit()
-    return '', 204
+
+        print(f"DEBUG: User {current_user.user_id} hid chat {chat_id} (is_in_chat=False)")
+
+        # inspect remaining participants for debugging
+        remaining = ChatParticipant.query.filter_by(chat_id=chat_id).all()
+        rem_user_ids = [r.user_id for r in remaining]
+        mappings = FriendChatMap.query.filter_by(chat_id=chat_id).all()
+        mapping_info = [(m.user_id, m.friend_id, m.chat_id) for m in mappings]
+
+        print(f"DEBUG: User {current_user.user_id} deleted their ChatParticipant for chat {chat_id}")
+        print(f"DEBUG: Remaining participants for chat {chat_id}: {rem_user_ids}")
+        print(f"DEBUG: FriendChatMap rows pointing at chat {chat_id}: {mapping_info}")
+
+        return '', 204
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"ERROR delete_chat: {e}")
+        return jsonify({'error': 'internal'}), 500
 
 @app.route('/api/friends_to_readd')
 @user_required
 def api_friends_to_readd():
-    # Get all accepted friendships involving the current user
+    # accepted friends
     friendships = Friendship.query.filter(
         ((Friendship.user_id1 == current_user.user_id) | (Friendship.user_id2 == current_user.user_id)),
         Friendship.status == 'accepted'
@@ -1747,14 +2201,20 @@ def api_friends_to_readd():
         for f in friendships
     ]
     friends = User.query.filter(User.user_id.in_(friend_ids)).all()
+
     friends_to_readd = []
     for friend in friends:
         mapping = FriendChatMap.query.filter_by(user_id=current_user.user_id, friend_id=friend.user_id).first()
-        if mapping:
-            cp = ChatParticipant.query.filter_by(chat_id=mapping.chat_id, user_id=current_user.user_id).first()
-            if not cp:
-                friends_to_readd.append(friend)
-    friends_to_readd_info = [
+        if not mapping or not mapping.chat_id:
+            # No mapped chat history for this pair -> skip (this endpoint is for re-adding mapped chats)
+            continue
+
+        # only include if current user is NOT a participant of the mapped chat
+        cp = ChatParticipant.query.filter_by(chat_id=mapping.chat_id, user_id=current_user.user_id).first()
+        if not cp or not getattr(cp, 'is_in_chat', True):
+            friends_to_readd.append(friend)
+
+    payload = [
         {
             'user_id': f.user_id,
             'username': f.username,
@@ -1762,7 +2222,7 @@ def api_friends_to_readd():
         }
         for f in friends_to_readd
     ]
-    return jsonify(friends_to_readd_info)
+    return jsonify(payload)
 
 # --- Admin Routes ---
 @app.route('/users_dashboard')

@@ -2,7 +2,8 @@
 #Basic signup form - name, password + phone no.
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField, IntegerField,SelectField,TextAreaField,HiddenField
-from wtforms.validators import DataRequired, Length, Email, EqualTo,ValidationError
+from wtforms.validators import DataRequired, Length, Email, EqualTo,ValidationError, Optional
+from flask_wtf.file import FileField, FileAllowed, FileRequired
 from flask_wtf.recaptcha import RecaptchaField # Import RecaptchaField
 from wtforms.fields import DateTimeLocalField, BooleanField
 
@@ -83,12 +84,27 @@ class UpdateUserStatusForm(FlaskForm):
         ],
         render_kw={"class": "form-select"}  # Optional: Add Bootstrap class for styling
     )
-    
+
+# --- create post form ---
+class CreatePostForm(FlaskForm):
+    #title = StringField('Title', validators=[DataRequired(), Length(max=50)])
+    post_content = TextAreaField('Content', validators=[DataRequired(), Length(max=300)])
+    image = FileField('Upload Image', validators=[Optional(), FileAllowed(['jpg', 'jpeg', 'png'], 'Images only!')])
+    submit = SubmitField('Create Post')
+
+
     # CAPTCHA field for security
     recaptcha = RecaptchaField()
     
     # Submit button
     submit = SubmitField('Submit', render_kw={"class": "btn btn-primary"})
+
+# --- edit profile form ---
+
+class EditProfileForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired(), Length(min=2, max=50)])
+    profile_pic = FileField('Profile Picture', validators=[FileAllowed(['jpg', 'jpeg', 'png'], 'Images only!')])
+    submit = SubmitField('Save Changes')
 
 
 class UpdateReportStatusForm(FlaskForm):

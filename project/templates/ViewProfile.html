@@ -689,6 +689,16 @@
         transform: scale(1.1);
     }
 
+    /* Like button styles - no animations */
+    .like-icon.liked,
+    .list-like-icon.liked {
+        color: #ed4956 !important;
+    }
+
+    .post-action-btn.liked {
+        color: #ed4956 !important;
+    }
+
     /* Responsive design with Gestalt principles */
     @media (max-width: 1024px) {
         .profile-container {
@@ -1054,7 +1064,7 @@ const postsData = {
 
 let currentPostId = null;
 
-// Add this function to handle image loading errors
+// Handle image loading errors
 function handleImageError(img, isPostImage = false) {
     img.onerror = null; // Prevent infinite loop
     
@@ -1070,7 +1080,7 @@ function handleImageError(img, isPostImage = false) {
     }
 }
 
-// Like/Unlike functionality
+// Like/Unlike functionality - no animations
 async function toggleLike(postId, event) {
     event.stopPropagation(); // Prevent modal from opening
     
@@ -1136,9 +1146,6 @@ async function toggleLike(postId, event) {
             postsData[postId].likeCount = data.like_count;
             postsData[postId].isLiked = data.is_liked;
             
-            // Show feedback
-            showLikeFeedback(data.action === 'liked');
-            
         } else {
             console.error('Error toggling like:', data.message);
             showToast('Error updating like', 'error');
@@ -1147,29 +1154,6 @@ async function toggleLike(postId, event) {
         console.error('Error toggling like:', error);
         showToast('Error updating like', 'error');
     }
-}
-
-// Show like feedback animation
-function showLikeFeedback(isLiked) {
-    const feedback = document.createElement('div');
-    feedback.className = 'like-feedback';
-    feedback.innerHTML = isLiked ? '❤️' : '💔';
-    feedback.style.cssText = `
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        font-size: 48px;
-        z-index: 9999;
-        pointer-events: none;
-        animation: likeFeedback 0.6s ease-out;
-    `;
-    
-    document.body.appendChild(feedback);
-    
-    setTimeout(() => {
-        document.body.removeChild(feedback);
-    }, 600);
 }
 
 // Show toast notification
@@ -1186,20 +1170,16 @@ function showToast(message, type = 'info') {
         padding: 12px 20px;
         border-radius: 8px;
         z-index: 9999;
-        animation: slideIn 0.3s ease-out;
     `;
     
     document.body.appendChild(toast);
     
     setTimeout(() => {
-        toast.style.animation = 'slideOut 0.3s ease-in';
-        setTimeout(() => {
-            document.body.removeChild(toast);
-        }, 300);
+        document.body.removeChild(toast);
     }, 3000);
 }
 
-// View switching functionality with Gestalt principles
+// View switching functionality
 document.addEventListener('DOMContentLoaded', function() {
     const postsTabs = document.querySelectorAll('.posts-tab');
     const postsGrid = document.getElementById('postsGrid');
@@ -1207,78 +1187,38 @@ document.addEventListener('DOMContentLoaded', function() {
     const viewToggle = document.getElementById('viewToggle');
     const viewBtns = document.querySelectorAll('.view-btn');
 
-    // Tab switching - Common Fate principle
+    // Tab switching
     postsTabs.forEach(tab => {
         tab.addEventListener('click', function() {
             const viewType = this.dataset.view;
             
-            // Update active tab with visual feedback
-            postsTabs.forEach(t => {
-                t.classList.remove('active');
-                t.style.transform = 'scale(1)';
-            });
+            // Update active tab
+            postsTabs.forEach(t => t.classList.remove('active'));
             this.classList.add('active');
-            this.style.transform = 'scale(1.02)';
             
-            // Show/hide appropriate view with smooth transition
+            // Show/hide appropriate view
             if (viewType === 'grid') {
                 postsGrid.style.display = 'grid';
                 postsList.classList.remove('active');
                 viewToggle.style.display = 'flex';
-                
-                // Animate grid items - Common Fate
-                const gridItems = postsGrid.querySelectorAll('.post-item');
-                gridItems.forEach((item, index) => {
-                    setTimeout(() => {
-                        item.style.opacity = '0';
-                        item.style.transform = 'scale(0.8)';
-                        setTimeout(() => {
-                            item.style.opacity = '1';
-                            item.style.transform = 'scale(1)';
-                        }, 50);
-                    }, index * 30);
-                });
             } else {
                 postsGrid.style.display = 'none';
                 postsList.classList.add('active');
                 viewToggle.style.display = 'none';
-                
-                // Animate list items - Good Continuation
-                const listItems = postsList.querySelectorAll('.post-list-item');
-                listItems.forEach((item, index) => {
-                    setTimeout(() => {
-                        item.style.opacity = '0';
-                        item.style.transform = 'translateY(20px)';
-                        setTimeout(() => {
-                            item.style.opacity = '1';
-                            item.style.transform = 'translateY(0)';
-                        }, 50);
-                    }, index * 100);
-                });
             }
-            
-            // Reset tab scale after animation
-            setTimeout(() => {
-                this.style.transform = 'scale(1)';
-            }, 200);
         });
     });
 
-    // Grid size switching - Similarity principle
+    // Grid size switching
     viewBtns.forEach(btn => {
         btn.addEventListener('click', function() {
             const size = this.dataset.size;
             
-            // Update active button with enhanced feedback
-            viewBtns.forEach(b => {
-                b.classList.remove('active');
-                b.style.transform = 'scale(1)';
-            });
+            // Update active button
+            viewBtns.forEach(b => b.classList.remove('active'));
             this.classList.add('active');
-            this.style.transform = 'scale(1.05)';
             
-            // Update grid class with transition
-            postsGrid.style.transition = 'all 0.3s ease';
+            // Update grid class
             postsGrid.classList.remove('compact', 'ultra-compact');
             
             if (size === 'compact') {
@@ -1286,29 +1226,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } else if (size === 'ultra-compact') {
                 postsGrid.classList.add('ultra-compact');
             }
-            
-            // Animate grid reorganization - Closure principle
-            const gridItems = postsGrid.querySelectorAll('.post-item');
-            gridItems.forEach((item, index) => {
-                setTimeout(() => {
-                    item.style.transform = 'scale(0.9)';
-                    setTimeout(() => {
-                        item.style.transform = 'scale(1)';
-                    }, 100);
-                }, index * 20);
-            });
-            
-            // Reset button scale
-            setTimeout(() => {
-                this.style.transform = 'scale(1)';
-            }, 200);
         });
-    });
-
-    // Add initial transition styles
-    const allItems = document.querySelectorAll('.post-item, .post-list-item');
-    allItems.forEach(item => {
-        item.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
     });
 
     // Setup image error handling
@@ -1319,44 +1237,21 @@ document.addEventListener('DOMContentLoaded', function() {
         };
     });
     
-    // Handle post images
     const postImages = document.querySelectorAll('.post-image');
     postImages.forEach(img => {
         img.onerror = function() {
             handleImageError(this, true);
         };
     });
-
-    // Add focus styles for better accessibility
-    const postItems = document.querySelectorAll('.post-item');
-    postItems.forEach(item => {
-        item.setAttribute('tabindex', '0');
-        item.addEventListener('focus', function() {
-            this.style.outline = '3px solid #0095f6';
-            this.style.outlineOffset = '2px';
-        });
-        item.addEventListener('blur', function() {
-            this.style.outline = 'none';
-        });
-    });
 });
 
-// Update the openPostModal function with like information - NO EDIT FUNCTIONALITY
+// Modal functions
 function openPostModal(postId) {
-    console.log('Opening modal for post:', postId);
-    console.log('Posts data:', postsData);
-    
     const post = postsData[postId];
-    if (!post) {
-        console.error('Post not found:', postId);
-        return;
-    }
-    
-    console.log('Post data:', post);
+    if (!post) return;
     
     currentPostId = postId;
     
-    // Get modal elements with error checking
     const modal = document.getElementById('postModal');
     const modalText = document.getElementById('modalText');
     const modalDate = document.getElementById('modalDate');
@@ -1365,13 +1260,9 @@ function openPostModal(postId) {
     const imageContainer = document.getElementById('modalImageContainer');
     const modalLikeIcon = document.getElementById('modalLikeIcon');
     
-    // Check if required elements exist
-    if (!modal || !modalImage || !imageContainer) {
-        console.error('Required modal elements not found!');
-        return;
-    }
+    if (!modal || !modalImage || !imageContainer) return;
     
-    // Set modal content with null checks
+    // Set modal content
     if (modalText) modalText.textContent = post.content;
     if (modalDate) modalDate.textContent = post.date.toUpperCase();
     if (modalLikeCount) modalLikeCount.textContent = post.likeCount;
@@ -1388,25 +1279,12 @@ function openPostModal(postId) {
     }
     
     // Handle image display
-    console.log('Post images:', post.images);
-    
     if (post.images && post.images.length > 0) {
-        console.log('Setting modal image to:', post.images[0]);
-        
-        // Clear any previous error handlers
-        modalImage.onerror = null;
-        modalImage.onload = null;
-        
-        // Set up new handlers
         modalImage.onload = function() {
-            console.log('Modal image loaded successfully');
             imageContainer.style.display = 'flex';
         };
         
         modalImage.onerror = function() {
-            console.error('Failed to load modal image:', post.images[0]);
-            
-            // Try to show a placeholder instead
             imageContainer.innerHTML = `
                 <div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 400px; background: #f8f9fa; color: #666;">
                     <div style="text-align: center;">
@@ -1418,178 +1296,35 @@ function openPostModal(postId) {
             imageContainer.style.display = 'flex';
         };
         
-        // Set the image source
         modalImage.src = post.images[0];
-        
     } else {
-        console.log('No images for this post, hiding image container');
         imageContainer.style.display = 'none';
     }
     
-    // Show modal with animation
+    // Show modal
     modal.classList.add('active');
     document.body.style.overflow = 'hidden';
-    
-    // Animate modal appearance
-    const modalContent = modal.querySelector('.post-modal-content');
-    if (modalContent) {
-        modalContent.style.transform = 'scale(0.8)';
-        modalContent.style.opacity = '0';
-        modalContent.style.transition = 'all 0.3s ease';
-        
-        // Force reflow
-        modalContent.offsetHeight;
-        
-        setTimeout(() => {
-            modalContent.style.transform = 'scale(1)';
-            modalContent.style.opacity = '1';
-        }, 10);
-    }
 }
 
 function closePostModal() {
     const modal = document.getElementById('postModal');
-    const modalContent = modal.querySelector('.post-modal-content');
-    
-    // Animate modal disappearance
-    modalContent.style.transform = 'scale(0.8)';
-    modalContent.style.opacity = '0';
-    
-    setTimeout(() => {
-        modal.classList.remove('active');
-        document.body.style.overflow = '';
-        currentPostId = null;
-    }, 300);
+    modal.classList.remove('active');
+    document.body.style.overflow = '';
+    currentPostId = null;
 }
 
-// Enhanced keyboard navigation for accessibility
+// Keyboard navigation
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         closePostModal();
     }
 });
 
-// Close modal on backdrop click with visual feedback
+// Close modal on backdrop click
 document.getElementById('postModal').addEventListener('click', function(e) {
     if (e.target === this) {
-        // Add visual feedback before closing
-        const modalContent = this.querySelector('.post-modal-content');
-        modalContent.style.transform = 'scale(0.95)';
-        setTimeout(() => {
-            modalContent.style.transform = 'scale(1)';
-            closePostModal();
-        }, 100);
+        closePostModal();
     }
 });
-
-// Add CSS for like animations and toast notifications
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes likeFeedback {
-        0% {
-            opacity: 0;
-            transform: translate(-50%, -50%) scale(0.5);
-        }
-        50% {
-            opacity: 1;
-            transform: translate(-50%, -50%) scale(1.2);
-        }
-        100% {
-            opacity: 0;
-            transform: translate(-50%, -50%) scale(1);
-        }
-    }
-    
-    .like-icon.liked,
-    .list-like-icon.liked {
-        color: #ed4956 !important;
-        animation: heartBeat 0.3s ease-in-out;
-    }
-    
-    @keyframes heartBeat {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.2); }
-        100% { transform: scale(1); }
-    }
-    
-    .post-action-btn.liked {
-        color: #ed4956 !important;
-    }
-    
-    .post-action-btn.liked i {
-        animation: heartBeat 0.3s ease-in-out;
-    }
-    
-    @keyframes slideIn {
-        from {
-            transform: translateX(100%);
-            opacity: 0;
-        }
-        to {
-            transform: translateX(0);
-            opacity: 1;
-        }
-    }
-    
-    @keyframes slideOut {
-        from {
-            transform: translateX(0);
-            opacity: 1;
-        }
-        to {
-            transform: translateX(100%);
-            opacity: 0;
-        }
-    }
-    
-    .post-stat:hover .like-icon {
-        transform: scale(1.1);
-        transition: transform 0.2s ease;
-    }
-    
-    .post-action-btn:hover i {
-        transform: scale(1.1);
-        transition: transform 0.2s ease;
-    }
-    
-    .like-loading {
-        opacity: 0.6;
-        pointer-events: none;
-    }
-    
-    .post-stat:focus,
-    .post-action-btn:focus {
-        outline: 3px solid #0095f6;
-        outline-offset: 2px;
-        border-radius: 4px;
-    }
-    
-    @media (prefers-contrast: high) {
-        .like-icon.liked,
-        .list-like-icon.liked {
-            color: #ff0000 !important;
-        }
-        
-        .post-action-btn.liked {
-            color: #ff0000 !important;
-            background: rgba(255, 0, 0, 0.1);
-        }
-    }
-    
-    @media (prefers-reduced-motion: reduce) {
-        .like-icon.liked,
-        .list-like-icon.liked,
-        .post-action-btn.liked i {
-            animation: none;
-        }
-        
-        .like-feedback {
-            animation: none !important;
-            opacity: 1;
-            transform: translate(-50%, -50%) scale(1);
-        }
-    }
-`;
-document.head.appendChild(style);
 </script>
 {% endblock %}

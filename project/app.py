@@ -23,7 +23,9 @@ from flask_wtf.file import FileAllowed, FileField
 from wtforms.validators import DataRequired, Length, Email, EqualTo,ValidationError, Optional
 from werkzeug.utils import secure_filename
 from apscheduler.schedulers.background import BackgroundScheduler
-
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicNumbers, SECP256R1
 # -- profile imports --
 import imghdr
 import bleach
@@ -86,7 +88,9 @@ from user_actions import (
     log_user_login_attempt, log_user_login_success, 
     log_user_login_failure, log_user_logout
 )
-
+#validate
+from file_validate import validate_post_images
+from file_validate import validate_banner_image, clean_old_file
 # Log parsing utilities
 from parse_test import parse_modsec_audit_log, parse_error_log
 
@@ -366,49 +370,28 @@ def upload_banner():
         if file.filename == '':
             return jsonify({'success': False, 'error': 'No file selected'})
         
-        # Validate file type
-        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
-        if '.' not in file.filename or file.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
-            return jsonify({'success': False, 'error': 'Invalid file type'})
+        # Use modular validation
+        from file_validate import validate_banner_image, clean_old_file
         
-        # Generate unique filename
-        file_extension = file.filename.rsplit('.', 1)[1].lower()
-        filename = f"banner_{current_user.user_id}_{uuid.uuid4().hex}.{file_extension}"
-        
-        # Ensure upload directory exists
         upload_dir = os.path.join(app.static_folder, 'uploads')
-        os.makedirs(upload_dir, exist_ok=True)
+        result = validate_banner_image(file, current_user.user_id, upload_dir)
         
-        file_path = os.path.join(upload_dir, filename)
+        if not result['success']:
+            app.logger.warning(f"Banner upload failed for user {current_user.user_id}: {result['error']}")
+            return jsonify({'success': False, 'error': result['error']})
         
-        # Save and optimize the image
-        file.save(file_path)
+        # Remove old banner
+        clean_old_file(upload_dir, current_user.banner_url)
         
-        # Optimize image with PIL
-        with Image.open(file_path) as img:
-            # Convert to RGB if necessary
-            if img.mode in ('RGBA', 'P'):
-                img = img.convert('RGB')
-            
-            # Optimize and save
-            img.save(file_path, 'JPEG', quality=85, optimize=True)
-        
-        # Remove old banner if exists
-        if current_user.banner_url:
-            old_banner_path = os.path.join(upload_dir, current_user.banner_url)
-            if os.path.exists(old_banner_path):
-                try:
-                    os.remove(old_banner_path)
-                except:
-                    pass  # Ignore if file doesn't exist or can't be deleted
-        
-        # Update user's banner in database
-        current_user.banner_url = filename
+        # Update database
+        current_user.banner_url = result['filename']
         db.session.commit()
+        
+        app.logger.info(f"User {current_user.user_id} successfully uploaded banner: {result['filename']}")
         
         return jsonify({
             'success': True,
-            'banner_url': filename,
+            'banner_url': result['filename'],
             'message': 'Banner updated successfully!'
         })
         
@@ -534,7 +517,8 @@ def home():
                              current_user_post_count=0,
                              current_user_friend_count=0)
 
-# Add the missing toggle like route that the frontend expects
+
+#toggle like
 @app.route('/api/toggle_like/<int:post_id>', methods=['POST'])
 @login_required
 def toggle_like_api(post_id):
@@ -732,7 +716,6 @@ def signup():
         db.session.add(new_user)
         db.session.commit()
 
-        # Assign 'user' role
         default_role = Role.query.filter_by(role_name='user').first()
         new_user.roles.append(default_role)
         db.session.commit()
@@ -760,7 +743,7 @@ def verify_2fa():
             login_user(user)
             session.pop('pending_2fa_user_id', None)
             
-            # ✅ Send event reminders on successful 2FA login
+    
             send_user_event_reminders(user.user_id)
             
             return redirect(url_for('home'))
@@ -793,8 +776,6 @@ def check_user_auth_methods():
         return jsonify({"has_2fa": False, "has_passkeys": False})
 
 # -- User security management --
-
-
 @app.route('/account_security', methods=['GET', 'POST'])
 @user_required
 def account_security():
@@ -811,7 +792,6 @@ def account_security():
                          form=form, 
                          form1=form1,
                          user_passkeys=user_passkeys)
-
 
 @app.route('/enable_2fa', methods=['GET', 'POST'])
 @user_required
@@ -854,8 +834,8 @@ def disable_2fa():
         return redirect(url_for('account_security'))
     return render_template('UserDisable2FA.html', form=form)
 
+
 # -- User passkey management --
-# Update the existing passkey_begin_register route to require 2FA
 @app.route('/passkey/begin_register', methods=['POST'])
 @csrf.exempt
 @login_required
@@ -900,7 +880,6 @@ def passkey_begin_register():
         traceback.print_exc()
         return jsonify({"error": f"Failed to begin passkey registration: {str(e)}"}), 500
     
-
 @app.route('/passkey/finish_register', methods=['POST'])
 @csrf.exempt
 @user_required
@@ -966,7 +945,6 @@ def passkey_finish_register():
         db.session.rollback()
         return jsonify({"error": f"Failed to complete passkey registration: {str(e)}"}), 500
     
-
 @app.route('/remove_passkey/<int:cred_id>', methods=['POST'])
 @user_required
 def remove_passkey(cred_id):
@@ -1175,9 +1153,7 @@ def passkey_finish_login():
             
             # Manual ECDSA signature verification (same pattern as registration)
             if public_key.get(1) == 2 and public_key.get(3) == -7:  # EC2 key type, ES256 algorithm
-                from cryptography.hazmat.primitives.asymmetric import ec
-                from cryptography.hazmat.primitives import hashes
-                from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicNumbers, SECP256R1
+                
                 
                 # Extract x and y coordinates
                 x_bytes = public_key.get(-2)
@@ -1237,10 +1213,8 @@ def passkey_finish_login():
         traceback.print_exc()
         return jsonify({"error": f"Failed to complete passkey authentication: {str(e)}"}), 500
 
+
 # --- User Reporting ---
-
-# ...existing code...
-
 @app.route('/report_user', methods=['GET', 'POST'])
 @login_required
 @user_required
@@ -1396,9 +1370,9 @@ def search_users():
         })
     
     return jsonify(user_list)
-# --- Notifications ---
-# Find the notifications route (around lines 985-1020) and replace it:
 
+
+# --- Notifications ---
 @app.route('/Notifications')
 @user_required
 def notifications():
@@ -1552,6 +1526,7 @@ def mark_notification_read(notification_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/mark_all_notifications_read/<notification_type>', methods=['POST'])
 @user_required
 def mark_all_notifications_read(notification_type):
@@ -1586,6 +1561,7 @@ def mark_all_notifications_read(notification_type):
         db.session.rollback()
         print(f"Error marking notifications as read: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
 
 # -- Friends Management --
 @app.route('/send_friend_request/<int:target_user_id>', methods=['POST'])
@@ -1693,8 +1669,6 @@ def unfriend(friendship_id):
     db.session.delete(friendship)
     db.session.commit()
     flash('You have unfriended this user.', 'info')
-
-    
     return redirect(request.referrer or url_for('friends'))
 
 @app.route('/unblock_user_friend/<int:friend_id>', methods=['POST'])
@@ -2229,7 +2203,6 @@ def manage_report(report_id):
             report.admin_notes = admin_notes
             report.resolved_at = datetime.utcnow() if new_status in ['action_taken', 'rejected'] else None
             
-            # ✅ CREATE NOTIFICATION FOR THE REPORTER
             if report.reporter_id:  # Make sure reporter exists
                 # Create user-friendly status messages
                 status_messages = {
@@ -2666,15 +2639,11 @@ def create_post():
     
     if request.method == 'POST':
         try:
-            # Get form data
             post_content = request.form.get('post_content', '').strip()
             
-            # Validate content
             if not post_content:
                 flash('Post content cannot be empty.', 'error')
                 return render_template('create_post.html', form=form)
-            
-            print(f"DEBUG: Creating post with content: {post_content}")
             
             # Create the post object
             new_post = Post(
@@ -2684,86 +2653,52 @@ def create_post():
                 updated_at=datetime.utcnow()
             )
             
-            # Add to session and flush to get the post_id
             db.session.add(new_post)
             db.session.flush()
             
-            print(f"DEBUG: Post created with ID: {new_post.post_id}")
-            
-            # Handle uploaded files
+            # Handle uploaded files with modular validation
             uploaded_files = request.files.getlist('image')
-            print(f"DEBUG: Number of uploaded files: {len(uploaded_files)}")
             
-            valid_files = []
-            
-            for i, file in enumerate(uploaded_files):
-                print(f"DEBUG: Processing file {i}: {file.filename}")
+            if uploaded_files and uploaded_files[0].filename:
+                from file_validate import validate_post_images
                 
-                if file and file.filename:
-                    # Check if file is allowed
-                    if allowed_file(file.filename):
-                        print(f"DEBUG: File {file.filename} is allowed")
-                        
-                        # Generate unique filename
-                        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                        random_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
-                        filename = f"{new_post.post_id}_{timestamp}_{random_suffix}_{secure_filename(file.filename)}"
-                        
-                        print(f"DEBUG: Generated filename: {filename}")
-                        
-                        # Create full file path
-                        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                        print(f"DEBUG: Full file path: {file_path}")
-                        
-                        # Ensure upload directory exists
-                        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-                        print(f"DEBUG: Upload directory exists: {os.path.exists(app.config['UPLOAD_FOLDER'])}")
-                        
-                        # Save the file
-                        file.save(file_path)
-                        print(f"DEBUG: File saved to: {file_path}")
-                        
-                        # Verify file was saved
-                        if os.path.exists(file_path):
-                            print(f"DEBUG: File successfully saved, size: {os.path.getsize(file_path)} bytes")
-                        else:
-                            print(f"ERROR: File was not saved!")
-                            continue
-                        
-                        # Create PostImage object
-                        post_image = PostImage(
-                            post_id=new_post.post_id,
-                            image_url=f"uploads/{filename}",  # Store the full path
-                            order_index=0,
-                            created_at=datetime.utcnow()
-                        )
-                        
-                        db.session.add(post_image)
-                        valid_files.append(filename)
-                        
-                        print(f"DEBUG: Added PostImage to database for file: {filename}")
-                    else:
-                        print(f"DEBUG: File {file.filename} is not allowed")
-                        flash(f'Invalid file type: {file.filename}', 'warning')
-                else:
-                    print(f"DEBUG: File {i} is empty or has no filename")
+                upload_dir = app.config['UPLOAD_FOLDER']
+                result = validate_post_images(uploaded_files, new_post.post_id, upload_dir)
+                
+                # Add warnings/errors to flash messages
+                for error in result['errors']:
+                    flash(error, 'warning')
+                
+                for warning in result['warnings']:
+                    flash(warning, 'info')
+                
+                # Create PostImage objects for successfully processed files
+                for file_info in result['processed_files']:
+                    post_image = PostImage(
+                        post_id=new_post.post_id,
+                        image_url=file_info['url'],
+                        order_index=0,
+                        created_at=datetime.utcnow()
+                    )
+                    db.session.add(post_image)
+                    app.logger.info(f"User {current_user.user_id} uploaded post image: {file_info['filename']}")
             
-            # Commit all changes
             db.session.commit()
-            print(f"DEBUG: Database committed successfully")
             
-            flash(f'Post created successfully with {len(valid_files)} images!', 'success')
+            valid_file_count = len(result['processed_files']) if 'result' in locals() else 0
+            if valid_file_count > 0:
+                flash(f'Post created successfully with {valid_file_count} images!', 'success')
+            else:
+                flash('Post created successfully!', 'success')
+            
             return redirect(url_for('account'))
             
         except Exception as e:
             db.session.rollback()
-            print(f"ERROR: Exception in create_post: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            app.logger.error(f"Error in create_post: {str(e)}")
             flash('An error occurred while creating the post.', 'error')
             return render_template('create_post.html', form=form)
 
-    # GET request
     return render_template('create_post.html', form=form)
 
 
@@ -2951,85 +2886,49 @@ def edit_profile():
     form = EditProfileForm()
     
     if request.method == 'GET':
-        # Pre-populate form with current user data
         form.username.data = current_user.username
     
     if form.validate_on_submit():
         try:
-            # Check if username was changed and if it's already taken
+            # Check username changes
             if form.username.data != current_user.username:
                 existing_user = User.query.filter_by(username=form.username.data).first()
                 if existing_user:
                     flash('Username already exists. Please choose a different one.', 'error')
                     return render_template('EditProfile.html', form=form)
-                
-                # Update username
                 current_user.username = form.username.data
             
-            # Handle profile picture upload
+            # Handle profile picture upload with modular validation
             cropped_image_data = request.form.get('cropped_image_data')
             
             if cropped_image_data:
-                try:
-                    
-                    # Remove data URL prefix
-                    image_data = cropped_image_data.split(',')[1]
-                    image_binary = base64.b64decode(image_data)
-                    
-                    # Open with PIL
-                    image = Image.open(io.BytesIO(image_binary))
-                    
-                    # Generate filename
-                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    filename = f"profile_{current_user.user_id}_{timestamp}.jpg"
-                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                    
-                    # Ensure upload directory exists
-                    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-                    
-                    # Save image
-                    image.save(file_path, 'JPEG', quality=90)
-                    
-                    # Delete old profile picture if it exists
-                    if current_user.profile_pic_url:
-                        old_file_path = os.path.join(app.config['UPLOAD_FOLDER'], current_user.profile_pic_url)
-                        if os.path.exists(old_file_path):
-                            try:
-                                os.remove(old_file_path)
-                            except Exception as e:
-                                app.logger.warning(f"Could not delete old profile picture: {e}")
-                    
-                    # Update user profile picture URL (store just the filename)
-                    current_user.profile_pic_url = filename
-                    
-                    print(f"DEBUG: Saved profile picture: {filename}")
-                    
-                except Exception as e:
-                    app.logger.error(f"Error processing profile picture: {str(e)}")
-                    flash('Error processing profile picture. Please try again.', 'error')
+                from file_validate import validate_cropped_image_data, clean_old_file
+                
+                upload_dir = app.config['UPLOAD_FOLDER']
+                result = validate_cropped_image_data(cropped_image_data, current_user.user_id, upload_dir)
+                
+                if not result['success']:
+                    app.logger.warning(f"Profile image upload failed for user {current_user.user_id}: {result['error']}")
+                    flash(result['error'], 'error')
                     return render_template('EditProfile.html', form=form)
+                
+                # Clean old file and update database
+                clean_old_file(upload_dir, current_user.profile_pic_url)
+                current_user.profile_pic_url = result['filename']
+                app.logger.info(f"User {current_user.user_id} updated profile picture: {result['filename']}")
             
-            # Update timestamp
             current_user.updated_at = datetime.utcnow()
-            
-            # Commit changes
             db.session.commit()
             
             # Log the action
             try:
                 from user_actions import log_user_action
-                log_user_action(
-                    current_user.user_id,
-                    'update_profile',
-                    'Updated profile information',
-                    request.remote_addr,
-                    request.headers.get('User-Agent', 'Unknown')
-                )
+                log_user_action(current_user.user_id, 'update_profile', 'Updated profile information')
             except ImportError:
                 pass
             
             flash('Profile updated successfully!', 'success')
-            return redirect(url_for('account'))  # Changed from 'profile' to 'account'
+            return redirect(url_for('account'))
             
         except Exception as e:
             db.session.rollback()

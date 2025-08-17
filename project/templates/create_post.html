@@ -403,11 +403,11 @@
                 <div class="google-form-group">
                     <label for="image" class="google-form-label">Add a photo</label>
                     <div class="google-file-upload" id="fileUploadArea">
-                        {{ form.image(id="image", accept=".jpg,.jpeg,.png", onchange="validateAndPreviewImage(event)") }}
+                        {{ form.image(id="image", accept=".jpg,.jpeg,.png,.gif,.webp", onchange="validateAndPreviewImage(event)", multiple=false) }}
                         <span class="upload-icon">📷</span>
                         <span class="upload-text">Choose file or drag and drop</span>
                         <div class="upload-subtext">
-                            JPEG, JPG, PNG up to 5MB<br>
+                            JPEG, JPG, PNG, GIF, WEBP up to 10MB<br>
                             <small>Recommended: 1080x1080 pixels</small>
                         </div>
                     </div>
@@ -447,26 +447,13 @@
 
 <!-- Create post specific JavaScript -->
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Wait for parent scripts to load first
-    setTimeout(function() {
-        initializeCreatePostForm();
-    }, 100);
-});
+// Global variables to avoid scope issues
+let formInitialized = false;
 
-function initializeCreatePostForm() {
-    const form = document.getElementById('createPostForm');
-    const textArea = document.getElementById('post_content');
-    const wordCount = document.getElementById('wordCount');
-    const submitBtn = document.getElementById('submitBtn');
-    const loadingSpinner = document.getElementById('loadingSpinner');
-    const submitText = document.getElementById('submitText');
+// Global functions - define these first
+function showValidationMessage(message, type = 'error') {
     const validationMessage = document.getElementById('validationMessage');
-    const fileUploadArea = document.getElementById('fileUploadArea');
-    const maxChars = 250;
-
-    // Global functions to avoid scope issues
-    window.showValidationMessage = function(message, type = 'error') {
+    if (validationMessage) {
         validationMessage.textContent = message;
         validationMessage.className = `validation-message ${type}`;
         validationMessage.style.display = 'block';
@@ -477,165 +464,16 @@ function initializeCreatePostForm() {
                 validationMessage.style.display = 'none';
             }, 5000);
         }
-    };
+    }
+}
 
-    window.hideValidationMessage = function() {
+function hideValidationMessage() {
+    const validationMessage = document.getElementById('validationMessage');
+    if (validationMessage) {
         validationMessage.style.display = 'none';
-    };
-
-    // Sanitize input function
-    function sanitizeInput(input) {
-        return input.replace(/<[^>]*>/g, '');
-    }
-
-    // Update character counter
-    function updateWordCount() {
-        const currentChars = textArea.value.length;
-        wordCount.textContent = `${currentChars}/${maxChars}`;
-        
-        // Update counter styling
-        wordCount.className = 'char-counter';
-        if (currentChars >= 240) {
-            wordCount.classList.add('danger');
-        } else if (currentChars >= 200) {
-            wordCount.classList.add('warning');
-        }
-    }
-
-    // Text area input handling - FIXED to prevent interference
-    textArea.addEventListener('input', function(e) {
-        // Prevent event from bubbling up
-        e.stopPropagation();
-        
-        // Auto-resize textarea
-        this.style.height = 'auto';
-        this.style.height = Math.max(120, this.scrollHeight) + 'px';
-        
-        // Sanitize the input
-        this.value = sanitizeInput(this.value);
-        
-        if (this.value.length > maxChars) {
-            this.value = this.value.substring(0, maxChars);
-        }
-        
-        updateWordCount();
-    });
-
-    // FIXED: Paste event handling with better isolation
-    textArea.addEventListener('paste', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        const text = sanitizeInput((e.clipboardData || window.clipboardData).getData('text'));
-        
-        // Use modern approach for text insertion
-        const start = this.selectionStart;
-        const end = this.selectionEnd;
-        const value = this.value;
-        
-        // Calculate available space
-        const availableSpace = maxChars - (value.length - (end - start));
-        const textToInsert = text.substring(0, availableSpace);
-        
-        // Insert text at cursor position
-        this.value = value.substring(0, start) + textToInsert + value.substring(end);
-        
-        // Set cursor position after inserted text
-        this.selectionStart = this.selectionEnd = start + textToInsert.length;
-        
-        // Update counter and auto-resize
-        updateWordCount();
-        this.style.height = 'auto';
-        this.style.height = Math.max(120, this.scrollHeight) + 'px';
-    });
-
-    // Form submission handling with better debugging
-    form.addEventListener('submit', function(e) {
-        console.log('Form submission started');
-        
-        // Debug file input
-        const fileInput = document.getElementById('image');
-        console.log('File input element:', fileInput);
-        console.log('File input files:', fileInput.files);
-        console.log('Number of files:', fileInput.files.length);
-        
-        if (fileInput.files.length > 0) {
-            console.log('File details:', {
-                name: fileInput.files[0].name,
-                size: fileInput.files[0].size,
-                type: fileInput.files[0].type
-            });
-        }
-        
-        // Show loading state
-        submitBtn.disabled = true;
-        loadingSpinner.style.display = 'inline-block';
-        submitText.textContent = 'Creating...';
-    });
-
-    // FIXED: Drag and drop functionality with better isolation
-    fileUploadArea.addEventListener('dragover', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        this.classList.add('drag-over');
-    });
-
-    fileUploadArea.addEventListener('dragleave', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        this.classList.remove('drag-over');
-    });
-
-    fileUploadArea.addEventListener('drop', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        this.classList.remove('drag-over');
-        
-        const files = e.dataTransfer.files;
-        console.log('Files dropped:', files.length);
-        
-        if (files.length > 0) {
-            handleFileSelection(files[0]);
-        }
-    });
-
-    // FIXED: Click handler with better event isolation
-    fileUploadArea.addEventListener('click', function(e) {
-        e.stopPropagation();
-        // Only trigger if not clicking on the actual file input
-        if (e.target.type !== 'file') {
-            const fileInput = document.getElementById('image');
-            if (fileInput) {
-                fileInput.click();
-            }
-        }
-    });
-
-    // Initialize word count
-    updateWordCount();
-}
-
-// FIXED: Centralized file handling function
-function handleFileSelection(file) {
-    console.log('handleFileSelection called with file:', file);
-    
-    // Get the current file input
-    const fileInput = document.getElementById('image');
-    
-    if (file && fileInput) {
-        // Create DataTransfer and assign file
-        const dt = new DataTransfer();
-        dt.items.add(file);
-        fileInput.files = dt.files;
-        
-        console.log('File assigned to input:', fileInput.files[0]);
-        
-        // Trigger validation and preview
-        validateAndPreviewImage({ target: { files: [file] } });
     }
 }
 
-// FIXED: Improved image validation and preview function
 function validateAndPreviewImage(event) {
     console.log('validateAndPreviewImage called');
     
@@ -653,7 +491,7 @@ function validateAndPreviewImage(event) {
     }
     
     // Validate file type
-    const validExtensions = ['jpg', 'jpeg', 'png'];
+    const validExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
     const fileName = file.name.toLowerCase();
     const fileExtension = fileName.split('.').pop();
     
@@ -666,24 +504,24 @@ function validateAndPreviewImage(event) {
     
     if (!validExtensions.includes(fileExtension)) {
         console.log('Invalid file extension');
-        showValidationMessage('Please upload only JPEG, JPG or PNG images.');
+        showValidationMessage('Please upload only JPEG, JPG, PNG, GIF, or WEBP images.');
         clearImage();
         return;
     }
 
     // Additional MIME type validation
-    const validMimeTypes = ['image/jpeg', 'image/png'];
+    const validMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     if (!validMimeTypes.includes(file.type)) {
         console.log('Invalid MIME type');
-        showValidationMessage('Invalid image format. Please upload only JPEG, JPG or PNG images.');
+        showValidationMessage('Invalid image format. Please upload only JPEG, JPG, PNG, GIF, or WEBP images.');
         clearImage();
         return;
     }
 
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
+    // Validate file size (max 10MB to match backend)
+    if (file.size > 10 * 1024 * 1024) {
         console.log('File too large');
-        showValidationMessage('File size must be less than 5MB');
+        showValidationMessage('File size must be less than 10MB');
         clearImage();
         return;
     }
@@ -694,33 +532,23 @@ function validateAndPreviewImage(event) {
     const reader = new FileReader();
     reader.onload = function(e) {
         console.log('FileReader loaded successfully');
-        preview.src = e.target.result;
-        previewContainer.style.display = 'block';
+        if (preview) preview.src = e.target.result;
+        if (previewContainer) previewContainer.style.display = 'block';
         
-        // Update upload area styling without recreating the input
-        fileUploadArea.classList.add('has-file');
-        
-        // Find existing elements and update them
-        const uploadIcon = fileUploadArea.querySelector('.upload-icon');
-        const uploadText = fileUploadArea.querySelector('.upload-text');
-        const uploadSubtext = fileUploadArea.querySelector('.upload-subtext');
-        
-        if (uploadIcon) uploadIcon.textContent = '✅';
-        if (uploadText) uploadText.textContent = file.name;
-        if (uploadSubtext) uploadSubtext.textContent = 'Click to change image';
-        
-        // Ensure the file input still has the file
-        const currentFileInput = document.getElementById('image');
-        if (currentFileInput && currentFileInput.files.length === 0) {
-            const dt = new DataTransfer();
-            dt.items.add(file);
-            currentFileInput.files = dt.files;
-            console.log('Re-assigned file to input');
+        // Update upload area styling
+        if (fileUploadArea) {
+            fileUploadArea.classList.add('has-file');
+            
+            const uploadIcon = fileUploadArea.querySelector('.upload-icon');
+            const uploadText = fileUploadArea.querySelector('.upload-text');
+            const uploadSubtext = fileUploadArea.querySelector('.upload-subtext');
+            
+            if (uploadIcon) uploadIcon.textContent = '✅';
+            if (uploadText) uploadText.textContent = file.name;
+            if (uploadSubtext) uploadSubtext.textContent = 'Click to change image';
         }
         
-        // Hide validation message
         hideValidationMessage();
-        
         console.log('Image preview updated successfully');
     };
     
@@ -732,7 +560,6 @@ function validateAndPreviewImage(event) {
     reader.readAsDataURL(file);
 }
 
-// FIXED: Improved clear image function
 function clearImage() {
     console.log('clearImage called');
     
@@ -750,7 +577,6 @@ function clearImage() {
     if (fileUploadArea) {
         fileUploadArea.classList.remove('has-file');
         
-        // Reset text content without recreating elements
         const uploadIcon = fileUploadArea.querySelector('.upload-icon');
         const uploadText = fileUploadArea.querySelector('.upload-text');
         const uploadSubtext = fileUploadArea.querySelector('.upload-subtext');
@@ -758,11 +584,185 @@ function clearImage() {
         if (uploadIcon) uploadIcon.textContent = '📷';
         if (uploadText) uploadText.textContent = 'Choose file or drag and drop';
         if (uploadSubtext) {
-            uploadSubtext.innerHTML = 'JPEG, JPG, PNG up to 5MB<br><small>Recommended: 1080x1080 pixels</small>';
+            uploadSubtext.innerHTML = 'JPEG, JPG, PNG, GIF, WEBP up to 10MB<br><small>Recommended: 1080x1080 pixels</small>';
         }
     }
     
     console.log('Image cleared successfully');
+}
+
+function handleFileSelection(file) {
+    console.log('handleFileSelection called with file:', file);
+    
+    const fileInput = document.getElementById('image');
+    
+    if (file && fileInput) {
+        // Create DataTransfer and assign file
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        fileInput.files = dt.files;
+        
+        console.log('File assigned to input:', fileInput.files[0]);
+        
+        // Trigger validation and preview
+        validateAndPreviewImage({ target: { files: [file] } });
+    }
+}
+
+function initializeCreatePostForm() {
+    if (formInitialized) return;
+    formInitialized = true;
+    
+    const form = document.getElementById('createPostForm');
+    const textArea = document.getElementById('post_content');
+    const wordCount = document.getElementById('wordCount');
+    const submitBtn = document.getElementById('submitBtn');
+    const loadingSpinner = document.getElementById('loadingSpinner');
+    const submitText = document.getElementById('submitText');
+    const fileUploadArea = document.getElementById('fileUploadArea');
+    const maxChars = 250;
+
+    if (!form || !textArea) {
+        console.error('Form elements not found');
+        return;
+    }
+
+    // Sanitize input function
+    function sanitizeInput(input) {
+        return input.replace(/<[^>]*>/g, '');
+    }
+
+    // Update character counter
+    function updateWordCount() {
+        const currentChars = textArea.value.length;
+        if (wordCount) {
+            wordCount.textContent = `${currentChars}/${maxChars}`;
+            
+            // Update counter styling
+            wordCount.className = 'char-counter';
+            if (currentChars >= 240) {
+                wordCount.classList.add('danger');
+            } else if (currentChars >= 200) {
+                wordCount.classList.add('warning');
+            }
+        }
+    }
+
+    // Text area input handling
+    textArea.addEventListener('input', function(e) {
+        e.stopPropagation();
+        
+        // Auto-resize textarea
+        this.style.height = 'auto';
+        this.style.height = Math.max(120, this.scrollHeight) + 'px';
+        
+        // Sanitize the input
+        this.value = sanitizeInput(this.value);
+        
+        if (this.value.length > maxChars) {
+            this.value = this.value.substring(0, maxChars);
+        }
+        
+        updateWordCount();
+    });
+
+    // Paste event handling
+    textArea.addEventListener('paste', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const text = sanitizeInput((e.clipboardData || window.clipboardData).getData('text'));
+        
+        const start = this.selectionStart;
+        const end = this.selectionEnd;
+        const value = this.value;
+        
+        const availableSpace = maxChars - (value.length - (end - start));
+        const textToInsert = text.substring(0, availableSpace);
+        
+        this.value = value.substring(0, start) + textToInsert + value.substring(end);
+        this.selectionStart = this.selectionEnd = start + textToInsert.length;
+        
+        updateWordCount();
+        this.style.height = 'auto';
+        this.style.height = Math.max(120, this.scrollHeight) + 'px';
+    });
+
+    // Form submission handling
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            console.log('Form submission started');
+            
+            const fileInput = document.getElementById('image');
+            console.log('File input files:', fileInput ? fileInput.files : 'No file input');
+            
+            // Show loading state
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                if (loadingSpinner) loadingSpinner.style.display = 'inline-block';
+                if (submitText) submitText.textContent = 'Creating...';
+            }
+        });
+    }
+
+    // Drag and drop functionality
+    if (fileUploadArea) {
+        fileUploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.classList.add('drag-over');
+        });
+
+        fileUploadArea.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.classList.remove('drag-over');
+        });
+
+        fileUploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.classList.remove('drag-over');
+            
+            const files = e.dataTransfer.files;
+            console.log('Files dropped:', files.length);
+            
+            if (files.length > 0) {
+                handleFileSelection(files[0]);
+            }
+        });
+
+        fileUploadArea.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (e.target.type !== 'file') {
+                const fileInput = document.getElementById('image');
+                if (fileInput) {
+                    fileInput.click();
+                }
+            }
+        });
+    }
+
+    // Initialize word count
+    updateWordCount();
+    
+    console.log('Create post form initialized successfully');
+}
+
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+        initializeCreatePostForm();
+    }, 100);
+});
+
+// Also initialize if DOM is already loaded
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(initializeCreatePostForm, 100);
+    });
+} else {
+    setTimeout(initializeCreatePostForm, 100);
 }
 </script>
 {% endblock %}

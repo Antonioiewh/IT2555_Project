@@ -50,7 +50,6 @@ class User(UserMixin, db.Model):
     created_events = db.relationship('Event', backref='creator', lazy=True, overlaps="user")
     
     posts = db.relationship('Post', back_populates='user', lazy=True)
-    notifications = db.relationship('Notification', backref='user', lazy=True)
     submitted_reports = db.relationship(
         'Report',
         primaryjoin="User.user_id == Report.reporter_id",
@@ -287,7 +286,7 @@ class Report(db.Model):
     __tablename__ = 'reports'
 
     report_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    reporter_id = db.Column(db.Integer, db.ForeignKey('users.user_id', ondelete='SET NULL'), nullable=True)
+    reporter_id = db.Column(db.Integer, db.ForeignKey('users.user_id', ondelete='CASCADE'), nullable=False)  # ← FIXED: nullable=False
     reported_user_id = db.Column(db.Integer, db.ForeignKey('users.user_id', ondelete='CASCADE'), nullable=False)
     report_type = db.Column(db.String(50), nullable=False)
     description = db.Column(db.Text, nullable=False)

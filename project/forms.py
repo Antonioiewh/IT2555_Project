@@ -131,9 +131,9 @@ class EditProfileForm(FlaskForm):
 class UpdateReportStatusForm(FlaskForm):
     status = SelectField('Status', choices=[
         ('pending', 'Pending'),
-        ('under_review', 'Under Review'),
-        ('resolved', 'Resolved'),
-        ('dismissed', 'Dismissed')
+        ('in_review', 'Under Review'),
+        ('action_taken', 'Resolved'),
+        ('rejected', 'Dismissed')
     ])
     admin_notes = TextAreaField('Admin Notes', validators=[Optional(), Length(max=1000)])
     submit = SubmitField('Update Status')

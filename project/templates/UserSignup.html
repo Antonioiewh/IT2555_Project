@@ -58,7 +58,12 @@
             <!-- Password -->
             <div class="mb-4">
                 {{ form.password.label(class="form-label fw-medium") }}
-                {{ form.password(class="form-control", id="signup-password") }}
+                <div class="password-input-container">
+                    {{ form.password(class="form-control", id="signup-password") }}
+                    <button type="button" class="password-toggle-btn" id="signupPasswordToggle">
+                        <i class="bi bi-eye" id="signupPasswordToggleIcon"></i>
+                    </button>
+                </div>
                 <div class="form-text">Password must meet all requirements above</div>
                 {% if form.password.errors %}
                     <div class="text-danger small mt-1">
@@ -199,6 +204,47 @@
         padding: 0 0.5rem !important;
     }
 }
+
+/* Password toggle styling */
+.password-input-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-toggle-btn {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #6c757d;
+    font-size: 16px;
+    padding: 4px;
+    border-radius: 4px;
+    transition: color 0.2s, background-color 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+}
+
+.password-toggle-btn:hover {
+    color: #1a73e8;
+    background-color: #f8f9fa;
+}
+
+.password-toggle-btn:focus {
+    outline: 2px solid #1a73e8;
+    outline-offset: 2px;
+}
+
+.password-input-container .form-control {
+    padding-right: 48px; /* Make room for the toggle button */
+}
 </style>
 
 <!-- JavaScript for Real-time Password Validation -->
@@ -254,7 +300,34 @@ document.addEventListener('DOMContentLoaded', function() {
         
         return true;
     });
-});
+    const passwordField = document.getElementById('password');
+    const passwordToggle = document.getElementById('passwordToggle');
+    const passwordToggleIcon = document.getElementById('passwordToggleIcon');
+
+    if (passwordToggle && passwordField && passwordToggleIcon) {
+        passwordToggle.addEventListener('click', function() {
+            // Toggle password visibility
+            if (passwordField.type === 'password') {
+                passwordField.type = 'text';
+                passwordToggleIcon.className = 'bi bi-eye-slash';
+                passwordToggle.setAttribute('aria-label', 'Hide password');
+            } else {
+                passwordField.type = 'password';
+                passwordToggleIcon.className = 'bi bi-eye';
+                passwordToggle.setAttribute('aria-label', 'Show password');
+            }
+        });
+
+        // Set initial aria-label
+        passwordToggle.setAttribute('aria-label', 'Show password');
+    }
+
+
+
+}
+    
+
+);
 </script>
 
 {% endblock %}

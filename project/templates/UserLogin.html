@@ -301,6 +301,46 @@
     margin-top: 4px;
     display: block;
 }
+/* Password toggle styling */
+.password-input-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-toggle-btn {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #5f6368;
+    font-size: 16px;
+    padding: 4px;
+    border-radius: 4px;
+    transition: color 0.2s, background-color 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+}
+
+.password-toggle-btn:hover {
+    color: #1a73e8;
+    background-color: #f8f9fa;
+}
+
+.password-toggle-btn:focus {
+    outline: 2px solid #1a73e8;
+    outline-offset: 2px;
+}
+
+.password-input-container .google-form-input {
+    padding-right: 48px; /* Make room for the toggle button */
+}
 </style>
 
 <div class="google-login-container">
@@ -325,7 +365,12 @@
 
             <div class="google-form-group">
                 <label for="password" class="google-form-label">Password</label>
-                {{ form.password(class="google-form-input", id="password", placeholder="Enter your password") }}
+                <div class="password-input-container">
+                    {{ form.password(class="google-form-input", id="password", placeholder="Enter your password") }}
+                    <button type="button" class="password-toggle-btn" id="passwordToggle">
+                        <i class="bi bi-eye" id="passwordToggleIcon"></i>
+                    </button>
+                </div>
                 {% if form.password.errors %}
                     {% for error in form.password.errors %}
                         <span class="google-error-text">{{ error }}</span>
@@ -676,6 +721,30 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
         }
     });
-});
+
+    const passwordField = document.getElementById('password');
+    const passwordToggle = document.getElementById('passwordToggle');
+    const passwordToggleIcon = document.getElementById('passwordToggleIcon');
+
+    if (passwordToggle && passwordField && passwordToggleIcon) {
+        passwordToggle.addEventListener('click', function() {
+            // Toggle password visibility
+            if (passwordField.type === 'password') {
+                passwordField.type = 'text';
+                passwordToggleIcon.className = 'bi bi-eye-slash';
+                passwordToggle.setAttribute('aria-label', 'Hide password');
+            } else {
+                passwordField.type = 'password';
+                passwordToggleIcon.className = 'bi bi-eye';
+                passwordToggle.setAttribute('aria-label', 'Show password');
+            }
+        });
+
+        // Set initial aria-label
+        passwordToggle.setAttribute('aria-label', 'Show password');
+    }
+}
+
+);
 </script>
 {% endblock %}

@@ -164,7 +164,7 @@ CREATE TABLE notifications (
 
 CREATE TABLE reports (
     report_id INT AUTO_INCREMENT PRIMARY KEY,
-    reporter_id INT NULL,
+    reporter_id INT NOT NULL,                    
     reported_user_id INT NOT NULL,
 
     report_type ENUM(
@@ -182,10 +182,7 @@ CREATE TABLE reports (
     resolved_at DATETIME NULL,
     admin_notes TEXT NULL,
 
-    -- Corrected Foreign Key: REFERENCES users(user_id)
-    FOREIGN KEY (reporter_id) REFERENCES users(user_id) ON DELETE SET NULL,
-
-    -- Corrected Foreign Key: REFERENCES users(user_id)
+    FOREIGN KEY (reporter_id) REFERENCES users(user_id) ON DELETE CASCADE,
     FOREIGN KEY (reported_user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 -- **************************************

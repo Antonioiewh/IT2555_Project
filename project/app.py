@@ -1587,23 +1587,50 @@ def report_user():
             reported_user = User.query.filter_by(username=form.reported_username.data).first()
             if not reported_user:
                 flash('User not found.', 'error')
-            else:
-                new_report = Report(
-                    reporter_id=current_user.user_id,
-                    reported_user_id=reported_user.user_id,  # Use user_id, not username
-                    report_type=form.report_type.data,
-                    description=form.description.data,
-                    submitted_at=datetime.utcnow(),
-                    status='open'
-                )
-                db.session.add(new_report)
-                db.session.commit()
-                report_submitted = True
-                reported_username = reported_user.username
-                form = ReportForm()
+                return render_template('UserReport.html', form=form, report_submitted=False, reported_username=None)
+            
+            # FIXED: Ensure reporter_id is always set
+            if not current_user.user_id:
+                app.logger.error("Current user has no user_id - this should not happen")
+                flash('Authentication error. Please log in again.', 'error')
+                return redirect(url_for('login'))
+            
+            new_report = Report(
+                reporter_id=current_user.user_id,  # ✅ This must not be NULL
+                reported_user_id=reported_user.user_id,
+                report_type=form.report_type.data,
+                description=form.description.data,
+                submitted_at=datetime.utcnow(),
+                status='open'
+            )
+            db.session.add(new_report)
+            db.session.flush()  # Get the report_id
+            
+            app.logger.info(f"📝 Creating report - Reporter: {current_user.user_id}, Reported: {reported_user.user_id}, Report ID: {new_report.report_id}")
+            
+            submission_notification = Notification(
+                user_id=current_user.user_id,  # Notify the reporter
+                type='report_status',
+                source_id=new_report.report_id,
+                message=f"Your report #{new_report.report_id} against {reported_user.username} has been submitted and is being reviewed.",
+                created_at=datetime.utcnow(),
+                is_read=False
+            )
+            db.session.add(submission_notification)
+            
+            db.session.commit()
+            
+            app.logger.info(f"✅ Report #{new_report.report_id} created successfully with notification")
+            
+            report_submitted = True
+            reported_username = reported_user.username
+            form = ReportForm()  # Reset form
+            
         except Exception as e:
             db.session.rollback()
+            app.logger.error(f"❌ Error creating report: {str(e)}")
             flash('An error occurred while submitting your report. Please try again.', 'error')
+            
     return render_template('UserReport.html',
                           form=form,
                           report_submitted=report_submitted,
@@ -2596,6 +2623,7 @@ def manage_report(report_id):
         reported_username=reported_username,
         form=form
     )
+
 @app.route('/manage_ModSecLogs', methods=['GET'])
 @admin_required
 def admin_modsec_logs():

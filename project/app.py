@@ -1084,26 +1084,35 @@ def search_users():
         .join(user_role_assignments, User.user_id == user_role_assignments.c.user_id)
         .join(Role, user_role_assignments.c.role_id == Role.role_id)
         .filter(
+            Role.role_name == 'user',
             User.user_id.in_(subq),
             User.user_id != user.user_id,
-            User.username.ilike(f'%{query}%')
+            User.username.ilike(f'%{query}%') if query else True
         )
+        .distinct()
         .all()
     )
-    pending_friendships = [
+    pending_friendships = Friendship.query.filter(
+        ((Friendship.user_id1 == user.user_id) | (Friendship.user_id2 == user.user_id)),
+        Friendship.status == 'pending'
+    ).all()
+    pending_ids = {
         f.user_id2 if f.user_id1 == user.user_id else f.user_id1
-        for f in Friendship.query.filter(
-            ((Friendship.user_id1 == user.user_id) | (Friendship.user_id2 == user.user_id)),
-            Friendship.status == 'pending'
-        ).all()
-    ]
+        for f in pending_friendships
+    }
+    pending_by_me_ids = {
+        (f.user_id2 if f.user_id1 == user.user_id else f.user_id1)
+        for f in pending_friendships if f.action_user_id == user.user_id
+    }
     # Return minimal user info as JSON
     return jsonify([
         {
             'user_id': u.user_id,
             'username': u.username,
             'profile_pic_url': u.profile_pic_url or url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp'),
-            'pending': u.user_id in pending_friendships  # Add this if you want to show "Pending"
+            'pending': u.user_id in pending_ids,
+            'pending_by_me': u.user_id in pending_by_me_ids,
+            'bio': u.bio or ''
         }
         for u in users
     ])
@@ -1306,6 +1315,29 @@ def mark_all_notifications_read(notification_type):
 def send_friend_request(target_user_id):
     form = FriendRequestForm()
     if form.validate_on_submit():
+
+        elevated_exists = (
+            db.session.query(user_role_assignments.c.user_id)
+            .join(Role, user_role_assignments.c.role_id == Role.role_id)
+            .filter(
+                user_role_assignments.c.user_id == target_user_id,
+                Role.role_name.in_(['admin', 'editor', 'guest'])
+            )
+            .first()
+        )
+        has_user_role = (
+            db.session.query(user_role_assignments.c.user_id)
+            .join(Role, user_role_assignments.c.role_id == Role.role_id)
+            .filter(
+                user_role_assignments.c.user_id == target_user_id,
+                Role.role_name == 'user'
+            )
+            .first()
+        )
+        if elevated_exists or not has_user_role:
+            flash('Cannot send friend requests to this account.', 'warning')
+            return redirect(url_for('discover_friends'))
+
         # Always store user_id1 < user_id2 to avoid duplicates
         user1, user2 = sorted([current_user.user_id, target_user_id])
         # Check if a friendship already exists

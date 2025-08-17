@@ -1,51 +1,230 @@
 {% extends "UserBase.html" %}
 {% block title %}Discover Friends Page{% endblock %}
 
+{% block head %}
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-    <h2 class="mb-4">Discover Friends</h2>
-    <input id="search-bar" type="text" class="form-control form-control-lg mb-4" placeholder="Search users...">
-    <div id="user-list">
-        {% include 'user_list.html' %}
+<style>
+:root{
+  --ink:#202124;
+  --muted:#5f6368;
+  --border:#e8eaed;
+  --ring:0 0 0 3px rgba(26,115,232,0.18);
+}
+.df-page{
+  font-family:'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+  color:var(--ink);
+  padding: 16px 12px;
+}
+.df-header{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  max-width: 1100px; margin: 8px auto 16px;
+}
+.df-title{ display:flex; align-items:center; gap:10px; font-size:24px; font-weight:600; margin:0; }
+.df-title .material-icons{ color:#1a73e8; }
+.df-search{ position:relative; width:100%; max-width:560px; }
+.df-search input{
+  width:100%; padding:12px 16px 12px 44px; border:1px solid var(--border); border-radius:24px;
+  background:#f8f9fa; transition:all .15s;
+}
+.df-search input:focus{ outline:none; background:#fff; border-color:#c7d2fe; box-shadow:var(--ring); }
+.df-search .material-icons{ position:absolute; left:14px; top:50%; transform:translateY(-50%); color:#9aa0a6; }
+
+/* Centered grid */
+.df-grid{
+  display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap:16px;
+  max-width: 1000px; margin: 0 auto; /* centers the grid */
+}
+.df-card{
+  background:#fff; border:1px solid var(--border); border-radius:12px; padding:18px; text-align:center;
+  box-shadow:0 1px 6px rgba(32,33,36,.18); transition:transform .15s, box-shadow .15s;
+}
+.df-card:hover{ transform:translateY(-2px); box-shadow:0 6px 18px rgba(32,33,36,.24); }
+.df-avatar{
+  width:88px; height:88px; border-radius:50%; overflow:hidden; margin:0 auto 10px; position:relative;
+  box-shadow:0 1px 2px rgba(0,0,0,.08);
+}
+.df-avatar::after{ content:""; position:absolute; inset:-2px; border-radius:50%;
+  background:linear-gradient(135deg,#1a73e8,#3b82f6,#60a5fa); filter:blur(8px); opacity:.28; z-index:-1; }
+.df-name{ font-weight:600; color:#1f2937; margin-top:6px; }
+.df-bio{ font-size:13px; color:var(--muted); min-height:18px; margin-top:4px; }
+
+/* Google-style buttons */
+.gbtn{ border:none; border-radius:20px; padding:8px 14px; font-size:14px; font-weight:500; cursor:pointer; transition:filter .15s; }
+.gbtn:disabled{ opacity:.7; cursor:default; }
+.gbtn-primary{ background:#1a73e8; color:#fff; }
+.gbtn-primary:hover{ filter:brightness(.95); }
+.gbtn-secondary{ background:#fff; color:#3c4043; border:1px solid var(--border); }
+.gbtn-secondary:hover{ background:#f8f9fa; }
+.gbtn-danger{ background:#ea4335; color:#fff; }
+.gbtn-danger:hover{ filter:brightness(.95); }
+.df-actions{ margin-top:12px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+
+/* Empty + skeleton */
+.df-empty{ grid-column:1/-1; text-align:center; color:var(--muted); padding:28px 8px; }
+.skeleton{ background:linear-gradient(90deg,#f4f4f4,#e9eef5,#f4f4f4); background-size:200% 100%; animation:sh 1.1s infinite; border-radius:12px; height:190px; }
+@keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+</style>
+
+<div class="df-page">
+  <div class="df-header">
+    <h2 class="df-title"><span class="material-icons" aria-hidden="true">group_add</span>Discover Friends</h2>
+    <div class="df-search">
+      <span class="material-icons" aria-hidden="true">search</span>
+      <input id="search-bar" type="text" placeholder="Search users by name...">
     </div>
+  </div>
+
+  <div id="user-list">
+    {% include 'user_list.html' %}
+  </div>
 </div>
+
 <script>
-document.getElementById('search-bar').addEventListener('input', function() {
-    const query = this.value;
-    fetch(`/search_users?q=${encodeURIComponent(query)}`)
-        .then(response => response.json())
-        .then(users => {
-            const userList = document.getElementById('user-list');
-            if (users.length === 0) {
-                userList.innerHTML = '<div class="alert alert-info text-center">No users found.</div>';
-                return;
-            }
-            userList.innerHTML = `
-                <div class="row row-cols-1 row-cols-md-3 g-4">
-                    ${users.map(user => `
-                        <div class="col">
-                            <div class="card h-100 text-center shadow-sm">
-                                <div class="card-body d-flex flex-column align-items-center">
-                                    <img src="${user.profile_pic_url}" alt="Profile Picture" class="rounded-circle mb-3" width="100" height="100">
-                                    <h5 class="card-title mb-1">${user.username}</h5>
-                                    ${user.bio ? `<p class="card-text text-muted small">${user.bio}</p>` : ''}
-                                    <form method="post" action="/send_friend_request/${user.user_id}">
-                                        ${user.pending ? `
-                                            <button type="button" class="btn btn-secondary btn-sm mt-2" disabled>
-                                                <i class="bi bi-hourglass-split"></i> Pending
-                                            </button>
-                                        ` : `
-                                            <button type="submit" class="btn btn-primary btn-sm mt-2">Request</button>
-                                        `}
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            `;
-        });
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+function gridSkeleton(count=6){
+  return `<div class="df-grid">${Array.from({length:count}).map(()=>'<div class="skeleton"></div>').join('')}</div>`;
+}
+function cardHtml(u){
+  const bio = u.bio ? `<div class="df-bio">${u.bio}</div>` : `<div class="df-bio"></div>`;
+  // pending_by_me is optional; if server includes it we show Cancel; if not, we’ll still switch to cancel after we send a request
+  if (u.pending){
+    const pendingBtn = `<button class="gbtn gbtn-secondary" disabled><span class="material-icons" style="font-size:16px;vertical-align:-3px">hourglass_empty</span> Pending</button>`;
+    const cancelBtn = u.pending_by_me ? `<button class="gbtn gbtn-danger js-cancel" data-user-id="${u.user_id}"><span class="material-icons" style="font-size:16px;vertical-align:-3px">cancel</span> Cancel</button>` : '';
+    return `
+      <div class="df-card" data-user-id="${u.user_id}">
+        <div class="df-avatar"><img src="${u.profile_pic_url}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"></div>
+        <div class="df-name">${u.username}</div>${bio}
+        <div class="df-actions">${pendingBtn}${cancelBtn}</div>
+      </div>`;
+  }
+  return `
+    <div class="df-card" data-user-id="${u.user_id}">
+      <div class="df-avatar"><img src="${u.profile_pic_url}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"></div>
+      <div class="df-name">${u.username}</div>${bio}
+      <div class="df-actions">
+        <button class="gbtn gbtn-primary js-request" data-user-id="${u.user_id}">
+          <span class="material-icons" style="font-size:16px;vertical-align:-3px">person_add</span> Request
+        </button>
+      </div>
+    </div>`;
+}
+
+async function doSearch(q){
+  const list = document.getElementById('user-list');
+  list.innerHTML = gridSkeleton();
+  try{
+    const r = await fetch(`/search_users?q=${encodeURIComponent(q||'')}`);
+    const users = await r.json();
+    if (!users?.length){
+      list.innerHTML = `<div class="df-grid"><div class="df-empty"><span class="material-icons" style="font-size:56px;color:#dadce0;">person_search</span><div>No users found.</div></div></div>`;
+      return;
+    }
+    list.innerHTML = `<div class="df-grid">${users.map(cardHtml).join('')}</div>`;
+  }catch(e){
+    list.innerHTML = `<div class="df-grid"><div class="df-empty">Something went wrong. Try again.</div></div>`;
+  }
+}
+
+document.getElementById('search-bar').addEventListener('input', e => doSearch(e.target.value));
+
+// Progressive enhancement: intercept server-rendered forms inside user_list (send + cancel)
+document.addEventListener('submit', async (e) => {
+  const form = e.target;
+  if (!form.matches('.js-request-form, .js-cancel-form')) return;
+  e.preventDefault();
+  const isCancel = form.classList.contains('js-cancel-form');
+  const btn = form.querySelector('button, input[type="submit"]');
+  const oldHTML = btn?.innerHTML;
+  if (btn){ btn.disabled = true; btn.innerHTML = '<span class="material-icons" style="font-size:16px;vertical-align:-3px">hourglass_empty</span> Working...'; }
+  try{
+    const r = await fetch(form.action, { method:'POST', headers: { 'X-CSRFToken': csrfToken } });
+    if (!r.ok) throw 0;
+    const card = form.closest('.df-card') || form.closest('.card');
+    if (!isCancel){
+      // turned Pending + show Cancel
+      if (card){
+        const actions = card.querySelector('.df-actions') || card.querySelector('.card-body');
+        if (actions){
+          actions.innerHTML = `
+            <button class="gbtn gbtn-secondary" disabled>
+              <span class="material-icons" style="font-size:16px;vertical-align:-3px">hourglass_empty</span> Pending
+            </button>
+            <form method="post" action="${form.action.replace('send_friend_request','cancel_friend_request')}" class="js-cancel-form" style="display:inline;">
+              <input type="hidden" name="csrf_token" value="${csrfToken}">
+              <button type="submit" class="gbtn gbtn-danger">
+                <span class="material-icons" style="font-size:16px;vertical-align:-3px">cancel</span> Cancel
+              </button>
+            </form>`;
+        }
+      }
+    }else{
+      // back to Request
+      if (card){
+        const actions = card.querySelector('.df-actions') || card.querySelector('.card-body');
+        if (actions){
+          const userId = form.action.split('/').pop();
+          actions.innerHTML = `
+            <form method="post" action="/send_friend_request/${userId}" class="js-request-form" style="display:inline;">
+              <input type="hidden" name="csrf_token" value="${csrfToken}">
+              <button type="submit" class="gbtn gbtn-primary">
+                <span class="material-icons" style="font-size:16px;vertical-align:-3px">person_add</span> Request
+              </button>
+            </form>`;
+        }
+      }
+    }
+  }catch(_){
+    if (btn){ btn.disabled = false; btn.innerHTML = oldHTML; }
+  }
+});
+
+// JS-only buttons in search results
+document.addEventListener('click', async (e) => {
+  const sendBtn = e.target.closest('.js-request');
+  const cancelBtn = e.target.closest('.js-cancel');
+  if (sendBtn){
+    const userId = sendBtn.dataset.userId;
+    sendBtn.disabled = true; const old = sendBtn.innerHTML;
+    sendBtn.innerHTML = '<span class="material-icons" style="font-size:16px;vertical-align:-3px">hourglass_empty</span> Sending...';
+    try{
+      const r = await fetch(`/send_friend_request/${userId}`, { method:'POST', headers:{ 'X-CSRFToken': csrfToken } });
+      if (!r.ok) throw 0;
+      const card = sendBtn.closest('.df-card');
+      const actions = card.querySelector('.df-actions');
+      actions.innerHTML = `
+        <button class="gbtn gbtn-secondary" disabled>
+          <span class="material-icons" style="font-size:16px;vertical-align:-3px">hourglass_empty</span> Pending
+        </button>
+        <button class="gbtn gbtn-danger js-cancel" data-user-id="${userId}">
+          <span class="material-icons" style="font-size:16px;vertical-align:-3px">cancel</span> Cancel
+        </button>`;
+    }catch(_){
+      sendBtn.disabled = false; sendBtn.innerHTML = old;
+    }
+  }
+  if (cancelBtn){
+    const userId = cancelBtn.dataset.userId;
+    cancelBtn.disabled = true; const old = cancelBtn.innerHTML;
+    cancelBtn.innerHTML = '<span class="material-icons" style="font-size:16px;vertical-align:-3px">hourglass_empty</span> Cancelling...';
+    try{
+      const r = await fetch(`/cancel_friend_request/${userId}`, { method:'POST', headers:{ 'X-CSRFToken': csrfToken } });
+      if (!r.ok) throw 0;
+      const card = cancelBtn.closest('.df-card');
+      const actions = card.querySelector('.df-actions');
+      actions.innerHTML = `
+        <button class="gbtn gbtn-primary js-request" data-user-id="${userId}">
+          <span class="material-icons" style="font-size:16px;vertical-align:-3px">person_add</span> Request
+        </button>`;
+    }catch(_){
+      cancelBtn.disabled = false; cancelBtn.innerHTML = old;
+    }
+  }
 });
 </script>
 {% endblock %}
-

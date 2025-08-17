@@ -80,7 +80,7 @@ from filters import (
 from forms import (
     SignupForm, LoginForm, ReportForm, UpdateUserStatusForm,
     FriendRequestForm, UpdateReportStatusForm, Enable2FAForm,
-    Disable2FAForm, RemovePassKeyForm, CreatePostForm,EditProfileForm
+    Disable2FAForm, RemovePassKeyForm, CreatePostForm,EditProfileForm,ChangePasswordForm 
 )
 
 # Custom logging utilities
@@ -126,12 +126,15 @@ socketio = SocketIO(app, cors_allowed_origins=[
     "http://127.0.0.1",
     ""
 ])
+
+# No longer used!
 def allowed_file(filename):
     """Check if file extension is allowed"""
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-# --- Initialize Extensions ---
+
+
 # CSRF protection
 csrf = CSRFProtect(app)
 
@@ -144,9 +147,13 @@ ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png'}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 UPLOAD_FOLDER = 'static/uploads'
 
+
+# No longer used!
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+
+#no longer used!
 def validate_image(file_stream):
     # Check file type using python-magic
     mime = magic.from_buffer(file_stream.read(1024), mime=True)
@@ -740,13 +747,32 @@ def verify_2fa():
         code = form.totp_code.data
         totp = pyotp.TOTP(user.totp_secret)
         if totp.verify(code):
+            # Clear failed login attempts and lockout
+            user.failed_login_attempts = 0
+            user.lockout_until = None
+            
+            # Update user status to online and last active time
+            user.current_status = 'online'
+            user.last_active_at = datetime.utcnow()
+            
             login_user(user)
             session.pop('pending_2fa_user_id', None)
+            session.pop('login_method', None)  # Clean up login method too
             
-    
+            # Commit all user updates
+            db.session.commit()
+            
+            # Send event reminders on login
             send_user_event_reminders(user.user_id)
             
-            return redirect(url_for('home'))
+            # Log successful 2FA login
+            log_user_login_success(user.user_id, details="User logged in successfully with 2FA.")
+            
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('home'))
+        else:
+            flash('Invalid 2FA code. Please try again.', 'error')
+    
     return render_template('UserVerify2FA.html', form=form)
 
 @app.route('/check_user_auth_methods', methods=['POST'])
@@ -957,6 +983,7 @@ def remove_passkey(cred_id):
         pass
     return redirect(url_for('account_security'))
 
+# --- Passkey when logging in ---
 @app.route('/passkey/begin_login', methods=['POST'])
 @csrf.exempt
 def passkey_begin_login():
@@ -1213,6 +1240,249 @@ def passkey_finish_login():
         traceback.print_exc()
         return jsonify({"error": f"Failed to complete passkey authentication: {str(e)}"}), 500
 
+# --- change password ---
+
+@app.route('/change_password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    form = ChangePasswordForm()
+    
+    # Check user's security setup
+    has_2fa = bool(current_user.totp_secret)
+    has_passkeys = WebAuthnCredential.query.filter_by(user_id=current_user.user_id).first() is not None
+    
+    if request.method == 'POST':
+        # Handle passkey authentication
+        if request.form.get('auth_method') == 'passkey':
+            # Verify passkey was used (this would be set by JavaScript)
+            passkey_verified = session.get('passkey_verified_for_password_change')
+            if not passkey_verified:
+                flash('Passkey verification required.', 'error')
+                return render_template('change_password.html', form=form, has_2fa=has_2fa, has_passkeys=has_passkeys)
+            
+            # Clear the session flag
+            session.pop('passkey_verified_for_password_change', None)
+        
+        if form.validate_on_submit():
+            try:
+                # Additional validation based on security setup
+                auth_method = form.auth_method.data
+                
+                if has_2fa and auth_method != 'passkey':
+                    # 2FA is enabled and not using passkey - require 2FA code
+                    if not form.totp_code.data:
+                        flash('2FA code is required when 2FA is enabled.', 'error')
+                        return render_template('change_password.html', form=form, has_2fa=has_2fa, has_passkeys=has_passkeys)
+                    
+                    # Verify 2FA code
+                    totp = pyotp.TOTP(current_user.totp_secret)
+                    if not totp.verify(form.totp_code.data):
+                        flash('Invalid 2FA code.', 'error')
+                        return render_template('change_password.html', form=form, has_2fa=has_2fa, has_passkeys=has_passkeys)
+                
+                # Update password
+                current_user.password_hash = generate_password_hash(form.new_password.data)
+                current_user.updated_at = datetime.utcnow()
+                db.session.commit()
+                
+                # Log the action
+                try:
+                    from user_actions import log_user_action
+                    log_user_action(
+                        current_user.user_id,
+                        'change_password',
+                        f'Password changed using {auth_method or "password"}',
+                        request.remote_addr,
+                        request.headers.get('User-Agent', 'Unknown')
+                    )
+                except ImportError:
+                    pass
+                
+                flash('Password changed successfully!', 'success')
+                return redirect(url_for('account_security'))
+                
+            except Exception as e:
+                db.session.rollback()
+                app.logger.error(f"Error changing password: {str(e)}")
+                flash('An error occurred while changing your password.', 'error')
+    
+    return render_template('change_password.html', form=form, has_2fa=has_2fa, has_passkeys=has_passkeys)
+
+@app.route('/verify_passkey_for_password_change', methods=['POST'])
+@csrf.exempt
+@login_required
+def verify_passkey_for_password_change():
+    """Verify passkey for password change"""
+    try:
+        if 'fido2_auth_state' not in session:
+            return jsonify({"error": "No authentication in progress"}), 400
+        
+        data = request.get_json()
+        state = session.pop('fido2_auth_state')
+        
+        credential_id = data['id']
+        clientDataJSON_bytes = base64.b64decode(data['response']['clientDataJSON'])
+        authenticatorData_bytes = base64.b64decode(data['response']['authenticatorData'])
+        signature = base64.b64decode(data['response']['signature'])
+        
+        # Convert base64url to hex for database lookup
+        def base64url_to_base64(base64url_string):
+            base64_string = base64url_string.replace('-', '+').replace('_', '/')
+            padding = len(base64_string) % 4
+            if padding:
+                base64_string += '=' * (4 - padding)
+            return base64_string
+        
+        try:
+            standard_b64 = base64url_to_base64(credential_id)
+            credential_id_bytes = base64.b64decode(standard_b64)
+            credential_id_hex = credential_id_bytes.hex()
+        except Exception:
+            credential_id_hex = credential_id
+        
+        # Find credential in database - must belong to current user
+        cred_record = WebAuthnCredential.query.filter_by(
+            credential_id=credential_id_hex,
+            user_id=current_user.user_id
+        ).first()
+        
+        if not cred_record:
+            return jsonify({"error": "Credential not found or not owned by user"}), 400
+        
+        # Deserialize the public key
+        try:
+            public_key = cbor2.loads(cred_record.public_key)
+        except Exception:
+            import json
+            public_key = json.loads(cred_record.public_key.decode('utf-8'))
+        
+        # Create ClientData and AuthenticatorData objects
+        client_data = ClientData(clientDataJSON_bytes)
+        auth_data = AuthenticatorData(authenticatorData_bytes)
+        
+        # Manual ECDSA signature verification
+        try:
+            if public_key.get(1) == 2 and public_key.get(3) == -7:  # EC2 key type, ES256 algorithm
+                # Extract x and y coordinates
+                x_bytes = public_key.get(-2)
+                y_bytes = public_key.get(-3)
+                
+                if x_bytes and y_bytes:
+                    # Convert to EC public key
+                    x_int = int.from_bytes(x_bytes, 'big')
+                    y_int = int.from_bytes(y_bytes, 'big')
+                    public_numbers = EllipticCurvePublicNumbers(x_int, y_int, SECP256R1())
+                    public_key_obj = public_numbers.public_key()
+                    
+                    # Verify signature
+                    import hashlib
+                    client_data_hash = hashlib.sha256(clientDataJSON_bytes).digest()
+                    signed_data = authenticatorData_bytes + client_data_hash
+                    
+                    public_key_obj.verify(signature, signed_data, ec.ECDSA(hashes.SHA256()))
+                else:
+                    raise Exception("Missing x or y coordinates in public key")
+            else:
+                raise Exception("Unsupported key type")
+            
+        except Exception as verify_error:
+            return jsonify({"error": f"Authentication failed: {str(verify_error)}"}), 400
+        
+        # Update sign count
+        cred_record.sign_count = auth_data.counter
+        db.session.commit()
+        
+        # Set session flag for password change
+        session['passkey_verified_for_password_change'] = True
+        
+        return jsonify({"success": True})
+        
+    except Exception as e:
+        print(f"Error in verify_passkey_for_password_change: {e}")
+        return jsonify({"error": f"Failed to verify passkey: {str(e)}"}), 500
+
+@app.route('/begin_passkey_auth_for_password_change', methods=['POST'])
+@csrf.exempt
+@login_required
+def begin_passkey_auth_for_password_change():
+    """Begin passkey authentication for password change"""
+    try:
+        fido2_server = get_fido2_server()
+        
+        # Get user's credentials
+        user_credentials = WebAuthnCredential.query.filter_by(user_id=current_user.user_id).all()
+        
+        if not user_credentials:
+            return jsonify({"error": "No passkeys found for authentication"}), 400
+        
+        allow_credentials = []
+        for cred in user_credentials:
+            try:
+                allow_credentials.append({
+                    "id": bytes.fromhex(cred.credential_id),
+                    "type": "public-key"
+                })
+            except ValueError as e:
+                continue
+        
+        if not allow_credentials:
+            return jsonify({"error": "No valid passkeys found"}), 400
+        
+        # Get the authentication options
+        options, state = fido2_server.authenticate_begin(
+            credentials=allow_credentials,
+            user_verification="preferred"
+        )
+        
+        # Store the state in session
+        session['fido2_auth_state'] = state
+        
+        # Build the response dictionary manually
+        try:
+            response_dict = {
+                'challenge': base64.b64encode(options.challenge).decode('utf-8'),
+                'rpId': options.rp_id,
+                'userVerification': options.user_verification.value if hasattr(options.user_verification, 'value') else str(options.user_verification),
+                'allowCredentials': []
+            }
+            
+            # Convert allowCredentials manually
+            if hasattr(options, 'allow_credentials') and options.allow_credentials:
+                for cred in options.allow_credentials:
+                    cred_dict = {
+                        'type': cred.type.value if hasattr(cred.type, 'value') else str(cred.type),
+                        'id': base64.b64encode(cred.id).decode('utf-8')
+                    }
+                    response_dict['allowCredentials'].append(cred_dict)
+            
+            return jsonify(response_dict)
+            
+        except Exception as manual_error:
+            # If options is a dict with publicKey
+            if isinstance(options, dict) and 'publicKey' in options:
+                actual_options = options['publicKey']
+                response_dict = {
+                    'challenge': base64.b64encode(actual_options.challenge).decode('utf-8'),
+                    'rpId': actual_options.rp_id,
+                    'userVerification': actual_options.user_verification.value if hasattr(actual_options.user_verification, 'value') else str(actual_options.user_verification),
+                    'allowCredentials': []
+                }
+                
+                if hasattr(actual_options, 'allow_credentials') and actual_options.allow_credentials:
+                    for cred in actual_options.allow_credentials:
+                        cred_dict = {
+                            'type': cred.type.value if hasattr(cred.type, 'value') else str(cred.type),
+                            'id': base64.b64encode(cred.id).decode('utf-8')
+                        }
+                        response_dict['allowCredentials'].append(cred_dict)
+                
+                return jsonify(response_dict)
+            else:
+                return jsonify({"error": "Invalid options format"}), 500
+        
+    except Exception as e:
+        print(f"Error in begin_passkey_auth_for_password_change: {e}")
+        return jsonify({"error": f"Failed to begin passkey authentication: {str(e)}"}), 500
 
 # --- User Reporting ---
 @app.route('/report_user', methods=['GET', 'POST'])

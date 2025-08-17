@@ -172,3 +172,52 @@ class EventForm(FlaskForm):
     submit = SubmitField('Create Event')  # Changed from 'Create' to 'Create Event'
 
     #hausas
+
+class ChangePasswordForm(FlaskForm):
+    current_password = PasswordField(
+        'Current Password',
+        validators=[
+            DataRequired(message='Please enter your current password.'),
+            Length(min=6, max=50, message='Password must be between 6 and 50 characters.')
+        ],
+        render_kw={"placeholder": "Enter your current password", "class": "form-control"}
+    )
+    new_password = PasswordField(
+        'New Password',
+        validators=[
+            DataRequired(message='Please enter a new password.'),
+            Length(min=6, max=50, message='Password must be between 6 and 50 characters.')
+        ],
+        render_kw={"placeholder": "Enter your new password", "class": "form-control"}
+    )
+    confirm_password = PasswordField(
+        'Confirm New Password',
+        validators=[
+            DataRequired(message='Please confirm your new password.'),
+            EqualTo('new_password', message='Passwords must match.')
+        ],
+        render_kw={"placeholder": "Confirm your new password", "class": "form-control"}
+    )
+    totp_code = StringField(
+        '2FA Code (if enabled)',
+        validators=[
+            Optional(),
+            Length(min=6, max=6, message='2FA code must be 6 digits.')
+        ],
+        render_kw={"placeholder": "Enter 6-digit code (if 2FA enabled)", "class": "form-control"}
+    )
+    # Hidden field to track authentication method used
+    auth_method = HiddenField()
+    
+    recaptcha = RecaptchaField()
+    submit = SubmitField('Change Password', render_kw={"class": "btn btn-primary"})
+
+    def validate_current_password(self, field):
+        from flask_login import current_user
+        if not current_user.check_password(field.data):
+            raise ValidationError('Current password is incorrect.')
+
+    def validate_new_password(self, field):
+        from flask_login import current_user
+        if current_user.check_password(field.data):
+            raise ValidationError('New password must be different from current password.')

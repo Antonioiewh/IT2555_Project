@@ -2,109 +2,493 @@
 {% block title %}Admin - Manage Users{% endblock %}
 
 {% block content %}
-<div class="container mt-5">
-    <h1 class="text-center mb-4">Admin Dashboard - Manage Users</h1>
+<style>
+/* Google-inspired design system */
+:root {
+    --google-blue: #1a73e8;
+    --google-blue-hover: #1557b0;
+    --google-blue-light: #e8f0fe;
+    --google-grey-50: #f8f9fa;
+    --google-grey-100: #f1f3f4;
+    --google-grey-200: #e8eaed;
+    --google-grey-300: #dadce0;
+    --google-grey-400: #bdc1c6;
+    --google-grey-500: #9aa0a6;
+    --google-grey-600: #80868b;
+    --google-grey-700: #5f6368;
+    --google-grey-800: #3c4043;
+    --google-grey-900: #202124;
+    --google-green: #34a853;
+    --google-yellow: #fbbc04;
+    --google-red: #ea4335;
+    --google-shadow: 0 1px 2px 0 rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15);
+    --google-shadow-hover: 0 1px 3px 0 rgba(60,64,67,.3), 0 4px 8px 3px rgba(60,64,67,.15);
+}
 
-    <!-- Top Section: Statistics -->
-    <div class="row mb-4">
-        <div class="col-md-4">
-            <div class="card shadow-sm border-0 rounded">
-                <div class="card-body">
-                    <h6 class="card-title text-uppercase text-muted">Total Users</h6>
-                    <p class="card-text display-4 text-dark">{{ total_users }}</p>
-                </div>
-            </div>
+.google-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px;
+    background-color: #fff;
+    min-height: 100vh;
+}
+
+.google-header {
+    margin-bottom: 32px;
+}
+
+.google-title {
+    font-size: 28px;
+    font-weight: 400;
+    color: var(--google-grey-800);
+    margin: 0 0 8px 0;
+    letter-spacing: 0;
+}
+
+.google-subtitle {
+    font-size: 14px;
+    color: var(--google-grey-600);
+    margin: 0;
+}
+
+/* Statistics Cards */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+}
+
+.stat-card {
+    background: #fff;
+    border: 1px solid var(--google-grey-200);
+    border-radius: 8px;
+    padding: 20px;
+    transition: box-shadow 0.2s ease;
+}
+
+.stat-card:hover {
+    box-shadow: var(--google-shadow-hover);
+}
+
+.stat-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--google-grey-600);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.stat-value {
+    font-size: 32px;
+    font-weight: 400;
+    color: var(--google-grey-800);
+    margin: 0;
+}
+
+.stat-total .stat-value { color: var(--google-blue); }
+.stat-online .stat-value { color: var(--google-green); }
+.stat-offline .stat-value { color: var(--google-grey-500); }
+
+/* Search Card */
+.search-card {
+    background: #fff;
+    border: 1px solid var(--google-grey-200);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 24px;
+    box-shadow: var(--google-shadow);
+}
+
+.search-form {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.search-input {
+    flex: 1;
+    border: 1px solid var(--google-grey-300);
+    border-radius: 4px;
+    padding: 12px 16px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s ease;
+}
+
+.search-input:focus {
+    border-color: var(--google-blue);
+    box-shadow: 0 0 0 1px var(--google-blue);
+}
+
+.search-btn {
+    background: var(--google-blue);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 12px 24px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.search-btn:hover {
+    background: var(--google-blue-hover);
+}
+
+/* Table Container */
+.table-container {
+    background: #fff;
+    border: 1px solid var(--google-grey-200);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: var(--google-shadow);
+}
+
+/* Table Styles */
+.google-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.google-table thead {
+    background: var(--google-grey-50);
+    border-bottom: 1px solid var(--google-grey-200);
+}
+
+.google-table th {
+    padding: 16px 20px;
+    text-align: left;
+    font-weight: 500;
+    color: var(--google-grey-700);
+    border: none;
+}
+
+.google-table th a {
+    color: var(--google-grey-700);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: color 0.2s ease;
+}
+
+.google-table th a:hover {
+    color: var(--google-blue);
+}
+
+.google-table tbody tr {
+    border-bottom: 1px solid var(--google-grey-200);
+    transition: background-color 0.2s ease;
+}
+
+.google-table tbody tr:hover {
+    background: var(--google-grey-50);
+}
+
+.google-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.google-table td {
+    padding: 16px 20px;
+    vertical-align: middle;
+    border: none;
+}
+
+/* Status Badges */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-online {
+    background: rgba(52, 168, 83, 0.1);
+    color: var(--google-green);
+}
+
+.status-offline {
+    background: var(--google-grey-100);
+    color: var(--google-grey-600);
+}
+
+.status-suspended {
+    background: rgba(251, 188, 4, 0.1);
+    color: #f9ab00;
+}
+
+.status-terminated {
+    background: rgba(234, 67, 53, 0.1);
+    color: var(--google-red);
+}
+
+/* Role Badges */
+.role-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    margin-right: 4px;
+    margin-bottom: 4px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.role-admin {
+    background: rgba(234, 67, 53, 0.1);
+    color: var(--google-red);
+}
+
+.role-editor {
+    background: rgba(251, 188, 4, 0.1);
+    color: #f9ab00;
+}
+
+.role-user {
+    background: var(--google-blue-light);
+    color: var(--google-blue);
+}
+
+.role-none {
+    background: var(--google-grey-100);
+    color: var(--google-grey-600);
+}
+
+/* Action Buttons */
+.action-btn {
+    background: var(--google-blue);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    transition: all 0.2s ease;
+}
+
+.action-btn:hover {
+    background: var(--google-blue-hover);
+    color: white;
+    text-decoration: none;
+    box-shadow: var(--google-shadow);
+}
+
+.action-btn:disabled {
+    background: var(--google-grey-200);
+    color: var(--google-grey-500);
+    cursor: not-allowed;
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 64px 24px;
+    color: var(--google-grey-600);
+}
+
+.empty-state-icon {
+    font-size: 48px;
+    color: var(--google-grey-400);
+    margin-bottom: 16px;
+}
+
+.empty-state-title {
+    font-size: 20px;
+    font-weight: 400;
+    color: var(--google-grey-700);
+    margin-bottom: 8px;
+}
+
+.empty-state-subtitle {
+    font-size: 14px;
+    color: var(--google-grey-600);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .google-container {
+        padding: 16px;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    
+    .search-form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .table-container {
+        overflow-x: auto;
+    }
+    
+    .google-table th,
+    .google-table td {
+        padding: 12px 16px;
+        white-space: nowrap;
+    }
+}
+
+/* Sort Icons */
+.sort-icon {
+    font-size: 12px;
+    opacity: 0.6;
+    transition: opacity 0.2s ease;
+}
+
+.google-table th a:hover .sort-icon {
+    opacity: 1;
+}
+</style>
+
+<div class="google-container">
+    <!-- Header -->
+    <div class="google-header">
+        <h1 class="google-title">User Management</h1>
+        <p class="google-subtitle">Manage user accounts, roles, and permissions</p>
+    </div>
+
+    <!-- Statistics Grid -->
+    <div class="stats-grid">
+        <div class="stat-card stat-total">
+            <div class="stat-label">Total Users</div>
+            <div class="stat-value">{{ total_users }}</div>
         </div>
-        <div class="col-md-4">
-            <div class="card shadow-sm border-0 rounded">
-                <div class="card-body">
-                    <h6 class="card-title text-uppercase text-muted">Online Users</h6>
-                    <p class="card-text display-4 text-success">{{ online_users }}</p>
-                </div>
-            </div>
+        <div class="stat-card stat-online">
+            <div class="stat-label">Online Users</div>
+            <div class="stat-value">{{ online_users }}</div>
         </div>
-        <div class="col-md-4">
-            <div class="card shadow-sm border-0 rounded">
-                <div class="card-body">
-                    <h6 class="card-title text-uppercase text-muted">Offline Users</h6>
-                    <p class="card-text display-4 text-secondary">{{ offline_users }}</p>
-                </div>
-            </div>
+        <div class="stat-card stat-offline">
+            <div class="stat-label">Offline Users</div>
+            <div class="stat-value">{{ offline_users }}</div>
         </div>
     </div>
 
-    <!-- Search Bar -->
-    <div class="card shadow-sm border-0 mb-4 rounded">
-        <div class="card-body">
-            <form method="get" action="/users_dashboard">
-                <div class="input-group">
-                    <input type="text" name="search" class="form-control" placeholder="Search (e.g., id=1,username=admin,status=online)" value="{{ search_query }}">
-                    <button class="btn btn-primary" type="submit">Search</button>
-                </div>
-            </form>
-        </div>
+    <!-- Search Card -->
+    <div class="search-card">
+        <form method="get" action="/users_dashboard" class="search-form">
+            <input type="text" 
+                   name="search" 
+                   class="search-input" 
+                   placeholder="Search users (e.g., id=1, username=admin, status=online)" 
+                   value="{{ search_query }}">
+            <button type="submit" class="search-btn">
+                <i class="bi bi-search"></i> Search
+            </button>
+        </form>
     </div>
 
-    <!-- Bottom Section: User Table -->
+    <!-- Users Table -->
     {% if users %}
-    <div class="table-responsive">
-        <table class="table table-hover table-striped align-middle">
-            <thead class="table-dark">
+    <div class="table-container">
+        <table class="google-table">
+            <thead>
                 <tr>
-                    <th scope="col">
-                        <a href="?sort_by=id&order={{ 'asc' if sort_by != 'id' or order == 'desc' else 'desc' }}&search={{ search_query }}" class="text-white text-decoration-none">
-                            ID 
-                            <i class="bi {% if sort_by == 'id' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %}" style="font-size: 0.8rem; color: #0d6efd;"></i>
+                    <th>
+                        <a href="?sort_by=id&order={{ 'asc' if sort_by != 'id' or order == 'desc' else 'desc' }}&search={{ search_query }}">
+                            ID
+                            <i class="bi {% if sort_by == 'id' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %} sort-icon"></i>
                         </a>
                     </th>
-                    <th scope="col">
-                        <a href="?sort_by=username&order={{ 'asc' if sort_by != 'username' or order == 'desc' else 'desc' }}&search={{ search_query }}" class="text-white text-decoration-none">
-                            Username 
-                            <i class="bi {% if sort_by == 'username' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %}" style="font-size: 0.8rem; color: #0d6efd;"></i>
+                    <th>
+                        <a href="?sort_by=username&order={{ 'asc' if sort_by != 'username' or order == 'desc' else 'desc' }}&search={{ search_query }}">
+                            Username
+                            <i class="bi {% if sort_by == 'username' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %} sort-icon"></i>
                         </a>
                     </th>
-                    <th scope="col">Phone</th>
-                    <th scope="col">Status</th>
-                    <th scope="col">Roles</th>
-                    <th scope="col">
-                        <a href="?sort_by=registration_date&order={{ 'asc' if sort_by != 'registration_date' or order == 'desc' else 'desc' }}&search={{ search_query }}" class="text-white text-decoration-none">
-                            Registration Date 
-                            <i class="bi {% if sort_by == 'registration_date' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %}" style="font-size: 0.8rem; color: #0d6efd;"></i>
+                    <th>Phone</th>
+                    <th>Status</th>
+                    <th>Roles</th>
+                    <th>
+                        <a href="?sort_by=registration_date&order={{ 'asc' if sort_by != 'registration_date' or order == 'desc' else 'desc' }}&search={{ search_query }}">
+                            Registration Date
+                            <i class="bi {% if sort_by == 'registration_date' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %} sort-icon"></i>
                         </a>
                     </th>
-                    <th scope="col">Actions</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for user in users %}
                 <tr>
-                    <th scope="row">{{ user.user_id }}</th>
-                    <td>{{ user.username }}</td>
-                    <td>{{ user.phone_number if user.phone_number else 'N/A' }}</td>
+                    <td><strong>{{ user.user_id }}</strong></td>
                     <td>
-                        <span class="badge 
-                            {% if user.current_status == 'online' %}bg-success
-                            {% elif user.current_status == 'offline' %}bg-secondary
-                            {% elif user.current_status == 'suspended' %}bg-warning
-                            {% elif user.current_status == 'terminated' %}bg-danger
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <!-- Profile Picture -->
+                            <img src="{% if user.profile_pic_url %}{{ url_for('static', filename='uploads/' + user.profile_pic_url) }}{% else %}{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}{% endif %}" 
+                                 alt="{{ user.username }}" 
+                                 style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 2px solid var(--google-grey-200);"
+                                 onerror="this.src='{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}'">
+                            <div>
+                                <div style="font-weight: 500; color: var(--google-grey-800);">{{ user.username }}</div>
+                                {% if user.bio %}
+                                <div style="font-size: 12px; color: var(--google-grey-600); margin-top: 2px;">{{ user.bio[:30] }}{% if user.bio|length > 30 %}...{% endif %}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <span style="color: var(--google-grey-700);">
+                            {{ user.phone_number if user.phone_number else 'Not provided' }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="status-badge 
+                            {% if user.current_status == 'online' %}status-online
+                            {% elif user.current_status == 'offline' %}status-offline
+                            {% elif user.current_status == 'suspended' %}status-suspended
+                            {% elif user.current_status == 'terminated' %}status-terminated
                             {% endif %}">
+                            <i class="bi {% if user.current_status == 'online' %}bi-circle-fill{% elif user.current_status == 'offline' %}bi-circle{% elif user.current_status == 'suspended' %}bi-pause-circle{% else %}bi-x-circle{% endif %}" style="margin-right: 4px; font-size: 10px;"></i>
                             {{ user.current_status }}
                         </span>
                     </td>
                     <td>
-                        {% for role in user.roles %}
-                            <span class="badge bg-info text-dark me-1">{{ role.role_name }}</span>
-                        {% else %}
-                            <span class="badge bg-warning text-dark">No Roles</span>
-                        {% endfor %}
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                            {% for role in user.roles %}
+                                <span class="role-badge role-{{ role.role_name }}">
+                                    {{ role.role_name }}
+                                </span>
+                            {% else %}
+                                <span class="role-badge role-none">No Roles</span>
+                            {% endfor %}
+                        </div>
                     </td>
-                    <td>{{ user.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>
+                        <div style="color: var(--google-grey-700);">
+                            {{ user.created_at.strftime('%b %d, %Y') }}
+                            <div style="font-size: 12px; color: var(--google-grey-500); margin-top: 2px;">
+                                {{ user.created_at.strftime('%H:%M') }}
+                            </div>
+                        </div>
+                    </td>
                     <td>
                         {% if 'admin' in user.roles|map(attribute='role_name') %}
-                            <button class="btn btn-sm btn-secondary" disabled>Manage User</button>
+                            <button class="action-btn" disabled>
+                                <i class="bi bi-shield-lock" style="margin-right: 6px; font-size: 12px;"></i>
+                                Protected
+                            </button>
                         {% else %}
-                            <a href="{{ url_for('manage_user', user_id=user.user_id) }}" class="btn btn-sm btn-primary">
-                                Manage User
+                            <a href="{{ url_for('manage_user', user_id=user.user_id) }}" class="action-btn">
+                                <i class="bi bi-gear" style="margin-right: 6px; font-size: 12px;"></i>
+                                Manage
                             </a>
                         {% endif %}
                     </td>
@@ -114,7 +498,21 @@
         </table>
     </div>
     {% else %}
-    <p class="text-center text-muted">No users found in the database.</p>
+    <div class="table-container">
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <i class="bi bi-people"></i>
+            </div>
+            <div class="empty-state-title">No users found</div>
+            <div class="empty-state-subtitle">
+                {% if search_query %}
+                    Try adjusting your search criteria or clear the search to see all users.
+                {% else %}
+                    There are no users in the system yet.
+                {% endif %}
+            </div>
+        </div>
+    </div>
     {% endif %}
 </div>
 {% endblock %}

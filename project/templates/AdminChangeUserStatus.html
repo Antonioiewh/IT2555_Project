@@ -2,40 +2,252 @@
 {% block title %}Manage User{% endblock %}
 
 {% block content %}
-<div class="container mt-5">
-    <div class="row justify-content-center">
-        <div class="col-md-6">
-            <div class="card shadow-sm border-0 rounded">
-                <div class="card-header bg-primary text-white rounded-top">
-                    <h4 class="mb-0">Manage User: {{ user.username }}</h4>
-                </div>
-                <div class="card-body rounded-bottom">
-                    <p><strong>Current Status:</strong> 
-                        <span class="badge 
-                            {% if user.current_status == 'online' %}bg-success
-                            {% elif user.current_status == 'offline' %}bg-secondary
-                            {% elif user.current_status == 'suspended' %}bg-warning
-                            {% elif user.current_status == 'terminated' %}bg-danger
-                            {% endif %}">
-                            {{ user.current_status }}
-                        </span>
-                    </p>
-                    <form method="post" action="{{ url_for('manage_user', user_id=user.user_id) }}">
-                        {{ form.hidden_tag() }}
-                        <div class="mb-3">
-                            <label for="status" class="form-label">Select Action</label>
-                            {{ form.status(class="form-select") }}
-                        </div>
-                        <div class="mb-3">
-                            {{ form.recaptcha }}
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <button type="submit" class="btn btn-primary">Submit</button>
-                            <a href="{{ url_for('manage_users') }}" class="btn btn-secondary">Cancel</a>
-                        </div>
-                    </form>
+<style>
+/* Google-inspired design for user management page */
+.google-container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 24px;
+    background-color: #fff;
+    min-height: 100vh;
+}
+
+.google-card {
+    background: #fff;
+    border: 1px solid #dadce0;
+    border-radius: 8px;
+    box-shadow: 0 1px 2px 0 rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15);
+    overflow: hidden;
+}
+
+.google-card-header {
+    background: #1a73e8;
+    color: white;
+    padding: 20px 24px;
+    border-bottom: none;
+}
+
+.google-card-title {
+    font-size: 20px;
+    font-weight: 500;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.google-card-body {
+    padding: 24px;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+    padding: 16px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.user-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #dadce0;
+}
+
+.user-details h3 {
+    margin: 0 0 4px 0;
+    font-size: 18px;
+    font-weight: 500;
+    color: #3c4043;
+}
+
+.user-details p {
+    margin: 0;
+    font-size: 14px;
+    color: #5f6368;
+}
+
+.current-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    color: #3c4043;
+    margin-bottom: 8px;
+}
+
+.form-select {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    font-size: 14px;
+    color: #3c4043;
+    background: white;
+    transition: border-color 0.2s ease;
+}
+
+.form-select:focus {
+    outline: none;
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 1px #1a73e8;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 32px;
+}
+
+.btn-primary {
+    background: #1a73e8;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 12px 24px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-primary:hover {
+    background: #1557b0;
+    color: white;
+    text-decoration: none;
+}
+
+.btn-secondary {
+    background: transparent;
+    color: #1a73e8;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    padding: 12px 24px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-secondary:hover {
+    background: #f8f9fa;
+    border-color: #1a73e8;
+    color: #1a73e8;
+    text-decoration: none;
+}
+
+/* Status-specific colors */
+.status-online {
+    background: rgba(52, 168, 83, 0.1);
+    color: #34a853;
+}
+
+.status-offline {
+    background: rgba(154, 160, 166, 0.1);
+    color: #5f6368;
+}
+
+.status-suspended {
+    background: rgba(251, 188, 4, 0.1);
+    color: #f9ab00;
+}
+
+.status-terminated {
+    background: rgba(234, 67, 53, 0.1);
+    color: #ea4335;
+}
+</style>
+
+<div class="google-container">
+    <div class="google-card">
+        <div class="google-card-header">
+            <h2 class="google-card-title">
+                <i class="bi bi-gear"></i>
+                Manage User Account
+            </h2>
+        </div>
+        
+        <div class="google-card-body">
+            <!-- User Information -->
+            <div class="user-info">
+                <img src="{% if user.profile_pic_url %}{{ url_for('static', filename='uploads/' + user.profile_pic_url) }}{% else %}{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}{% endif %}" 
+                     alt="{{ user.username }}" 
+                     class="user-avatar"
+                     onerror="this.src='{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}'">
+                <div class="user-details">
+                    <h3>{{ user.username }}</h3>
+                    <p>User ID: {{ user.user_id }} • Joined {{ user.created_at.strftime('%B %Y') }}</p>
                 </div>
             </div>
+
+            <!-- Current Status -->
+            <div class="form-group">
+                <label class="form-label">Current Status</label>
+                <div>
+                    <span class="current-status 
+                        {% if user.current_status == 'online' %}status-online
+                        {% elif user.current_status == 'offline' %}status-offline
+                        {% elif user.current_status == 'suspended' %}status-suspended
+                        {% elif user.current_status == 'terminated' %}status-terminated
+                        {% endif %}">
+                        <i class="bi {% if user.current_status == 'online' %}bi-circle-fill{% elif user.current_status == 'offline' %}bi-circle{% elif user.current_status == 'suspended' %}bi-pause-circle{% else %}bi-x-circle{% endif %}"></i>
+                        {{ user.current_status|title }}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Management Form -->
+            <form method="post" action="{{ url_for('manage_user', user_id=user.user_id) }}">
+                {{ form.hidden_tag() }}
+                
+                <div class="form-group">
+                    <label for="status" class="form-label">Change Status</label>
+                    {{ form.status(class="form-select") }}
+                </div>
+                
+                <div class="form-group">
+                    {{ form.recaptcha }}
+                </div>
+                
+                <div class="action-buttons">
+                    <a href="{{ url_for('manage_users') }}" class="btn-secondary">
+                        <i class="bi bi-arrow-left"></i>
+                        Back to Users
+                    </a>
+                    <button type="submit" class="btn-primary">
+                        <i class="bi bi-check-circle"></i>
+                        Apply Changes
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

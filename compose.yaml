@@ -100,6 +100,7 @@ services:
       - ./certs:/etc/nginx/certs:ro 
       - ./modsec_logs:/var/log/nginx/modsec_audit_data 
       - ./nginx_logs:/var/log/nginx
+      - ./project/static:/var/www/static:ro
     depends_on:
       - app1
       - app2

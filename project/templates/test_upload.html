@@ -2,62 +2,697 @@
 {% block title %}File Security Test{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="row">
-        <div class="col-md-8 mx-auto">
-            <div class="card">
-                <div class="card-header bg-primary text-white">
-                    <h4><i class="fas fa-shield-alt"></i> File Security Validation Test</h4>
-                    <small>Test our advanced polyglot detection and file security system</small>
+<style>
+/* Google-inspired design for testing interface */
+:root {
+    --google-blue: #1a73e8;
+    --google-blue-hover: #1557b0;
+    --google-blue-light: #e8f0fe;
+    --google-grey-50: #f8f9fa;
+    --google-grey-100: #f1f3f4;
+    --google-grey-200: #e8eaed;
+    --google-grey-300: #dadce0;
+    --google-grey-400: #bdc1c6;
+    --google-grey-500: #9aa0a6;
+    --google-grey-600: #80868b;
+    --google-grey-700: #5f6368;
+    --google-grey-800: #3c4043;
+    --google-grey-900: #202124;
+    --google-green: #34a853;
+    --google-yellow: #fbbc04;
+    --google-red: #ea4335;
+    --google-orange: #ff6d01;
+    --google-shadow: 0 1px 2px 0 rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15);
+    --google-shadow-hover: 0 1px 3px 0 rgba(60,64,67,.3), 0 4px 8px 3px rgba(60,64,67,.15);
+}
+
+.test-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 24px;
+    background-color: #fff;
+    min-height: 100vh;
+}
+
+.test-header {
+    text-align: center;
+    margin-bottom: 32px;
+}
+
+.test-title {
+    font-size: 32px;
+    font-weight: 400;
+    color: var(--google-grey-800);
+    margin: 0 0 8px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+}
+
+.security-icon {
+    width: 40px;
+    height: 40px;
+    background: var(--google-red);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 20px;
+}
+
+.test-subtitle {
+    font-size: 16px;
+    color: var(--google-grey-600);
+    margin: 0;
+}
+
+/* Flash Messages */
+.flash-messages {
+    margin-bottom: 24px;
+}
+
+.flash-alert {
+    border: none;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    box-shadow: var(--google-shadow);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.flash-success {
+    background: rgba(52, 168, 83, 0.1);
+    color: var(--google-green);
+    border-left: 4px solid var(--google-green);
+}
+
+.flash-error {
+    background: rgba(234, 67, 53, 0.1);
+    color: var(--google-red);
+    border-left: 4px solid var(--google-red);
+}
+
+.flash-warning {
+    background: rgba(251, 188, 4, 0.1);
+    color: #f9ab00;
+    border-left: 4px solid var(--google-yellow);
+}
+
+.flash-info {
+    background: rgba(26, 115, 232, 0.1);
+    color: var(--google-blue);
+    border-left: 4px solid var(--google-blue);
+}
+
+/* Test Cards */
+.test-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 32px;
+}
+
+.test-card {
+    background: #fff;
+    border: 1px solid var(--google-grey-200);
+    border-radius: 8px;
+    box-shadow: var(--google-shadow);
+    overflow: hidden;
+    transition: box-shadow 0.2s ease;
+}
+
+.test-card:hover {
+    box-shadow: var(--google-shadow-hover);
+}
+
+.test-card-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--google-grey-200);
+    background: var(--google-grey-50);
+}
+
+.test-card-title {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--google-grey-800);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.test-card-subtitle {
+    font-size: 14px;
+    color: var(--google-grey-600);
+    margin: 8px 0 0 0;
+}
+
+.test-card-body {
+    padding: 24px;
+}
+
+/* File Upload Area */
+.upload-area {
+    border: 2px dashed var(--google-grey-300);
+    border-radius: 8px;
+    padding: 32px;
+    text-align: center;
+    background: var(--google-grey-50);
+    transition: all 0.2s ease;
+    cursor: pointer;
+    margin-bottom: 20px;
+}
+
+.upload-area:hover {
+    border-color: var(--google-blue);
+    background: var(--google-blue-light);
+}
+
+.upload-area.drag-over {
+    border-color: var(--google-blue);
+    background: var(--google-blue-light);
+    transform: scale(1.02);
+}
+
+.upload-icon {
+    font-size: 48px;
+    color: var(--google-grey-400);
+    margin-bottom: 16px;
+}
+
+.upload-text {
+    font-size: 16px;
+    color: var(--google-grey-700);
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.upload-subtext {
+    font-size: 12px;
+    color: var(--google-grey-500);
+}
+
+.file-input {
+    display: none;
+}
+
+/* Selected File Display */
+.selected-file {
+    background: var(--google-blue-light);
+    border: 1px solid var(--google-blue);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    display: none;
+}
+
+.selected-file.show {
+    display: block;
+}
+
+.file-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.file-icon {
+    width: 32px;
+    height: 32px;
+    background: var(--google-blue);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 14px;
+}
+
+.file-details {
+    flex: 1;
+}
+
+.file-name {
+    font-weight: 500;
+    color: var(--google-grey-800);
+    font-size: 14px;
+}
+
+.file-size {
+    font-size: 12px;
+    color: var(--google-grey-600);
+}
+
+.remove-file {
+    background: none;
+    border: none;
+    color: var(--google-grey-500);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+}
+
+.remove-file:hover {
+    background: rgba(0,0,0,0.1);
+    color: var(--google-grey-700);
+}
+
+/* Form Elements */
+.form-check {
+    margin-bottom: 20px;
+}
+
+.form-check-input {
+    margin-right: 8px;
+}
+
+.form-check-label {
+    font-size: 14px;
+    color: var(--google-grey-700);
+}
+
+/* Buttons */
+.test-btn {
+    background: var(--google-blue);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 12px 24px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    justify-content: center;
+}
+
+.test-btn:hover {
+    background: var(--google-blue-hover);
+    box-shadow: var(--google-shadow);
+}
+
+.test-btn:disabled {
+    background: var(--google-grey-300);
+    color: var(--google-grey-500);
+    cursor: not-allowed;
+}
+
+.test-btn-secondary {
+    background: transparent;
+    color: var(--google-blue);
+    border: 1px solid var(--google-blue);
+}
+
+.test-btn-secondary:hover {
+    background: var(--google-blue-light);
+}
+
+/* Security Information Panel */
+.security-info {
+    background: var(--google-grey-50);
+    border: 1px solid var(--google-grey-200);
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.security-info h6 {
+    color: var(--google-grey-800);
+    font-weight: 500;
+    margin-bottom: 12px;
+}
+
+.security-features {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.security-features li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 14px;
+    color: var(--google-grey-700);
+}
+
+.security-features li:before {
+    content: "✓";
+    color: var(--google-green);
+    font-weight: bold;
+}
+
+/* Testing Examples */
+.test-examples {
+    margin-top: 20px;
+}
+
+.example-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.example-item {
+    background: white;
+    border: 1px solid var(--google-grey-300);
+    border-radius: 6px;
+    padding: 12px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--google-grey-700);
+    transition: all 0.2s ease;
+}
+
+.example-item:hover {
+    border-color: var(--google-blue);
+    background: var(--google-blue-light);
+}
+
+.example-safe {
+    border-left: 4px solid var(--google-green);
+}
+
+.example-dangerous {
+    border-left: 4px solid var(--google-red);
+}
+
+.example-suspicious {
+    border-left: 4px solid var(--google-yellow);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .test-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .test-container {
+        padding: 16px;
+    }
+    
+    .test-title {
+        font-size: 24px;
+    }
+    
+    .upload-area {
+        padding: 20px;
+    }
+    
+    .upload-icon {
+        font-size: 32px;
+    }
+}
+
+/* Loading State */
+.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid transparent;
+    border-top: 2px solid currentColor;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+</style>
+
+<div class="test-container">
+    <!-- Header -->
+    <div class="test-header">
+        <h1 class="test-title">
+            <div class="security-icon">
+                <i class="bi bi-shield-check"></i>
+            </div>
+            File Security Validation Test
+        </h1>
+        <p class="test-subtitle">Test our advanced polyglot detection and file security system</p>
+    </div>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="flash-messages">
+                {% for category, message in messages %}
+                    <div class="flash-alert flash-{{ category }}">
+                        {{ message|safe }}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Main Testing Grid -->
+    <div class="test-grid">
+        <!-- File Upload Test -->
+        <div class="test-card">
+            <div class="test-card-header">
+                <h5 class="test-card-title">
+                    <i class="bi bi-upload"></i>
+                    File Security Test
+                </h5>
+                <p class="test-card-subtitle">Upload any file to test our security validation</p>
+            </div>
+            <div class="test-card-body">
+                <form method="POST" enctype="multipart/form-data" id="testForm">
+                    <!-- Upload Area -->
+                    <div class="upload-area" id="uploadArea">
+                        <div class="upload-icon">📁</div>
+                        <div class="upload-text">Choose file or drag and drop</div>
+                        <div class="upload-subtext">Any file type • Max 10MB</div>
+                        <input type="file" name="file" id="fileInput" class="file-input" required>
+                    </div>
+
+                    <!-- Selected File Display -->
+                    <div class="selected-file" id="selectedFile">
+                        <div class="file-info">
+                            <div class="file-icon">📄</div>
+                            <div class="file-details">
+                                <div class="file-name" id="fileName"></div>
+                                <div class="file-size" id="fileSize"></div>
+                            </div>
+                            <button type="button" class="remove-file" id="removeFile">
+                                <i class="bi bi-x"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Options -->
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="save_file" name="save_file" value="1">
+                        <label class="form-check-label" for="save_file">
+                            Save file if safe (for testing purposes)
+                        </label>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button type="submit" class="test-btn" id="submitBtn">
+                        <i class="bi bi-shield-check"></i>
+                        <span id="submitText">Validate File Security</span>
+                        <div class="spinner" id="loadingSpinner" style="display: none;"></div>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Security Information -->
+        <div class="test-card">
+            <div class="test-card-header">
+                <h5 class="test-card-title">
+                    <i class="bi bi-info-circle"></i>
+                    Security Features
+                </h5>
+                <p class="test-card-subtitle">What our system detects</p>
+            </div>
+            <div class="test-card-body">
+                <div class="security-info">
+                    <h6>Detection Capabilities:</h6>
+                    <ul class="security-features">
+                        <li>Polyglot file detection</li>
+                        <li>MIME type validation</li>
+                        <li>Malicious pattern scanning</li>
+                        <li>File signature verification</li>
+                        <li>Extension mismatch detection</li>
+                        <li>Size limit enforcement</li>
+                        <li>Content-based analysis</li>
+                        <li>Risk level assessment</li>
+                    </ul>
                 </div>
+
+                <!-- Test Examples -->
+                <div class="test-examples">
+                    <h6>Test File Examples:</h6>
+                    <div class="example-grid">
+                        <div class="example-item example-safe">
+                            <strong>✓ Safe</strong><br>
+                            Normal JPEG, PNG, PDF files
+                        </div>
+                        <div class="example-item example-suspicious">
+                            <strong>⚠ Suspicious</strong><br>
+                            Mismatched extensions
+                        </div>
+                        <div class="example-item example-dangerous">
+                            <strong>✗ Dangerous</strong><br>
+                            Polyglot files, embedded scripts
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Advanced Testing Options -->
+    <div class="test-card">
+        <div class="test-card-header">
+            <h5 class="test-card-title">
+                <i class="bi bi-gear"></i>
+                Advanced Testing
+            </h5>
+            <p class="test-card-subtitle">Detailed security analysis and testing options</p>
+        </div>
+        <div class="test-card-body">
+            <div class="security-info">
+                <h6>Testing Methodology:</h6>
+                <ul class="security-features">
+                    <li><strong>Polyglot Detection:</strong> Scans for multiple file format signatures in one file</li>
+                    <li><strong>Pattern Analysis:</strong> Detects malicious code patterns and scripts</li>
+                    <li><strong>MIME Validation:</strong> Ensures content matches declared file type</li>
+                    <li><strong>Size Verification:</strong> Prevents oversized malicious uploads</li>
+                    <li><strong>Risk Assessment:</strong> Categorizes threats by severity level</li>
+                </ul>
                 
-                <div class="card-body">
-                    <!-- Flash Messages -->
-                    {% with messages = get_flashed_messages(with_categories=true) %}
-                        {% if messages %}
-                            <div class="mb-3">
-                                {% for category, message in messages %}
-                                    {% set alert_class = {
-                                        'error': 'alert-danger',
-                                        'warning': 'alert-warning', 
-                                        'success': 'alert-success',
-                                        'info': 'alert-info'
-                                    }[category] or 'alert-secondary' %}
-                                    <div class="alert {{ alert_class }} alert-dismissible fade show" role="alert">
-                                        {{ message|safe }}
-                                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                                    </div>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    {% endwith %}
-                    
-                    <!-- Single File Test -->
-                    <h5>File Security Test</h5>
-                    <form method="POST" enctype="multipart/form-data" class="mb-4">
-                        <div class="mb-3">
-                            <label for="file" class="form-label">Choose File to Test</label>
-                            <input type="file" class="form-control" id="file" name="file" required>
-                            <div class="form-text">
-                                Test any file type. Our system will detect polyglot attacks, malicious patterns, 
-                                MIME mismatches, and more.
-                            </div>
-                        </div>
-                        
-                        <div class="mb-3 form-check">
-                            <input type="checkbox" class="form-check-input" id="save_file" name="save_file" value="1">
-                            <label class="form-check-label" for="save_file">
-                                Save file if safe (for testing purposes)
-                            </label>
-                        </div>
-                        
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-shield-alt"></i> Validate File Security
-                        </button>
-                    </form>
+                <div style="margin-top: 16px;">
+                    <strong>Risk Levels:</strong>
+                    <div style="margin-top: 8px; font-size: 14px;">
+                        <span style="color: var(--google-green);">🟢 Low:</span> Safe files<br>
+                        <span style="color: var(--google-yellow);">🟡 Medium:</span> Minor concerns<br>
+                        <span style="color: var(--google-orange);">🟠 High:</span> Suspicious content<br>
+                        <span style="color: var(--google-red);">🔴 Critical:</span> Dangerous threats
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+    const selectedFile = document.getElementById('selectedFile');
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+    const removeFile = document.getElementById('removeFile');
+    const testForm = document.getElementById('testForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const submitText = document.getElementById('submitText');
+    const loadingSpinner = document.getElementById('loadingSpinner');
+
+    // File size formatter
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    // Show selected file
+    function showSelectedFile(file) {
+        fileName.textContent = file.name;
+        fileSize.textContent = formatFileSize(file.size);
+        selectedFile.classList.add('show');
+        uploadArea.style.display = 'none';
+    }
+
+    // Hide selected file
+    function hideSelectedFile() {
+        selectedFile.classList.remove('show');
+        uploadArea.style.display = 'block';
+        fileInput.value = '';
+    }
+
+    // Upload area click
+    uploadArea.addEventListener('click', function() {
+        fileInput.click();
+    });
+
+    // File selection
+    fileInput.addEventListener('change', function(e) {
+        if (e.target.files.length > 0) {
+            showSelectedFile(e.target.files[0]);
+        }
+    });
+
+    // Remove file
+    removeFile.addEventListener('click', function() {
+        hideSelectedFile();
+    });
+
+    // Drag and drop
+    uploadArea.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        uploadArea.classList.add('drag-over');
+    });
+
+    uploadArea.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        uploadArea.classList.remove('drag-over');
+    });
+
+    uploadArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        uploadArea.classList.remove('drag-over');
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            fileInput.files = files;
+            showSelectedFile(files[0]);
+        }
+    });
+
+    // Form submission
+    testForm.addEventListener('submit', function(e) {
+        if (!fileInput.files.length) {
+            e.preventDefault();
+            alert('Please select a file to test.');
+            return;
+        }
+
+        // Show loading state
+        submitBtn.disabled = true;
+        submitText.textContent = 'Analyzing...';
+        loadingSpinner.style.display = 'inline-block';
+        testForm.classList.add('loading');
+    });
+
+    // Auto-hide flash messages after 10 seconds
+    setTimeout(function() {
+        const flashMessages = document.querySelectorAll('.flash-alert');
+        flashMessages.forEach(function(message) {
+            message.style.transition = 'opacity 0.5s ease';
+            message.style.opacity = '0';
+            setTimeout(function() {
+                message.remove();
+            }, 500);
+        });
+    }, 10000);
+});
+</script>
 {% endblock %}

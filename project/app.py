@@ -4,9 +4,15 @@ import re
 import json
 import socket
 import base64
+import io
 from io import BytesIO
 from datetime import datetime, timedelta
 from functools import wraps
+import random
+import string
+import uuid
+import logging
+from PIL import Image
 
 # --- Flask Core Imports ---
 from flask import Flask, render_template, redirect, url_for, flash, request, current_app, abort, jsonify, session
@@ -17,7 +23,9 @@ from flask_wtf.file import FileAllowed, FileField
 from wtforms.validators import DataRequired, Length, Email, EqualTo,ValidationError, Optional
 from werkzeug.utils import secure_filename
 from apscheduler.schedulers.background import BackgroundScheduler
-
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicNumbers, SECP256R1
 # -- profile imports --
 import imghdr
 import bleach
@@ -29,7 +37,7 @@ from forms import SignupForm,LoginForm,ReportForm,UpdateUserStatusForm,FriendReq
 # No clue but seems important
 from sqlalchemy.dialects.mysql import ENUM
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy import func
+from sqlalchemy import and_, or_, func
 
 # --- Forms & Validation Imports ---
 from wtforms import StringField, PasswordField, SubmitField, TextAreaField, SelectField, ValidationError
@@ -54,10 +62,9 @@ import cbor2
 
 # Models
 from models import (
-    db, User, Role, Permission, Event, EventParticipant, Post, PostImage, 
+    db, User, Role, Permission, Event, EventParticipant, Post, PostImage, PostLike,
     Notification, Report, Chat, ChatParticipant, Message, 
     Friendship, AdminAction, UserLog, ModSecLog, ErrorLog, 
-
     WebAuthnCredential, user_role_assignments,Event,FriendChatMap,BlockedUser,UserPublicKey, ChatKeyEnvelope
 
 )
@@ -74,7 +81,7 @@ from filters import (
 from forms import (
     SignupForm, LoginForm, ReportForm, UpdateUserStatusForm,
     FriendRequestForm, UpdateReportStatusForm, Enable2FAForm,
-    Disable2FAForm, RemovePassKeyForm
+    Disable2FAForm, RemovePassKeyForm, CreatePostForm,EditProfileForm,ChangePasswordForm 
 )
 
 # Custom logging utilities
@@ -82,11 +89,16 @@ from user_actions import (
     log_user_login_attempt, log_user_login_success, 
     log_user_login_failure, log_user_logout
 )
-
+#validate
+from file_validate import validate_post_images
+from file_validate import validate_banner_image, clean_old_file
 # Log parsing utilities
 from parse_test import parse_modsec_audit_log, parse_error_log
 
 from file_validate import validate_file_security, scan_upload
+
+#message validators
+from message_validator import validate_attachment, save_attachment
 
 
 # --- Configuration ---
@@ -105,6 +117,9 @@ app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USER}:{DB_PASSWORD
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'a_very_secret_key_for_dev')  # Change in production!
 REDIS_URL = os.getenv('REDIS_URL', 'redis://redis:6379/0')
+# -- img
+app.config['UPLOAD_FOLDER'] = 'static/uploads'
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # Initialize database
 db.init_app(app)
@@ -115,45 +130,16 @@ socketio = SocketIO(app, cors_allowed_origins=[
     "https://localhost",
     "http://127.0.0.1",
     ""
-    ],message_queue=REDIS_URL,async_mode='eventlet')
-    
+])
 
-connected_sids = {}
+# No longer used!
+def allowed_file(filename):
+    """Check if file extension is allowed"""
+    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-@socketio.on('connect')
-def _on_connect(auth):
-    """Socket.IO connect handler. Accept `auth` (Socket.IO passes it) and guard DB/current_user access
-    so a DB outage won't crash the connect flow."""
-    try:
-        # current_user may trigger DB access via the login manager; guard it
-        if getattr(current_user, 'is_authenticated', False):
-            s = connected_sids.setdefault(current_user.user_id, set())
-            s.add(request.sid)
-            print(f"Socket connected: user {current_user.user_id} -> sid {request.sid}")
-        else:
-            # unauthenticated connects still allowed; log for debug if desired
-            print(f"Socket connected: anonymous sid {request.sid}")
-    except Exception as e:
-        # Don't raise here — if DB is down or user load fails, allow socket connection to continue.
-        print(f"Warning in _on_connect: could not access current_user or DB ({e}). sid={getattr(request, 'sid', request.sid)}")
 
-@socketio.on('disconnect')
-def _on_disconnect():
-    try:
-        if getattr(current_user, 'is_authenticated', False):
-            s = connected_sids.get(current_user.user_id)
-            if s:
-                s.discard(request.sid)
-                if not s:
-                    connected_sids.pop(current_user.user_id, None)
-            print(f"Socket disconnected: user {current_user.user_id} sid {request.sid}")
-        else:
-            print(f"Socket disconnected: anonymous sid {request.sid}")
-    except Exception as e:
-        # swallow disconnect errors as well
-        print(f"Warning in _on_disconnect: {e} (sid={getattr(request, 'sid', request.sid)})")
-
-# --- Initialize Extensions ---
 # CSRF protection
 csrf = CSRFProtect(app)
 
@@ -166,9 +152,13 @@ ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png'}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 UPLOAD_FOLDER = 'static/uploads'
 
+
+# No longer used!
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+
+#no longer used!
 def validate_image(file_stream):
     # Check file type using python-magic
     mime = magic.from_buffer(file_stream.read(1024), mime=True)
@@ -273,60 +263,364 @@ def get_fido2_server():
 
 
 
-
-    """Test multiple files at once"""
-    files = request.files.getlist('files')
-    
-    if not files or all(f.filename == '' for f in files):
-        return jsonify({'error': 'No files provided'}), 400
-    
-    results = []
-    
-    for file in files:
-        if file.filename == '':
-            continue
-        
-        try:
-            file_data = file.read()
-            is_safe, issues = scan_upload(file_data, file.filename)
-            
-            results.append({
-                'filename': file.filename,
-                'is_safe': is_safe,
-                'issues': issues,
-                'size': len(file_data)
-            })
-            
-        except Exception as e:
-            results.append({
-                'filename': file.filename,
-                'is_safe': False,
-                'issues': [f'Processing error: {str(e)}'],
-                'size': 0
-            })
-    
-    # Summary statistics
-    total_files = len(results)
-    safe_files = sum(1 for r in results if r['is_safe'])
-    dangerous_files = total_files - safe_files
-    
-    return jsonify({
-        'results': results,
-        'summary': {
-            'total_files': total_files,
-            'safe_files': safe_files,
-            'dangerous_files': dangerous_files,
-            'safety_percentage': (safe_files / total_files * 100) if total_files > 0 else 0
-        }
-    })
-
 # --- login,signup,home ---
 
+# Helper function for relative time
+def get_relative_time(post_date):
+    from datetime import datetime, timezone
+    import math
+    
+    now = datetime.now(timezone.utc)
+    if post_date.tzinfo is None:
+        post_date = post_date.replace(tzinfo=timezone.utc)
+    
+    diff = now - post_date
+    
+    if diff.days > 0:
+        if diff.days == 1:
+            return "1 day ago"
+        elif diff.days < 7:
+            return f"{diff.days} days ago"
+        elif diff.days < 30:
+            weeks = diff.days // 7
+            return f"{weeks} week{'s' if weeks > 1 else ''} ago"
+        else:
+            months = diff.days // 30
+            return f"{months} month{'s' if months > 1 else ''} ago"
+    
+    hours = diff.seconds // 3600
+    if hours > 0:
+        return f"{hours} hour{'s' if hours > 1 else ''} ago"
+    
+    minutes = diff.seconds // 60
+    if minutes > 0:
+        return f"{minutes} minute{'s' if minutes > 1 else ''} ago"
+    
+    return "Just now"
+
+
+# load posts
+@app.route('/api/load_more_posts')
+@login_required
+def load_more_posts():
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = 10
+        
+        # Get current user's accepted friendships
+        friendships = Friendship.query.filter(
+            ((Friendship.user_id1 == current_user.user_id) | (Friendship.user_id2 == current_user.user_id)),
+            Friendship.status == 'accepted'
+        ).all()
+        
+        # Get friend user IDs
+        friend_ids = []
+        for f in friendships:
+            if f.user_id1 == current_user.user_id:
+                friend_ids.append(f.user_id2)
+            else:
+                friend_ids.append(f.user_id1)
+        
+        # Include current user's own posts
+        friend_ids.append(current_user.user_id)
+        
+        # Query posts only from friends and current user
+        posts_query = Post.query.filter(
+            Post.user_id.in_(friend_ids)
+        ).order_by(Post.created_at.desc())
+        
+        posts = posts_query.paginate(
+            page=page, 
+            per_page=per_page, 
+            error_out=False
+        )
+        
+        posts_data = []
+        for post in posts.items:
+            # Get the first image for this post
+            first_image = PostImage.query.filter_by(post_id=post.post_id).first()
+            image_url = None
+            if first_image:
+                image_url = url_for('static', filename=first_image.image_url)
+            
+            post_data = {
+                'post_id': post.post_id,
+                'content': post.post_content,
+                'image_url': image_url,
+                'date': post.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'relative_date': get_relative_time(post.created_at),
+                'user': {
+                    'user_id': post.user.user_id,
+                    'username': post.user.username,
+                    'profile_picture': url_for('static', filename=f'uploads/{post.user.profile_pic_url}') if post.user.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp')
+                },
+                'likes_count': PostLike.query.filter_by(post_id=post.post_id).count(),
+                'is_liked': PostLike.query.filter_by(post_id=post.post_id, user_id=current_user.user_id).first() is not None,
+                'is_own_post': post.user_id == current_user.user_id
+            }
+            posts_data.append(post_data)
+        
+        return jsonify({
+            'posts': posts_data,
+            'has_more': posts.has_next,
+            'next_page': page + 1 if posts.has_next else None
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error loading more posts: {str(e)}")
+        return jsonify({'error': 'Failed to load posts'}), 500
+
+
+@app.route('/upload_banner', methods=['POST'])
+@login_required
+def upload_banner():
+    try:
+        if 'banner' not in request.files:
+            return jsonify({'success': False, 'error': 'No banner file provided'})
+        
+        file = request.files['banner']
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'})
+        
+        # Use modular validation
+        from file_validate import validate_banner_image, clean_old_file
+        
+        upload_dir = os.path.join(app.static_folder, 'uploads')
+        result = validate_banner_image(file, current_user.user_id, upload_dir)
+        
+        if not result['success']:
+            app.logger.warning(f"Banner upload failed for user {current_user.user_id}: {result['error']}")
+            return jsonify({'success': False, 'error': result['error']})
+        
+        # Remove old banner
+        clean_old_file(upload_dir, current_user.banner_url)
+        
+        # Update database
+        current_user.banner_url = result['filename']
+        db.session.commit()
+        
+        app.logger.info(f"User {current_user.user_id} successfully uploaded banner: {result['filename']}")
+        
+        return jsonify({
+            'success': True,
+            'banner_url': result['filename'],
+            'message': 'Banner updated successfully!'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error uploading banner: {str(e)}")
+        return jsonify({'success': False, 'error': 'Failed to upload banner. Please try again.'})
+
+@app.route('/remove_banner', methods=['POST'])
+@login_required
+def remove_banner():
+    try:
+        # Remove banner file if exists
+        if current_user.banner_url:
+            upload_dir = os.path.join(app.static_folder, 'uploads')
+            banner_path = os.path.join(upload_dir, current_user.banner_url)
+            if os.path.exists(banner_path):
+                try:
+                    os.remove(banner_path)
+                except:
+                    pass  # Ignore if file can't be deleted
+        
+        # Update database
+        current_user.banner_url = None
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Banner removed successfully!'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error removing banner: {str(e)}")
+        return jsonify({'success': False, 'error': 'Failed to remove banner. Please try again.'})
 
 @app.route('/')
 @login_required
 def home():
-    return render_template('UserHome.html')
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = 10  # Posts per page
+        
+        # Get current user's accepted friendships
+        friendships = Friendship.query.filter(
+            ((Friendship.user_id1 == current_user.user_id) | (Friendship.user_id2 == current_user.user_id)),
+            Friendship.status == 'accepted'
+        ).all()
+        
+        # Get friend user IDs
+        friend_ids = []
+        for f in friendships:
+            if f.user_id1 == current_user.user_id:
+                friend_ids.append(f.user_id2)
+            else:
+                friend_ids.append(f.user_id1)
+        
+        # Include current user's own posts
+        friend_ids.append(current_user.user_id)
+        
+        # Query posts only from friends and current user
+        posts_query = Post.query.filter(
+            Post.user_id.in_(friend_ids)
+        ).order_by(Post.created_at.desc())
+        
+        posts = posts_query.paginate(
+            page=page, 
+            per_page=per_page, 
+            error_out=False
+        )
+        
+        # Get current user's actual stats
+        current_user_post_count = Post.query.filter_by(user_id=current_user.user_id).count()
+        current_user_friend_count = len(friendships)  # Number of accepted friendships
+        
+        # Format posts data for frontend
+        posts_data = []
+        for post in posts.items:
+            # Get the first image for this post
+            first_image = PostImage.query.filter_by(post_id=post.post_id).first()
+            image_url = None
+            if first_image:
+                image_url = url_for('static', filename=first_image.image_url)
+            
+            post_data = {
+                'post_id': post.post_id,
+                'content': post.post_content,
+                'image_url': image_url,
+                'date': post.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'relative_date': get_relative_time(post.created_at),
+                'user': {
+                    'user_id': post.user.user_id,
+                    'username': post.user.username,
+                    'profile_picture': url_for('static', filename=f'uploads/{post.user.profile_pic_url}') if post.user.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp')
+                },
+                'likes_count': PostLike.query.filter_by(post_id=post.post_id).count(),
+                'is_liked': PostLike.query.filter_by(post_id=post.post_id, user_id=current_user.user_id).first() is not None,
+                'is_own_post': post.user_id == current_user.user_id
+            }
+            posts_data.append(post_data)
+        
+        print(f"DEBUG: Found {len(posts_data)} posts from friends and self")
+        print(f"DEBUG: User post count: {current_user_post_count}")
+        print(f"DEBUG: User friend count: {current_user_friend_count}")
+        
+        return render_template('UserHome.html', 
+                             posts=posts_data,
+                             pagination=posts,
+                             has_more=posts.has_next,
+                             current_user_post_count=current_user_post_count,
+                             current_user_friend_count=current_user_friend_count)
+                             
+    except Exception as e:
+        app.logger.error(f"Error loading home feed: {str(e)}")
+        print(f"DEBUG: Error in home route: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        flash('Error loading feed. Please try again.', 'error')
+        return render_template('UserHome.html', 
+                             posts=[], 
+                             pagination=None, 
+                             has_more=False,
+                             current_user_post_count=0,
+                             current_user_friend_count=0)
+
+
+#toggle like
+@app.route('/api/toggle_like/<int:post_id>', methods=['POST'])
+@login_required
+def toggle_like_api(post_id):
+    try:
+        post = Post.query.get_or_404(post_id)
+        
+        # Check if user already liked this post
+        existing_like = PostLike.query.filter_by(
+            user_id=current_user.user_id,
+            post_id=post_id
+        ).first()
+        
+        if existing_like:
+            # Unlike the post
+            db.session.delete(existing_like)
+            is_liked = False
+        else:
+            # Like the post
+            new_like = PostLike(
+                user_id=current_user.user_id,
+                post_id=post_id
+            )
+            db.session.add(new_like)
+            is_liked = True
+        
+        db.session.commit()
+        
+        # Get updated like count
+        likes_count = PostLike.query.filter_by(post_id=post_id).count()
+        
+        return jsonify({
+            'success': True,
+            'is_liked': is_liked,
+            'likes_count': likes_count
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error toggling like: {str(e)}")
+        return jsonify({'success': False, 'error': 'Failed to toggle like'}), 500
+
+
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = 10
+        
+        # Same query as home route
+        posts_query = Post.query.order_by(Post.post_date.desc())
+        
+        posts = posts_query.paginate(
+            page=page, 
+            per_page=per_page, 
+            error_out=False
+        )
+        
+        posts_data = []
+        for post in posts.items:
+            # Get the first image for this post
+            first_image = PostImage.query.filter_by(post_id=post.post_id).first()
+            image_url = None
+            if first_image:
+                image_url = url_for('static', filename=first_image.image_url)
+            
+            post_data = {
+                'post_id': post.post_id,
+                'content': post.post_content,
+                'image_url': image_url,
+                'date': post.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'relative_date': get_relative_time(post.created_at),
+                'user': {
+                    'user_id': post.user.user_id,
+                    'username': post.user.username,
+                    'profile_picture': url_for('static', filename=f'uploads/{post.user.profile_pic_url}') if post.user.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp')
+                },
+                'likes_count': PostLike.query.filter_by(post_id=post.post_id).count(),
+                'is_liked': PostLike.query.filter_by(post_id=post.post_id, user_id=current_user.user_id).first() is not None,
+                'is_own_post': post.user_id == current_user.user_id
+            }
+            posts_data.append(post_data)
+        
+        return jsonify({
+            'posts': posts_data,
+            'has_more': posts.has_next,
+            'next_page': page + 1 if posts.has_next else None
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error loading more posts: {str(e)}")
+        return jsonify({'error': 'Failed to load posts'}), 500
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -434,7 +728,6 @@ def signup():
         db.session.add(new_user)
         db.session.commit()
 
-        # Assign 'user' role
         default_role = Role.query.filter_by(role_name='user').first()
         new_user.roles.append(default_role)
         db.session.commit()
@@ -459,13 +752,32 @@ def verify_2fa():
         code = form.totp_code.data
         totp = pyotp.TOTP(user.totp_secret)
         if totp.verify(code):
+            # Clear failed login attempts and lockout
+            user.failed_login_attempts = 0
+            user.lockout_until = None
+            
+            # Update user status to online and last active time
+            user.current_status = 'online'
+            user.last_active_at = datetime.utcnow()
+            
             login_user(user)
             session.pop('pending_2fa_user_id', None)
+            session.pop('login_method', None)  # Clean up login method too
             
-            # ✅ Send event reminders on successful 2FA login
+            # Commit all user updates
+            db.session.commit()
+            
+            # Send event reminders on login
             send_user_event_reminders(user.user_id)
             
-            return redirect(url_for('home'))
+            # Log successful 2FA login
+            log_user_login_success(user.user_id, details="User logged in successfully with 2FA.")
+            
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('home'))
+        else:
+            flash('Invalid 2FA code. Please try again.', 'error')
+    
     return render_template('UserVerify2FA.html', form=form)
 
 @app.route('/check_user_auth_methods', methods=['POST'])
@@ -495,8 +807,6 @@ def check_user_auth_methods():
         return jsonify({"has_2fa": False, "has_passkeys": False})
 
 # -- User security management --
-
-
 @app.route('/account_security', methods=['GET', 'POST'])
 @user_required
 def account_security():
@@ -513,7 +823,6 @@ def account_security():
                          form=form, 
                          form1=form1,
                          user_passkeys=user_passkeys)
-
 
 @app.route('/enable_2fa', methods=['GET', 'POST'])
 @user_required
@@ -556,8 +865,8 @@ def disable_2fa():
         return redirect(url_for('account_security'))
     return render_template('UserDisable2FA.html', form=form)
 
+
 # -- User passkey management --
-# Update the existing passkey_begin_register route to require 2FA
 @app.route('/passkey/begin_register', methods=['POST'])
 @csrf.exempt
 @login_required
@@ -602,7 +911,6 @@ def passkey_begin_register():
         traceback.print_exc()
         return jsonify({"error": f"Failed to begin passkey registration: {str(e)}"}), 500
     
-
 @app.route('/passkey/finish_register', methods=['POST'])
 @csrf.exempt
 @user_required
@@ -668,7 +976,6 @@ def passkey_finish_register():
         db.session.rollback()
         return jsonify({"error": f"Failed to complete passkey registration: {str(e)}"}), 500
     
-
 @app.route('/remove_passkey/<int:cred_id>', methods=['POST'])
 @user_required
 def remove_passkey(cred_id):
@@ -681,6 +988,7 @@ def remove_passkey(cred_id):
         pass
     return redirect(url_for('account_security'))
 
+# --- Passkey when logging in ---
 @app.route('/passkey/begin_login', methods=['POST'])
 @csrf.exempt
 def passkey_begin_login():
@@ -877,9 +1185,7 @@ def passkey_finish_login():
             
             # Manual ECDSA signature verification (same pattern as registration)
             if public_key.get(1) == 2 and public_key.get(3) == -7:  # EC2 key type, ES256 algorithm
-                from cryptography.hazmat.primitives.asymmetric import ec
-                from cryptography.hazmat.primitives import hashes
-                from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicNumbers, SECP256R1
+                
                 
                 # Extract x and y coordinates
                 x_bytes = public_key.get(-2)
@@ -939,10 +1245,251 @@ def passkey_finish_login():
         traceback.print_exc()
         return jsonify({"error": f"Failed to complete passkey authentication: {str(e)}"}), 500
 
+# --- change password ---
+
+@app.route('/change_password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    form = ChangePasswordForm()
+    
+    # Check user's security setup
+    has_2fa = bool(current_user.totp_secret)
+    has_passkeys = WebAuthnCredential.query.filter_by(user_id=current_user.user_id).first() is not None
+    
+    if request.method == 'POST':
+        # Handle passkey authentication
+        if request.form.get('auth_method') == 'passkey':
+            # Verify passkey was used (this would be set by JavaScript)
+            passkey_verified = session.get('passkey_verified_for_password_change')
+            if not passkey_verified:
+                flash('Passkey verification required.', 'error')
+                return render_template('change_password.html', form=form, has_2fa=has_2fa, has_passkeys=has_passkeys)
+            
+            # Clear the session flag
+            session.pop('passkey_verified_for_password_change', None)
+        
+        if form.validate_on_submit():
+            try:
+                # Additional validation based on security setup
+                auth_method = form.auth_method.data
+                
+                if has_2fa and auth_method != 'passkey':
+                    # 2FA is enabled and not using passkey - require 2FA code
+                    if not form.totp_code.data:
+                        flash('2FA code is required when 2FA is enabled.', 'error')
+                        return render_template('change_password.html', form=form, has_2fa=has_2fa, has_passkeys=has_passkeys)
+                    
+                    # Verify 2FA code
+                    totp = pyotp.TOTP(current_user.totp_secret)
+                    if not totp.verify(form.totp_code.data):
+                        flash('Invalid 2FA code.', 'error')
+                        return render_template('change_password.html', form=form, has_2fa=has_2fa, has_passkeys=has_passkeys)
+                
+                # Update password
+                current_user.password_hash = generate_password_hash(form.new_password.data)
+                current_user.updated_at = datetime.utcnow()
+                db.session.commit()
+                
+                # Log the action
+                try:
+                    from user_actions import log_user_action
+                    log_user_action(
+                        current_user.user_id,
+                        'change_password',
+                        f'Password changed using {auth_method or "password"}',
+                        request.remote_addr,
+                        request.headers.get('User-Agent', 'Unknown')
+                    )
+                except ImportError:
+                    pass
+                
+                flash('Password changed successfully!', 'success')
+                return redirect(url_for('account_security'))
+                
+            except Exception as e:
+                db.session.rollback()
+                app.logger.error(f"Error changing password: {str(e)}")
+                flash('An error occurred while changing your password.', 'error')
+    
+    return render_template('change_password.html', form=form, has_2fa=has_2fa, has_passkeys=has_passkeys)
+
+@app.route('/verify_passkey_for_password_change', methods=['POST'])
+@csrf.exempt
+@login_required
+def verify_passkey_for_password_change():
+    """Verify passkey for password change"""
+    try:
+        if 'fido2_auth_state' not in session:
+            return jsonify({"error": "No authentication in progress"}), 400
+        
+        data = request.get_json()
+        state = session.pop('fido2_auth_state')
+        
+        credential_id = data['id']
+        clientDataJSON_bytes = base64.b64decode(data['response']['clientDataJSON'])
+        authenticatorData_bytes = base64.b64decode(data['response']['authenticatorData'])
+        signature = base64.b64decode(data['response']['signature'])
+        
+        # Convert base64url to hex for database lookup
+        def base64url_to_base64(base64url_string):
+            base64_string = base64url_string.replace('-', '+').replace('_', '/')
+            padding = len(base64_string) % 4
+            if padding:
+                base64_string += '=' * (4 - padding)
+            return base64_string
+        
+        try:
+            standard_b64 = base64url_to_base64(credential_id)
+            credential_id_bytes = base64.b64decode(standard_b64)
+            credential_id_hex = credential_id_bytes.hex()
+        except Exception:
+            credential_id_hex = credential_id
+        
+        # Find credential in database - must belong to current user
+        cred_record = WebAuthnCredential.query.filter_by(
+            credential_id=credential_id_hex,
+            user_id=current_user.user_id
+        ).first()
+        
+        if not cred_record:
+            return jsonify({"error": "Credential not found or not owned by user"}), 400
+        
+        # Deserialize the public key
+        try:
+            public_key = cbor2.loads(cred_record.public_key)
+        except Exception:
+            import json
+            public_key = json.loads(cred_record.public_key.decode('utf-8'))
+        
+        # Create ClientData and AuthenticatorData objects
+        client_data = ClientData(clientDataJSON_bytes)
+        auth_data = AuthenticatorData(authenticatorData_bytes)
+        
+        # Manual ECDSA signature verification
+        try:
+            if public_key.get(1) == 2 and public_key.get(3) == -7:  # EC2 key type, ES256 algorithm
+                # Extract x and y coordinates
+                x_bytes = public_key.get(-2)
+                y_bytes = public_key.get(-3)
+                
+                if x_bytes and y_bytes:
+                    # Convert to EC public key
+                    x_int = int.from_bytes(x_bytes, 'big')
+                    y_int = int.from_bytes(y_bytes, 'big')
+                    public_numbers = EllipticCurvePublicNumbers(x_int, y_int, SECP256R1())
+                    public_key_obj = public_numbers.public_key()
+                    
+                    # Verify signature
+                    import hashlib
+                    client_data_hash = hashlib.sha256(clientDataJSON_bytes).digest()
+                    signed_data = authenticatorData_bytes + client_data_hash
+                    
+                    public_key_obj.verify(signature, signed_data, ec.ECDSA(hashes.SHA256()))
+                else:
+                    raise Exception("Missing x or y coordinates in public key")
+            else:
+                raise Exception("Unsupported key type")
+            
+        except Exception as verify_error:
+            return jsonify({"error": f"Authentication failed: {str(verify_error)}"}), 400
+        
+        # Update sign count
+        cred_record.sign_count = auth_data.counter
+        db.session.commit()
+        
+        # Set session flag for password change
+        session['passkey_verified_for_password_change'] = True
+        
+        return jsonify({"success": True})
+        
+    except Exception as e:
+        print(f"Error in verify_passkey_for_password_change: {e}")
+        return jsonify({"error": f"Failed to verify passkey: {str(e)}"}), 500
+
+@app.route('/begin_passkey_auth_for_password_change', methods=['POST'])
+@csrf.exempt
+@login_required
+def begin_passkey_auth_for_password_change():
+    """Begin passkey authentication for password change"""
+    try:
+        fido2_server = get_fido2_server()
+        
+        # Get user's credentials
+        user_credentials = WebAuthnCredential.query.filter_by(user_id=current_user.user_id).all()
+        
+        if not user_credentials:
+            return jsonify({"error": "No passkeys found for authentication"}), 400
+        
+        allow_credentials = []
+        for cred in user_credentials:
+            try:
+                allow_credentials.append({
+                    "id": bytes.fromhex(cred.credential_id),
+                    "type": "public-key"
+                })
+            except ValueError as e:
+                continue
+        
+        if not allow_credentials:
+            return jsonify({"error": "No valid passkeys found"}), 400
+        
+        # Get the authentication options
+        options, state = fido2_server.authenticate_begin(
+            credentials=allow_credentials,
+            user_verification="preferred"
+        )
+        
+        # Store the state in session
+        session['fido2_auth_state'] = state
+        
+        # Build the response dictionary manually
+        try:
+            response_dict = {
+                'challenge': base64.b64encode(options.challenge).decode('utf-8'),
+                'rpId': options.rp_id,
+                'userVerification': options.user_verification.value if hasattr(options.user_verification, 'value') else str(options.user_verification),
+                'allowCredentials': []
+            }
+            
+            # Convert allowCredentials manually
+            if hasattr(options, 'allow_credentials') and options.allow_credentials:
+                for cred in options.allow_credentials:
+                    cred_dict = {
+                        'type': cred.type.value if hasattr(cred.type, 'value') else str(cred.type),
+                        'id': base64.b64encode(cred.id).decode('utf-8')
+                    }
+                    response_dict['allowCredentials'].append(cred_dict)
+            
+            return jsonify(response_dict)
+            
+        except Exception as manual_error:
+            # If options is a dict with publicKey
+            if isinstance(options, dict) and 'publicKey' in options:
+                actual_options = options['publicKey']
+                response_dict = {
+                    'challenge': base64.b64encode(actual_options.challenge).decode('utf-8'),
+                    'rpId': actual_options.rp_id,
+                    'userVerification': actual_options.user_verification.value if hasattr(actual_options.user_verification, 'value') else str(actual_options.user_verification),
+                    'allowCredentials': []
+                }
+                
+                if hasattr(actual_options, 'allow_credentials') and actual_options.allow_credentials:
+                    for cred in actual_options.allow_credentials:
+                        cred_dict = {
+                            'type': cred.type.value if hasattr(cred.type, 'value') else str(cred.type),
+                            'id': base64.b64encode(cred.id).decode('utf-8')
+                        }
+                        response_dict['allowCredentials'].append(cred_dict)
+                
+                return jsonify(response_dict)
+            else:
+                return jsonify({"error": "Invalid options format"}), 500
+        
+    except Exception as e:
+        print(f"Error in begin_passkey_auth_for_password_change: {e}")
+        return jsonify({"error": f"Failed to begin passkey authentication: {str(e)}"}), 500
+
 # --- User Reporting ---
-
-# ...existing code...
-
 @app.route('/report_user', methods=['GET', 'POST'])
 @login_required
 @user_required
@@ -1069,7 +1616,7 @@ def discover_friends():
     return render_template('DiscoverFriends.html',all_users=all_users,current_user=user,form=form,pending_requests=pending_requests,accepted_friends=accepted_friends)
 
 @app.route('/search_users')
-@user_required
+@login_required
 def search_users():
     query = request.args.get('q', '').strip()
     user = current_user
@@ -1079,17 +1626,19 @@ def search_users():
     .join(Role, user_role_assignments.c.role_id == Role.role_id)
     .filter(Role.role_name.in_(['admin', 'editor', 'guest']))
     )
+    roles_alias = db.aliased(Role)
     users = (
         db.session.query(User)
         .join(user_role_assignments, User.user_id == user_role_assignments.c.user_id)
-        .join(Role, user_role_assignments.c.role_id == Role.role_id)
-        .filter(
-            Role.role_name == 'user',
-            User.user_id.in_(subq),
-            User.user_id != user.user_id,
-            User.username.ilike(f'%{query}%') if query else True
+        .join(roles_alias, user_role_assignments.c.role_id == roles_alias.role_id)
+        .filter(User.user_id != user.user_id)
+        .group_by(User.user_id)
+        .having(
+            db.func.sum(db.case((roles_alias.role_name == 'user', 1), else_=0)) >= 1,
+        ).having(
+            db.func.count(db.distinct(roles_alias.role_name)) == 1
         )
-        .distinct()
+        .filter(User.username.ilike(f'%{query}%') if query else True)
         .all()
     )
     pending_friendships = Friendship.query.filter(
@@ -1119,8 +1668,6 @@ def search_users():
 
 
 # --- Notifications ---
-# Find the notifications route (around lines 985-1020) and replace it:
-
 @app.route('/Notifications')
 @user_required
 def notifications():
@@ -1274,6 +1821,7 @@ def mark_notification_read(notification_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/mark_all_notifications_read/<notification_type>', methods=['POST'])
 @user_required
 def mark_all_notifications_read(notification_type):
@@ -1308,6 +1856,7 @@ def mark_all_notifications_read(notification_type):
         db.session.rollback()
         print(f"Error marking notifications as read: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
 
 # -- Friends Management --
 @app.route('/send_friend_request/<int:target_user_id>', methods=['POST'])
@@ -1454,9 +2003,78 @@ def unfriend(friendship_id):
     db.session.delete(friendship)
     db.session.commit()
     flash('You have unfriended this user.', 'info')
-
-    
     return redirect(request.referrer or url_for('friends'))
+
+
+def set_block(blocker_id, blocked_id, chat_id=None):
+    """Create or reactivate a BlockedUser record and set friendship.status='blocked'."""
+    block = BlockedUser.query.filter_by(blocker_id=blocker_id, blocked_id=blocked_id).first()
+    if not block:
+        block = BlockedUser(blocker_id=blocker_id, blocked_id=blocked_id, chat_id=chat_id, active=True, created_at=datetime.utcnow())
+        db.session.add(block)
+    else:
+        block.active = True
+        block.chat_id = chat_id
+        block.removed_at = None
+
+    user1, user2 = sorted([blocker_id, blocked_id])
+    friendship = Friendship.query.filter_by(user_id1=user1, user_id2=user2).first()
+    if friendship:
+        friendship.status = 'blocked'
+        friendship.action_user_id = blocker_id
+    db.session.commit()
+
+    # notify both parties (if connected) so clients update UI / leave rooms if needed
+    try:
+        other_sid = connected_sids.get(blocked_id)
+        if other_sid:
+            socketio.emit('blocked', {'chat_id': chat_id, 'by': blocker_id}, room=other_sid)
+        my_sid = connected_sids.get(blocker_id)
+        if my_sid:
+            socketio.emit('blocked', {'chat_id': chat_id, 'by': blocker_id}, room=my_sid)
+    except Exception:
+        db.session.rollback()
+
+def clear_block(blocker_id, blocked_id, chat_id=None):
+    """Clear an active BlockedUser record and notify both parties."""
+    try:
+        block = BlockedUser.query.filter_by(blocker_id=blocker_id, blocked_id=blocked_id, active=True).first()
+        if not block:
+            return False
+
+        block.active = False
+        block.removed_at = datetime.utcnow()
+        db.session.commit()
+
+        # If friendship row exists and was 'blocked', restore to 'accepted' (safe default)
+        user1, user2 = sorted([blocker_id, blocked_id])
+        friendship = Friendship.query.filter_by(user_id1=user1, user_id2=user2).first()
+        if friendship and friendship.status == 'blocked':
+            friendship.status = 'accepted'
+            friendship.action_user_id = None
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+
+        # Notify both users so clients can re-join rooms / update UI
+        try:
+            # use emit_to_user helper if present (safely fall back to socketio.emit)
+            try:
+                emit_to_user(blocker_id, 'unblocked', {'chat_id': chat_id, 'by': blocker_id, 'unblocked_id': blocked_id})
+                emit_to_user(blocked_id, 'unblocked', {'chat_id': chat_id, 'by': blocker_id, 'unblocked_id': blocked_id})
+            except NameError:
+                # emit_to_user not defined yet — fall back
+                socketio.emit('unblocked', {'chat_id': chat_id, 'by': blocker_id, 'unblocked_id': blocked_id}, room=connected_sids.get(blocker_id))
+                socketio.emit('unblocked', {'chat_id': chat_id, 'by': blocker_id, 'unblocked_id': blocked_id}, room=connected_sids.get(blocked_id))
+        except Exception:
+            # don't let notification failure break flow
+            pass
+
+        return True
+    except Exception:
+        db.session.rollback()
+        return False
 
 
 def set_block(blocker_id, blocked_id, chat_id=None):
@@ -2256,6 +2874,27 @@ def api_friends_to_readd():
     ]
     return jsonify(payload)
 
+
+# -------------------- Message validation and filtering --------------------
+
+@app.route('/upload_message_attachment', methods=['POST'])
+@login_required
+def upload_message_attachment():
+    file = request.files.get('file')
+    verdict = validate_attachment(file)
+    if not verdict.get('ok'):
+        return jsonify(ok=False, error=verdict.get('error', 'Validation failed'), issues=verdict.get('issues', [])), 400
+
+    rel_path, _abs = save_attachment(file, current_user.user_id)
+    return jsonify(
+        ok=True,
+        url=url_for('static', filename=rel_path),
+        name=verdict['name'],
+        size=verdict['size'],
+        mime=verdict['mime'],
+        kind=verdict['kind']
+    )
+
 # --- Admin Routes ---
 @app.route('/users_dashboard')
 @admin_required
@@ -2355,6 +2994,126 @@ def manage_reports():
         rejected_reports=rejected_reports
     )
 
+
+
+# ----------- Message notification -------------
+
+def add_message_notification(recipient_id: int, sender_id: int, text: str):
+    """Create a per-message notification; UI will stack by sender."""
+    try:
+        preview = (text or '').strip()
+        if len(preview) > 140:
+            preview = preview[:137] + '...'
+        n = Notification(
+            user_id=recipient_id,
+            type='message',
+            source_id=sender_id,
+            message=preview,
+            created_at=datetime.utcnow(),
+            is_read=False
+        )
+        db.session.add(n)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.warning(f'add_message_notification failed: {e}')
+
+@app.route('/api/unread_message_notifications_count')
+@user_required
+def unread_message_notifications_count():
+    try:
+        cnt = Notification.query.filter_by(
+            user_id=current_user.user_id,
+            type='message',
+            is_read=False
+        ).count()
+        return jsonify({'ok': True, 'count': cnt})
+    except Exception as e:
+        current_app.logger.error(f'unread_message_notifications_count: {e}')
+        return jsonify({'ok': False, 'count': 0}), 500
+
+@app.route('/api/notifications/message_stacks')
+@user_required
+def api_message_notification_stacks():
+    try:
+        rows = Notification.query.filter_by(user_id=current_user.user_id, type='message')\
+            .order_by(Notification.created_at.desc()).all()
+        by_sender = {}
+        for n in rows:
+            sid = n.source_id or 0
+            info = by_sender.get(sid)
+            if not info:
+                by_sender[sid] = {
+                    'sender_user_id': sid,
+                    'latest_message': n.message,
+                    'latest_created_at': n.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                    'count': 0,
+                    'unread': 0
+                }
+                info = by_sender[sid]
+            info['count'] += 1
+            if not n.is_read:
+                info['unread'] += 1
+        sender_ids = [sid for sid in by_sender.keys() if sid]
+        users = {u.user_id: u for u in User.query.filter(User.user_id.in_(sender_ids)).all()}
+        stacks = []
+        for sid, info in by_sender.items():
+            u = users.get(sid)
+            stacks.append({
+                **info,
+                'sender_username': u.username if u else 'Unknown',
+                'sender_profile_pic': (url_for('static', filename=f'uploads/{u.profile_pic_url}') if (u and u.profile_pic_url) else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp'))
+            })
+        return jsonify({'ok': True, 'items': stacks})
+    except Exception as e:
+        current_app.logger.error(f'api_message_notification_stacks: {e}')
+        return jsonify({'ok': False, 'items': []}), 500
+
+@app.route('/api/notifications/messages/mark_read', methods=['POST'])
+@user_required
+def mark_message_notifications_read():
+    """Mark all message notifications from a specific sender as read."""
+    try:
+        data = request.get_json(silent=True) or {}
+        sender_id = int(data.get('sender_id', 0))
+        if not sender_id:
+            return jsonify({'ok': False, 'error': 'sender_id required'}), 400
+        q = Notification.query.filter_by(
+            user_id=current_user.user_id,
+            type='message',
+            source_id=sender_id,
+            is_read=False
+        )
+        updated = q.update({'is_read': True})
+        db.session.commit()
+        return jsonify({'ok': True, 'updated': updated})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'mark_message_notifications_read: {e}')
+        return jsonify({'ok': False}), 500
+
+# when sending a message, also notify the recipient(s)
+@socketio.on('send_message')
+def socket_send_message(data):
+    
+    try:
+        chat_id = int(data.get('chat_id'))
+        sender_id = current_user.user_id
+        # E2EE: server can't read plaintext; use generic preview
+        preview = 'New message'
+        others = ChatParticipant.query.filter(
+            ChatParticipant.chat_id == chat_id,
+            ChatParticipant.user_id != sender_id,
+            ChatParticipant.is_in_chat == True
+        ).all()
+        for other in others:
+            add_message_notification(other.user_id, sender_id, preview)
+    except Exception as e:
+        current_app.logger.warning(f'notify on send_message failed: {e}')
+
+
+
+
 # Find the manage_report route (around line 1600) and replace the POST handling section:
 
 @app.route('/manage_report/<int:report_id>', methods=['GET', 'POST'])
@@ -2385,7 +3144,6 @@ def manage_report(report_id):
             report.admin_notes = admin_notes
             report.resolved_at = datetime.utcnow() if new_status in ['action_taken', 'rejected'] else None
             
-            # ✅ CREATE NOTIFICATION FOR THE REPORTER
             if report.reporter_id:  # Make sure reporter exists
                 # Create user-friendly status messages
                 status_messages = {
@@ -2720,87 +3478,170 @@ def internal_server_error(error):
     return render_template('500_error.html'), 500
 
 
+# -- USER
 
-# --- create, edit, and delete routes for Creating Posts ---
+
+
+# Update the account route to redirect to the new ID-based route
+@app.route('/account')
+@login_required
+def account():
+    """Redirect to user's own profile using ID"""
+    return redirect(url_for('view_profile', user_id=current_user.user_id))
+
+@app.route('/account/<int:user_id>')
+@login_required
+def view_profile(user_id):
+    """
+    Route to view user profiles with dynamic permissions.
+    Automatically redirects to appropriate template based on ownership.
+    """
+    import logging
+    
+    # Input validation
+    if not user_id or user_id <= 0:
+        flash('Invalid user ID provided.', 'error')
+        return redirect(url_for('home'))
+    
+    try:
+        # Get the target user by ID
+        target_user = User.query.get(user_id)
+        if not target_user:
+            flash('User not found.', 'error')
+            return redirect(url_for('home'))
+        
+        # CRITICAL: Simple ownership check
+        is_own_profile = (current_user.user_id == user_id)
+        
+        # Log profile access for security monitoring
+        logging.info(f"User {current_user.user_id} ({current_user.username}) accessing profile of {user_id} ({target_user.username}). Own profile: {is_own_profile}")
+        
+        # Get friendship status for permission checks (only if not own profile)
+        friendship_status = 'none'
+        friendship_id = None
+        
+        if not is_own_profile:
+            # Check friendship status
+            user1, user2 = sorted([current_user.user_id, user_id])
+            friendship = Friendship.query.filter_by(user_id1=user1, user_id2=user2).first()
+            
+            if friendship:
+                friendship_status = friendship.status
+                friendship_id = friendship.friendship_id
+        
+        # Get user's posts (only their own posts)
+        posts_query = Post.query.filter_by(user_id=user_id)
+        posts = posts_query.order_by(Post.created_at.desc()).all()
+        
+        # Get accurate friend count (accepted friendships only)
+        accepted_friendships = Friendship.query.filter(
+            ((Friendship.user_id1 == user_id) | (Friendship.user_id2 == user_id)),
+            Friendship.status == 'accepted'
+        ).count()
+        
+        # Get accurate post count for this user
+        user_post_count = Post.query.filter_by(user_id=user_id).count()
+        
+        # Prepare template data
+        template_data = {
+            'user': target_user,
+            'profile_user': target_user,
+            'user_id': target_user,
+            'posts': posts,
+            'post_count': user_post_count,  # Accurate post count
+            'friend_count': accepted_friendships,  # Accurate friend count
+            'is_own_profile': is_own_profile,
+            'friendship_status': friendship_status,
+            'friendship_id': friendship_id,
+            'current_user': current_user
+        }
+        
+        # DYNAMIC TEMPLATE SELECTION BASED ON OWNERSHIP
+        if is_own_profile:
+            # Own profile - full permissions (edit, delete, create)
+            logging.info(f"Rendering own profile template for user {current_user.username}")
+            return render_template('UserProfilePage.html', **template_data)
+        else:
+            # Viewing someone else's profile - restricted permissions (view only)
+            logging.info(f"Rendering view-only profile template for user {target_user.username} viewed by {current_user.username}")
+            return render_template('ViewProfile.html', **template_data)
+            
+    except Exception as e:
+        logging.error(f"Error in view_profile for user ID {user_id}: {str(e)}")
+        flash('An error occurred while loading the profile.', 'error')
+        return redirect(url_for('home'))
+    
+
+
 @app.route('/create_post', methods=['GET', 'POST'])
 @login_required
 def create_post():
     form = CreatePostForm()
-    if form.validate_on_submit():
+    
+    if request.method == 'POST':
         try:
-            # Sanitize the post content
-            clean_content = bleach.clean(
-                form.post_content.data,
-                tags=[],  # No HTML tags allowed
-                strip=True
-            )
-
-            post = Post(
+            post_content = request.form.get('post_content', '').strip()
+            
+            if not post_content:
+                flash('Post content cannot be empty.', 'error')
+                return render_template('create_post.html', form=form)
+            
+            # Create the post object
+            new_post = Post(
                 user_id=current_user.user_id,
-                post_content=clean_content,
+                post_content=post_content,
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow()
             )
-            db.session.add(post)
-            db.session.commit()
-
-            if form.image.data:
-                file = form.image.data
-                if file and allowed_file(file.filename):
-                    # Validate file size
-                    file.seek(0, os.SEEK_END)
-                    size = file.tell()
-                    file.seek(0)
-                    
-                    if size > MAX_FILE_SIZE:
-                        flash('File size too large', 'danger')
-                        return redirect(url_for('create_post'))
-
-                    # Validate image content
-                    if not validate_image(file):
-                        flash('Invalid image file', 'danger')
-                        return redirect(url_for('create_post'))
-
-                    # Secure the filename
-                    filename = secure_filename(f"{post.post_id}_{file.filename}")
-                    
-                    # Ensure upload directory exists
-                    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-                    
-                    # Create safe file path
-                    file_path = os.path.join(UPLOAD_FOLDER, filename)
-                    file_path = os.path.abspath(file_path)
-                    
-                    # Verify the path is within UPLOAD_FOLDER
-                    if not file_path.startswith(os.path.abspath(UPLOAD_FOLDER)):
-                        flash('Invalid file path', 'danger')
-                        return redirect(url_for('create_post'))
-
-                    file.save(file_path)
-                    rel_path = os.path.relpath(file_path, 'static').replace("\\", "/")
-                    post_image = PostImage(post_id=post.post_id, image_url=rel_path)
+            
+            db.session.add(new_post)
+            db.session.flush()
+            
+            # Handle uploaded files with modular validation
+            uploaded_files = request.files.getlist('image')
+            
+            if uploaded_files and uploaded_files[0].filename:
+                from file_validate import validate_post_images
+                
+                upload_dir = app.config['UPLOAD_FOLDER']
+                result = validate_post_images(uploaded_files, new_post.post_id, upload_dir)
+                
+                # Add warnings/errors to flash messages
+                for error in result['errors']:
+                    flash(error, 'warning')
+                
+                for warning in result['warnings']:
+                    flash(warning, 'info')
+                
+                # Create PostImage objects for successfully processed files
+                for file_info in result['processed_files']:
+                    post_image = PostImage(
+                        post_id=new_post.post_id,
+                        image_url=file_info['url'],
+                        order_index=0,
+                        created_at=datetime.utcnow()
+                    )
                     db.session.add(post_image)
-                    db.session.commit()
-
-            flash('Post created successfully!', 'success')
+                    app.logger.info(f"User {current_user.user_id} uploaded post image: {file_info['filename']}")
+            
+            db.session.commit()
+            
+            valid_file_count = len(result['processed_files']) if 'result' in locals() else 0
+            if valid_file_count > 0:
+                flash(f'Post created successfully with {valid_file_count} images!', 'success')
+            else:
+                flash('Post created successfully!', 'success')
+            
             return redirect(url_for('account'))
-
+            
         except Exception as e:
             db.session.rollback()
-            flash('An error occurred while creating the post', 'danger')
-            return redirect(url_for('create_post'))
+            app.logger.error(f"Error in create_post: {str(e)}")
+            flash('An error occurred while creating the post.', 'error')
+            return render_template('create_post.html', form=form)
 
     return render_template('create_post.html', form=form)
 
-class CreatePostForm(FlaskForm):
-    post_content = TextAreaField('Content', validators=[DataRequired(), Length(max=300)])
-    image = FileField('Image', validators=[Optional(), FileAllowed(['jpg', 'png', 'jpeg'], 'Images only!')])
-    submit = SubmitField('Submit')
-
-class EditProfileForm(FlaskForm):
-    username = StringField('Username', validators=[DataRequired(), Length(min=2, max=50)])
-    profile_pic = FileField('Profile Picture', validators=[FileAllowed(['jpg', 'jpeg', 'png'], 'Images only!')])
-    submit = SubmitField('Save Changes')
 
 @app.route('/edit_post/<int:post_id>', methods=['GET', 'POST'])
 @login_required
@@ -2810,146 +3651,232 @@ def edit_post(post_id):
     # Security check: Ensure user owns the post
     if post.user_id != current_user.user_id:
         abort(403)
-        
-    form = CreatePostForm(obj=post)
     
-    if form.validate_on_submit():
+    if request.method == 'POST':
         try:
-            # Sanitize input
-            sanitized_content = bleach.clean(form.post_content.data)
+            # Get content from form
+            post_content = request.form.get('post_content', '').strip()
             
+            # Validate content
+            if not post_content:
+                flash('Post content cannot be empty.', 'error')
+                return render_template('edit_post.html', post=post)
+            
+            if len(post_content) > 250:
+                flash('Post content must be 250 characters or less.', 'error')
+                return render_template('edit_post.html', post=post)
+            
+            # Sanitize input
+            sanitized_content = bleach.clean(post_content, tags=[], strip=True)
+            
+            # Update post
             post.post_content = sanitized_content
             post.updated_at = datetime.utcnow()
             
             db.session.commit()
+            
+            # Log the action
+            try:
+                from user_actions import log_user_action
+                log_user_action(
+                    current_user.user_id,
+                    'edit_post',
+                    f'Edited post {post_id}',
+                    request.remote_addr,
+                    request.headers.get('User-Agent', 'Unknown')
+                )
+            except ImportError:
+                pass
+            
             flash('Post updated successfully!', 'success')
             return redirect(url_for('account'))
             
-        except SQLAlchemyError:
+        except Exception as e:
             db.session.rollback()
-            flash('An error occurred while updating the post.', 'danger')
-            return redirect(url_for('edit_post', post_id=post_id))
-            
-    return render_template('edit_post.html', form=form, post=post)
+            app.logger.error(f"Error updating post: {str(e)}")
+            flash('An error occurred while updating the post.', 'error')
+            return render_template('edit_post.html', post=post)
+    
+    # GET request - show form with current content
+    return render_template('edit_post.html', post=post)
 
 
 @app.route('/delete_post/<int:post_id>', methods=['POST'])
 @login_required
 def delete_post(post_id):
-    post = Post.query.get_or_404(post_id)
-    
-    # Security check: Ensure user owns the post
-    if post.user_id != current_user.user_id:
-        abort(403)
-    
+    """Delete a post and its associated images"""
     try:
-        # Delete associated images first
+        # Get the post
+        post = Post.query.filter_by(post_id=post_id).first()
+        
+        if not post:
+            flash('Post not found.', 'error')
+            return redirect(url_for('account'))
+        
+        # Check if the current user owns the post
+        if post.user_id != current_user.user_id:
+            flash('You can only delete your own posts.', 'error')
+            return redirect(url_for('account'))
+        
+        # Delete associated images from filesystem
         for image in post.images:
-            # Delete image file from filesystem
-            image_path = os.path.join(app.config['UPLOAD_FOLDER'], image.image_url)
-            if os.path.exists(image_path):
-                os.remove(image_path)
-                
-        # Delete the post and commit transaction
+            try:
+                image_path = os.path.join(app.config['UPLOAD_FOLDER'], image.image_url)
+                if os.path.exists(image_path):
+                    os.remove(image_path)
+                    app.logger.info(f"Deleted image file: {image_path}")
+            except Exception as e:
+                app.logger.error(f"Error deleting image file {image.image_url}: {str(e)}")
+        
+        # Delete the post (cascade will delete images and likes)
         db.session.delete(post)
         db.session.commit()
         
+        # Log the action (if function exists)
+        try:
+            from user_actions import log_user_action
+            log_user_action(
+                current_user.user_id,
+                'delete_post',
+                f'Deleted post {post_id}',
+                request.remote_addr,
+                request.headers.get('User-Agent', 'Unknown')
+            )
+        except ImportError:
+            pass  # Skip logging if function doesn't exist
+        
         flash('Post deleted successfully!', 'success')
+        app.logger.info(f"User {current_user.user_id} deleted post {post_id}")
         
-    except OSError:
+    except Exception as e:
         db.session.rollback()
-        flash('Error deleting post images.', 'danger')
-        
-    except SQLAlchemyError:
-        db.session.rollback()
-        flash('Error deleting post.', 'danger')
-        
+        app.logger.error(f"Error deleting post {post_id}: {str(e)}")
+        flash('An error occurred while deleting the post.', 'error')
+    
     return redirect(url_for('account'))
 
-
-# --- user account/profile page ---
-@app.route('/account', methods=['GET', 'POST'])
+@app.route('/api/like_post/<int:post_id>', methods=['POST'])
 @login_required
-def account():
+def like_post(post_id):
+    """Like or unlike a post"""
     try:
-        user = current_user
-        posts = Post.query.filter_by(user_id=user.user_id)\
-                         .order_by(Post.created_at.desc())\
-                         .all()
-                         
-        return render_template('UserProfilePage.html', 
-                             user=user, 
-                             posts=posts)
-                             
-    except SQLAlchemyError:
-        flash('Error loading profile data.', 'danger')
-        return redirect(url_for('home'))
+        # Check if post exists
+        post = Post.query.filter_by(post_id=post_id).first()
+        if not post:
+            return jsonify({'success': False, 'message': 'Post not found'}), 404
+        
+        # Check if user already liked this post
+        existing_like = PostLike.query.filter_by(
+            user_id=current_user.user_id,
+            post_id=post_id
+        ).first()
+        
+        if existing_like:
+            # Unlike the post
+            db.session.delete(existing_like)
+            db.session.commit()
+            
+            
+            like_count = post.get_like_count()
+            return jsonify({
+                'success': True,
+                'action': 'unliked',
+                'like_count': like_count,
+                'is_liked': False
+            })
+        else:
+            # Like the post
+            new_like = PostLike(
+                user_id=current_user.user_id,
+                post_id=post_id
+            )
+            db.session.add(new_like)
+            db.session.commit()
+            
+            
+            like_count = post.get_like_count()
+            return jsonify({
+                'success': True,
+                'action': 'liked',
+                'like_count': like_count,
+                'is_liked': True
+            })
+            
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': 'Database error'}), 500
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error in like_post: {str(e)}")
+        return jsonify({'success': False, 'message': 'An error occurred'}), 500
+    
+# --- user account/profile page ---
+
+
+
+
+
+
 
 
 # --- Edit Profile ---
+
 @app.route('/edit_profile', methods=['GET', 'POST'])
 @login_required
 def edit_profile():
-    form = EditProfileForm(obj=current_user)
+    form = EditProfileForm()
+    
+    if request.method == 'GET':
+        form.username.data = current_user.username
+    
     if form.validate_on_submit():
         try:
-            # Sanitize and validate username
-            clean_username = bleach.clean(form.username.data, tags=[], strip=True)
-            if not re.match(r'^[a-zA-Z0-9_]{3,20}$', clean_username):
-                flash('Invalid username format', 'danger')
-                return redirect(url_for('edit_profile'))
-
-            # Check username uniqueness
-            existing_user = User.query.filter(
-                User.username == clean_username,
-                User.user_id != current_user.user_id
-            ).first()
-            if existing_user:
-                flash('Username already taken', 'danger')
-                return redirect(url_for('edit_profile'))
-
-            current_user.username = clean_username
-
-            if form.profile_pic.data:
-                file = form.profile_pic.data
-                if file and allowed_file(file.filename):
-                    # Validate file size
-                    file.seek(0, os.SEEK_END)
-                    size = file.tell()
-                    file.seek(0)
-                    
-                    if size > MAX_FILE_SIZE:
-                        flash('File size too large', 'danger')
-                        return redirect(url_for('edit_profile'))
-
-                    # Validate image content
-                    if not validate_image(file):
-                        flash('Invalid image file', 'danger')
-                        return redirect(url_for('edit_profile'))
-
-                    # Secure the filename and create unique name
-                    filename = f"profile_{current_user.user_id}_{int(datetime.utcnow().timestamp())}.png"
-                    filename = secure_filename(filename)
-                    
-                    # Save to uploads folder
-                    upload_path = os.path.join('static', 'uploads')
-                    os.makedirs(upload_path, exist_ok=True)
-                    file_path = os.path.join(upload_path, filename)
-                    
-                    # Save file and update database
-                    file.save(file_path)
-                    current_user.profile_pic_url = f'uploads/{filename}'
-
+            # Check username changes
+            if form.username.data != current_user.username:
+                existing_user = User.query.filter_by(username=form.username.data).first()
+                if existing_user:
+                    flash('Username already exists. Please choose a different one.', 'error')
+                    return render_template('EditProfile.html', form=form)
+                current_user.username = form.username.data
+            
+            # Handle profile picture upload with modular validation
+            cropped_image_data = request.form.get('cropped_image_data')
+            
+            if cropped_image_data:
+                from file_validate import validate_cropped_image_data, clean_old_file
+                
+                upload_dir = app.config['UPLOAD_FOLDER']
+                result = validate_cropped_image_data(cropped_image_data, current_user.user_id, upload_dir)
+                
+                if not result['success']:
+                    app.logger.warning(f"Profile image upload failed for user {current_user.user_id}: {result['error']}")
+                    flash(result['error'], 'error')
+                    return render_template('EditProfile.html', form=form)
+                
+                # Clean old file and update database
+                clean_old_file(upload_dir, current_user.profile_pic_url)
+                current_user.profile_pic_url = result['filename']
+                app.logger.info(f"User {current_user.user_id} updated profile picture: {result['filename']}")
+            
+            current_user.updated_at = datetime.utcnow()
             db.session.commit()
+            
+            # Log the action
+            try:
+                from user_actions import log_user_action
+                log_user_action(current_user.user_id, 'update_profile', 'Updated profile information')
+            except ImportError:
+                pass
+            
             flash('Profile updated successfully!', 'success')
             return redirect(url_for('account'))
-
+            
         except Exception as e:
             db.session.rollback()
-            flash('An error occurred while updating the profile', 'danger')
-            return redirect(url_for('edit_profile'))
-
-    return render_template('EditProfile.html', form=form, user=current_user)
+            app.logger.error(f"Error updating profile: {str(e)}")
+            flash('An error occurred while updating your profile.', 'error')
+    
+    return render_template('EditProfile.html', form=form)
 
 # -- Events 
 

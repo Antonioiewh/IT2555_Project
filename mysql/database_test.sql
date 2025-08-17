@@ -8,7 +8,7 @@ DROP TABLE IF EXISTS permissions;
 DROP TABLE IF EXISTS roles;
 DROP TABLE IF EXISTS posts;         -- Assuming posts table exists and links to users
 DROP TABLE IF EXISTS post_images;   -- Assuming post_images exists
-
+DROP TABLE IF EXISTS post_likes;
 DROP TABLE IF EXISTS events;        -- Assuming events exists
 DROP TABLE IF EXISTS notifications; -- Assuming notifications exists
 DROP TABLE IF EXISTS reports;       -- Assuming reports exists
@@ -38,6 +38,7 @@ CREATE TABLE users (
     -- Removed first_name VARCHAR(50) DEFAULT NULL,
     -- Removed last_name VARCHAR(50) DEFAULT NULL,
     profile_pic_url VARCHAR(255) DEFAULT NULL,
+    banner_url VARCHAR(255) DEFAULT NULL,
     bio TEXT DEFAULT NULL,
     current_status VARCHAR(50) NOT NULL DEFAULT 'offline',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -131,7 +132,20 @@ CREATE TABLE post_images (
     FOREIGN KEY (post_id) REFERENCES posts(post_id) ON DELETE CASCADE
 );
 
+CREATE TABLE post_likes (
+    like_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    post_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (post_id) REFERENCES posts(post_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_user_post_like (user_id, post_id)
+);
 
+-- Add indexes for better performance
+CREATE INDEX idx_post_likes_user_id ON post_likes(user_id);
+CREATE INDEX idx_post_likes_post_id ON post_likes(post_id);
+CREATE INDEX idx_post_likes_created_at ON post_likes(created_at);
 -- **************************************
 -- 5. Notifications
 -- **************************************

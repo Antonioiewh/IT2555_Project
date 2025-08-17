@@ -12,6 +12,7 @@ import random
 import string
 import uuid
 import logging
+import hashlib
 from PIL import Image
 
 # --- Flask Core Imports ---
@@ -88,13 +89,13 @@ from user_actions import (
     log_user_login_attempt, log_user_login_success, 
     log_user_login_failure, log_user_logout
 )
-#validate
-from file_validate import validate_post_images
-from file_validate import validate_banner_image, clean_old_file
+
+
 # Log parsing utilities
 from parse_test import parse_modsec_audit_log, parse_error_log
 
-from file_validate import validate_file_security, scan_upload
+# Validate
+from file_validate import validate_file_security
 
 
 # --- Configuration ---
@@ -104,6 +105,8 @@ app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config['RECAPTCHA_PUBLIC_KEY'] = '6LefCKcrAAAAAK-REXMG_5i6aqTW_ewYwRbEecB6'
 app.config['RECAPTCHA_PRIVATE_KEY'] = '6LefCKcrAAAAAGaO2Rac8zgqVqhjsy9oxp31fThl' #this in .env!
 app.config['GOOGLE_MAPS_API_KEY'] = os.getenv('GOOGLE_MAPS_API_KEY')
+
+
 # Database configuration
 DB_USER = os.getenv('MYSQL_USER', 'flaskuser')
 DB_PASSWORD = os.getenv('MYSQL_PASSWORD', 'password')
@@ -111,15 +114,28 @@ DB_NAME = os.getenv('MYSQL_DATABASE', 'flaskdb')
 DB_HOST = os.getenv('MYSQL_HOST', 'mysql')  # 'mysql' is the service name in docker-compose
 app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'a_very_secret_key_for_dev')  # Change in production!
-# -- img
+CONTAINER_ID = os.environ.get('HOSTNAME', socket.gethostname())
+BASE_SECRET = os.getenv('SECRET_KEY', 'a_very_secret_key_for_dev')
+app.config['SECRET_KEY'] = f"{BASE_SECRET}-{CONTAINER_ID}"
+
+# CHANGE FOR DOMAIN
+app.config['SESSION_COOKIE_DOMAIN'] = 'localhost'  # ONLY localhost, not subdomains
+app.config['SESSION_COOKIE_SECURE'] = True  # Set to True with HTTPS
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'  # Changed from 'Lax' to 'Strict'
+app.config['SESSION_PERMANENT'] = False
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
+app.config['SESSION_COOKIE_NAME'] = f'session_{CONTAINER_ID}'
+
+
+# -- img -- uploads
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # Initialize database
 db.init_app(app)
 
-# Socket.IO configuration (MAKE DYNAMIC)
+# Socket.IO configuration - NEED ADD DOMAIN WHEN USE - MESSAGE
 socketio = SocketIO(app, cors_allowed_origins=[
     "http://localhost",
     "https://localhost",
@@ -127,12 +143,6 @@ socketio = SocketIO(app, cors_allowed_origins=[
     ""
 ])
 
-# No longer used!
-def allowed_file(filename):
-    """Check if file extension is allowed"""
-    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
 # CSRF protection
@@ -142,24 +152,75 @@ csrf = CSRFProtect(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'  # Redirect to login if user not authenticated
 
-# --FILE RELATED STUFF --
-ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png'}
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
-UPLOAD_FOLDER = 'static/uploads'
 
+#CHANGE FOR DOMAIN - before request
+@app.before_request
+def validate_host():
+    """STRICTLY enforce only exact localhost hostname"""
+    # Get the exact host from request
+    request_host = request.headers.get('Host', '').lower()
+    server_name = request.host.lower()
+    
+    # ONLY allow exact localhost
+    allowed_hosts = ['localhost', 'localhost:5000', 'localhost:80']
+    
+    if request_host not in allowed_hosts or server_name.split(':')[0] != 'localhost':
+        app.logger.warning(f"BLOCKED: Invalid host '{request_host}' / '{server_name}' from IP: {request.remote_addr}")
+        
+        # Clear any existing session for security
+        session.clear()
+        
+        # Return error
+        abort(400, description=f"Access denied. Only 'localhost' is allowed. Requested: {request_host}")
 
-# No longer used!
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+@app.before_request  
+def validate_session():
+    """Enhanced session validation with hostname binding"""
+    if current_user.is_authenticated:
+        # Bind session to exact hostname
+        session_host = session.get('bound_hostname')
+        current_host = request.headers.get('Host', '').lower()
+        
+        if not session_host:
+            # First request - bind session to current hostname
+            session['bound_hostname'] = current_host
+            session['user_ip'] = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
+            session['session_created'] = datetime.utcnow().isoformat()
+        else:
+            # Validate hostname hasn't changed
+            if session_host != current_host:
+                app.logger.warning(f"SESSION HIJACK ATTEMPT: User {current_user.user_id} session bound to '{session_host}' but accessed from '{current_host}'")
+                
+                # FORCE LOGOUT
+                session.clear()
+                logout_user()
+                flash('Security violation detected. Please log in again.', 'error')
+                return redirect(url_for('login'))
+        
+        # Existing IP validation...
+        current_ip = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
+        session_ip = session.get('user_ip')
+        
+        if session_ip and session_ip != current_ip:
+            app.logger.warning(f"IP CHANGE: User {current_user.user_id} IP changed from {session_ip} to {current_ip}")
+            session.clear()
+            logout_user()
+            flash('Session invalid - IP address changed', 'error')
+            return redirect(url_for('login'))
 
-
-#no longer used!
-def validate_image(file_stream):
-    # Check file type using python-magic
-    mime = magic.from_buffer(file_stream.read(1024), mime=True)
-    file_stream.seek(0)  # Reset file pointer
-    return mime in ['image/jpeg', 'image/png']
-
+@app.before_request
+def check_session_timeout():
+    """Check session timeout"""
+    if current_user.is_authenticated:
+        session_created = session.get('session_created')
+        if session_created:
+            created_time = datetime.fromisoformat(session_created)
+            if datetime.utcnow() - created_time > timedelta(hours=8):  # 8 hour session timeout
+                session.clear()
+                logout_user()
+                flash('Session expired - please log in again', 'info')
+                return redirect(url_for('login'))
+            
 # -- Return container ID to templates --
 @app.context_processor
 def inject_container_id():
@@ -172,7 +233,8 @@ def load_user(user_id):
     """Loads a user from the database given their ID."""
     return db.session.get(User, int(user_id))
 
-# Add a template global to make it available in templates
+
+# avail everywhere
 @app.template_global()
 def google_maps_api_key():
     return app.config.get('GOOGLE_MAPS_API_KEY')
@@ -525,7 +587,6 @@ def home():
                              current_user_friend_count=0)
 
 
-#toggle like
 @app.route('/api/toggle_like/<int:post_id>', methods=['POST'])
 @login_required
 def toggle_like_api(post_id):
@@ -566,55 +627,6 @@ def toggle_like_api(post_id):
         db.session.rollback()
         app.logger.error(f"Error toggling like: {str(e)}")
         return jsonify({'success': False, 'error': 'Failed to toggle like'}), 500
-
-
-    try:
-        page = request.args.get('page', 1, type=int)
-        per_page = 10
-        
-        # Same query as home route
-        posts_query = Post.query.order_by(Post.post_date.desc())
-        
-        posts = posts_query.paginate(
-            page=page, 
-            per_page=per_page, 
-            error_out=False
-        )
-        
-        posts_data = []
-        for post in posts.items:
-            # Get the first image for this post
-            first_image = PostImage.query.filter_by(post_id=post.post_id).first()
-            image_url = None
-            if first_image:
-                image_url = url_for('static', filename=first_image.image_url)
-            
-            post_data = {
-                'post_id': post.post_id,
-                'content': post.post_content,
-                'image_url': image_url,
-                'date': post.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-                'relative_date': get_relative_time(post.created_at),
-                'user': {
-                    'user_id': post.user.user_id,
-                    'username': post.user.username,
-                    'profile_picture': url_for('static', filename=f'uploads/{post.user.profile_pic_url}') if post.user.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp')
-                },
-                'likes_count': PostLike.query.filter_by(post_id=post.post_id).count(),
-                'is_liked': PostLike.query.filter_by(post_id=post.post_id, user_id=current_user.user_id).first() is not None,
-                'is_own_post': post.user_id == current_user.user_id
-            }
-            posts_data.append(post_data)
-        
-        return jsonify({
-            'posts': posts_data,
-            'has_more': posts.has_next,
-            'next_page': page + 1 if posts.has_next else None
-        })
-        
-    except Exception as e:
-        app.logger.error(f"Error loading more posts: {str(e)}")
-        return jsonify({'error': 'Failed to load posts'}), 500
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -659,8 +671,15 @@ def login():
                     # User has no 2FA - direct login
                     user.failed_login_attempts = 0
                     user.lockout_until = None
-                    db.session.commit()
-
+                    
+                    # SECURE SESSION SETUP with hostname binding
+                    session.permanent = False
+                    session['user_ip'] = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
+                    session['session_created'] = datetime.utcnow().isoformat()
+                    session['container_id'] = socket.gethostname()
+                    session['bound_hostname'] = request.headers.get('Host', '').lower()
+                    session['login_timestamp'] = datetime.utcnow().isoformat()
+                    
                     login_user(user)
                     user.current_status = 'online'
                     user.last_active_at = datetime.utcnow()
@@ -669,7 +688,7 @@ def login():
                     # ✅ Send event reminders on login
                     send_user_event_reminders(user.user_id)
 
-                    log_user_login_success(user.user_id, details="User logged in successfully with password only.")
+                    log_user_login_success(user.user_id, details=f"User logged in successfully with password only from host: {session['bound_hostname']}")
                     next_page = request.args.get('next')
                     return redirect(next_page or url_for('home'))
             
@@ -692,9 +711,31 @@ def logout():
     if current_user.is_authenticated:
         current_user.current_status = 'offline'
         db.session.commit()
-    log_user_logout(current_user.user_id, details="User logged out.")
+        log_user_logout(current_user.user_id, details="User logged out.")
+    
+    # COMPREHENSIVE SESSION CLEARING
+    user_id = getattr(current_user, 'user_id', None)
+    
+    # Clear Flask-Login session
     logout_user()
-    return redirect(url_for('login'))
+    
+    # Clear ALL session data
+    session.clear()
+    
+    # Force session regeneration to prevent fixation
+    session.permanent = False
+    
+    # Log the logout for security
+    app.logger.info(f"User {user_id} logged out from host: {request.headers.get('Host', 'unknown')}")
+    
+    # Set response headers to prevent caching
+    response = make_response(redirect(url_for('login')))
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    
+    flash('You have been logged out successfully.', 'info')
+    return response
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
@@ -750,6 +791,12 @@ def verify_2fa():
             # Clear failed login attempts and lockout
             user.failed_login_attempts = 0
             user.lockout_until = None
+            
+            # SECURE SESSION SETUP
+            session.permanent = False
+            session['user_ip'] = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
+            session['session_created'] = datetime.utcnow().isoformat()
+            session['container_id'] = socket.gethostname()
             
             # Update user status to online and last active time
             user.current_status = 'online'
@@ -1036,8 +1083,7 @@ def passkey_begin_login():
         
         # Store the state in session
         session['fido2_auth_state'] = state
-        if username:
-            session['passkey_username'] = username
+        session['pending_passkey_user_id'] = user.user_id if username else None
         
         print(f"DEBUG: Raw options from fido2_server: {options}")
         print(f"DEBUG: Options type: {type(options)}")
@@ -1113,6 +1159,7 @@ def passkey_begin_login():
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"Failed to begin passkey authentication: {str(e)}"}), 500
+    
 
 @app.route('/passkey/finish_login', methods=['POST'])
 @csrf.exempt
@@ -1181,7 +1228,6 @@ def passkey_finish_login():
             # Manual ECDSA signature verification (same pattern as registration)
             if public_key.get(1) == 2 and public_key.get(3) == -7:  # EC2 key type, ES256 algorithm
                 
-                
                 # Extract x and y coordinates
                 x_bytes = public_key.get(-2)
                 y_bytes = public_key.get(-3)
@@ -1209,7 +1255,7 @@ def passkey_finish_login():
         cred_record.sign_count = auth_data.counter
         db.session.commit()
         
-        # Log in the user
+        # Log in the user with SECURE SESSION SETUP
         user = User.query.get(cred_record.user_id)
         if not user:
             return jsonify({"error": "User not found"}), 400
@@ -1218,18 +1264,31 @@ def passkey_finish_login():
         if user.lockout_until and user.lockout_until > datetime.utcnow():
             return jsonify({"error": "Account is locked out"}), 423
         
-        # Reset failed attempts and login
+        # Reset failed attempts and setup secure session
         user.failed_login_attempts = 0
         user.lockout_until = None
         user.current_status = 'online'
         user.last_active_at = datetime.utcnow()
-        db.session.commit()
+        
+        # SECURE SESSION SETUP with hostname binding
+        session.permanent = False
+        session['user_ip'] = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
+        session['session_created'] = datetime.utcnow().isoformat()
+        session['container_id'] = socket.gethostname()
+        session['bound_hostname'] = request.headers.get('Host', '').lower()
+        session['login_timestamp'] = datetime.utcnow().isoformat()
         
         login_user(user)
-        log_user_login_success(user.user_id, details="User logged in with passkey.")
+        db.session.commit()
+        
+        # Send event reminders
+        send_user_event_reminders(user.user_id)
         
         # Clean up session
-        session.pop('passkey_username', None)
+        session.pop('pending_passkey_user_id', None)
+        
+        # Log successful passkey login
+        log_user_login_success(user.user_id, details=f"User logged in with passkey from host: {session['bound_hostname']}")
         
         print(f"DEBUG: User {user.username} logged in successfully with passkey")
         return jsonify({"success": True, "redirect": url_for('home')})
@@ -1483,6 +1542,8 @@ def begin_passkey_auth_for_password_change():
     except Exception as e:
         print(f"Error in begin_passkey_auth_for_password_change: {e}")
         return jsonify({"error": f"Failed to begin passkey authentication: {str(e)}"}), 500
+
+
 
 # --- User Reporting ---
 @app.route('/report_user', methods=['GET', 'POST'])
@@ -2443,7 +2504,6 @@ def manage_reports():
         rejected_reports=rejected_reports
     )
 
-# Find the manage_report route (around line 1600) and replace the POST handling section:
 
 @app.route('/manage_report/<int:report_id>', methods=['GET', 'POST'])
 @admin_required
@@ -2711,9 +2771,6 @@ def admin_user_actions():
         search_query=search_query
     )
 
-
-# Admin - test polyglot 
-
 @app.route('/test_upload', methods=['GET', 'POST'])
 @csrf.exempt 
 @admin_required
@@ -2807,11 +2864,9 @@ def internal_server_error(error):
     return render_template('500_error.html'), 500
 
 
-# -- USER
+# -- USER PROFILE + POSTS
 
 
-
-# Update the account route to redirect to the new ID-based route
 @app.route('/account')
 @login_required
 def account():
@@ -2900,8 +2955,6 @@ def view_profile(user_id):
         flash('An error occurred while loading the profile.', 'error')
         return redirect(url_for('home'))
     
-
-
 @app.route('/create_post', methods=['GET', 'POST'])
 @login_required
 def create_post():
@@ -2971,7 +3024,6 @@ def create_post():
 
     return render_template('create_post.html', form=form)
 
-
 @app.route('/edit_post/<int:post_id>', methods=['GET', 'POST'])
 @login_required
 def edit_post(post_id):
@@ -3028,7 +3080,6 @@ def edit_post(post_id):
     
     # GET request - show form with current content
     return render_template('edit_post.html', post=post)
-
 
 @app.route('/delete_post/<int:post_id>', methods=['POST'])
 @login_required
@@ -3138,8 +3189,6 @@ def like_post(post_id):
         db.session.rollback()
         app.logger.error(f"Error in like_post: {str(e)}")
         return jsonify({'success': False, 'message': 'An error occurred'}), 500
-    
-# --- user account/profile page ---
 
 
 
@@ -3207,7 +3256,7 @@ def edit_profile():
     
     return render_template('EditProfile.html', form=form)
 
-# -- Events 
+
 
 
 @app.context_processor
@@ -3219,7 +3268,7 @@ def inject_datetime():
         'utcnow': datetime.utcnow
     }
 
-# Create Event Route
+
 # Create Event Route
 @app.route('/create_event', methods=['GET', 'POST'])
 @user_required
@@ -3417,8 +3466,6 @@ def leave_event(event_id):
         return redirect(url_for('discover_events'))
     else:
         return redirect(url_for('events_dashboard'))
-
-
 
 @app.route('/delete_event/<int:event_id>', methods=['POST'])
 @user_required
@@ -3621,6 +3668,9 @@ def send_user_event_reminders(user_id):
     except Exception as e:
         print(f"Error sending user event reminders: {e}")
         db.session.rollback()
+
+
+
 # Initialize scheduler for event reminders
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=send_event_reminders, trigger="interval", hours=24)

@@ -16,7 +16,7 @@ import hashlib
 from PIL import Image
 
 # --- Flask Core Imports ---
-from flask import Flask, render_template, redirect, url_for, flash, request, current_app, abort, jsonify, session
+from flask import Flask, render_template, redirect, url_for, flash, request, current_app, abort, jsonify, session,make_response
 from flask_wtf import CSRFProtect, FlaskForm
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_socketio import SocketIO, emit, join_room, leave_room, send
@@ -117,12 +117,31 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 CONTAINER_ID = os.environ.get('HOSTNAME', socket.gethostname())
 BASE_SECRET = os.getenv('SECRET_KEY', 'a_very_secret_key_for_dev')
 app.config['SECRET_KEY'] = f"{BASE_SECRET}-{CONTAINER_ID}"
+ALLOWED_SESSION_DOMAINS = [
+    'localhost',
+    '127.0.0.1',
+    'glowing-briefly-cicada.ngrok-free.app'
+]
 
+@app.before_request
+def set_session_domain():
+    """Dynamically set session cookie domain based on request host"""
+    host = request.headers.get('Host', '').lower()
+    
+    # Remove port from host (localhost:5000 -> localhost)
+    if ':' in host:
+        host = host.split(':')[0]
+    
+    # Check if host is in allowed domains
+    if host in ALLOWED_SESSION_DOMAINS:
+        app.config['SESSION_COOKIE_DOMAIN'] = host
+    else:
+        # Default to localhost for unknown domains
+        app.config['SESSION_COOKIE_DOMAIN'] = 'localhost'
 # CHANGE FOR DOMAIN
-app.config['SESSION_COOKIE_DOMAIN'] = 'localhost'  # ONLY localhost, not subdomains
 app.config['SESSION_COOKIE_SECURE'] = True  # Set to True with HTTPS
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'  # Changed from 'Lax' to 'Strict'
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # Changed from 'Lax' to 'Strict'
 app.config['SESSION_PERMANENT'] = False
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
 app.config['SESSION_COOKIE_NAME'] = f'session_{CONTAINER_ID}'
@@ -140,7 +159,8 @@ socketio = SocketIO(app, cors_allowed_origins=[
     "http://localhost",
     "https://localhost",
     "http://127.0.0.1",
-    ""
+    "http://glowing-briefly-cicada.ngrok-free.app",
+    "https://glowing-briefly-cicada.ngrok-free.app"
 ])
 
 
@@ -161,17 +181,23 @@ def validate_host():
     request_host = request.headers.get('Host', '').lower()
     server_name = request.host.lower()
     
-    # ONLY allow exact localhost
-    allowed_hosts = ['localhost', 'localhost:5000', 'localhost:80']
+    # FIXED: Allow both localhost and ngrok domains
+    allowed_hosts = [
+        'localhost', 
+        'localhost:5000', 
+        'localhost:80',
+        'glowing-briefly-cicada.ngrok-free.app'
+    ]
     
-    if request_host not in allowed_hosts or server_name.split(':')[0] != 'localhost':
+    # FIXED: Only check if request_host is in allowed list
+    if request_host not in allowed_hosts:
         app.logger.warning(f"BLOCKED: Invalid host '{request_host}' / '{server_name}' from IP: {request.remote_addr}")
         
         # Clear any existing session for security
         session.clear()
         
         # Return error
-        abort(400, description=f"Access denied. Only 'localhost' is allowed. Requested: {request_host}")
+        abort(400, description=f"Access denied. Only allowed hosts permitted. Requested: {request_host}")
 
 @app.before_request  
 def validate_session():
@@ -225,6 +251,7 @@ def check_session_timeout():
 @app.context_processor
 def inject_container_id():
     return {"container_id": socket.gethostname()}
+
 
 
 # --- Flask-Login User Loader ---

@@ -1,121 +1,867 @@
 {% extends "UserBase.html" %}
+
+{% block head %}
+<!-- Add CSRF token meta tag for sidebar functionality -->
+<meta name="csrf-token" content="{{ csrf_token() }}">
+
+<style>
+/* Google Material Design styles */
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600&family=Roboto:wght@400;500&display=swap');
+
+.google-container {
+    max-width: 600px;
+    margin: 40px auto;
+    padding: 0 24px;
+}
+
+.google-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(60,64,67,0.3), 0 4px 8px 3px rgba(60,64,67,0.15);
+    padding: 0;
+    overflow: hidden;
+    transition: box-shadow 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+.google-card:hover {
+    box-shadow: 0 2px 6px rgba(60,64,67,0.3), 0 8px 24px 4px rgba(60,64,67,0.15);
+}
+
+.google-header {
+    background: #f8f9fa;
+    padding: 24px 32px 16px;
+    border-bottom: 1px solid #e8eaed;
+}
+
+.google-title {
+    font-family: 'Google Sans', sans-serif;
+    font-size: 22px;
+    font-weight: 400;
+    color: #3c4043;
+    margin: 0;
+    text-align: center;
+}
+
+.google-body {
+    padding: 24px 32px 32px;
+}
+
+.google-form-group {
+    margin-bottom: 24px;
+    position: relative;
+}
+
+.google-form-label {
+    display: block;
+    font-family: 'Google Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: #5f6368;
+    margin-bottom: 8px;
+    transition: color 0.2s ease;
+}
+
+.google-textarea-container {
+    position: relative;
+    border: 1px solid #dadce0;
+    border-radius: 8px;
+    background: #fff;
+    transition: all 0.2s ease;
+}
+
+.google-textarea-container:focus-within {
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 1px #1a73e8;
+}
+
+.google-textarea-container:focus-within .google-form-label {
+    color: #1a73e8;
+}
+
+.google-textarea {
+    width: 100%;
+    min-height: 120px;
+    padding: 16px;
+    border: none;
+    outline: none;
+    font-family: 'Roboto', sans-serif;
+    font-size: 16px;
+    color: #3c4043;
+    background: transparent;
+    resize: vertical;
+    box-sizing: border-box;
+    line-height: 1.5;
+}
+
+.google-textarea::placeholder {
+    color: #9aa0a6;
+    font-weight: 400;
+}
+
+.char-counter {
+    position: absolute;
+    bottom: 8px;
+    right: 12px;
+    font-size: 12px;
+    color: #5f6368;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Roboto', sans-serif;
+    transition: color 0.2s ease;
+}
+
+.char-counter.warning {
+    color: #f9ab00;
+    font-weight: 500;
+}
+
+.char-counter.danger {
+    color: #ea4335;
+    font-weight: 600;
+}
+
+.google-file-upload {
+    position: relative;
+    border: 2px dashed #dadce0;
+    border-radius: 8px;
+    padding: 32px 24px;
+    text-align: center;
+    background: #fafbfc;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.google-file-upload:hover {
+    border-color: #1a73e8;
+    background: #f8f9ff;
+}
+
+.google-file-upload.drag-over {
+    border-color: #1a73e8;
+    background: #e8f0fe;
+    transform: scale(1.02);
+}
+
+.google-file-upload input[type="file"] {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+}
+
+.upload-icon {
+    font-size: 48px;
+    color: #5f6368;
+    margin-bottom: 16px;
+    display: block;
+}
+
+.upload-text {
+    font-family: 'Google Sans', sans-serif;
+    font-size: 16px;
+    font-weight: 500;
+    color: #3c4043;
+    margin-bottom: 8px;
+    display: block;
+}
+
+.upload-subtext {
+    font-family: 'Roboto', sans-serif;
+    font-size: 14px;
+    color: #5f6368;
+    line-height: 1.4;
+}
+
+.google-file-upload.has-file {
+    border-color: #34a853;
+    background: #f0f8f0;
+}
+
+.google-file-upload.has-file .upload-icon {
+    color: #34a853;
+}
+
+.google-file-upload.validating {
+    border-color: #f9ab00;
+    background: #fef7e0;
+}
+
+.google-file-upload.valid {
+    border-color: #34a853;
+    background: #f0f8f0;
+}
+
+.google-file-upload.invalid {
+    border-color: #ea4335;
+    background: #fce8e6;
+}
+
+.image-preview {
+    margin-top: 16px;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(60,64,67,0.3);
+    display: none;
+    position: relative;
+}
+
+.image-preview img {
+    width: 100%;
+    max-height: 300px;
+    object-fit: cover;
+    display: block;
+}
+
+.image-preview-overlay {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+}
+
+.remove-image-btn {
+    background: rgba(0,0,0,0.6);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    cursor: pointer;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    font-family: 'Roboto', sans-serif;
+}
+
+.remove-image-btn:hover {
+    background: rgba(0,0,0,0.8);
+    transform: scale(1.1);
+}
+
+.google-button-group {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid #e8eaed;
+}
+
+.google-btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 24px;
+    font-family: 'Google Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 80px;
+    height: 40px;
+    box-sizing: border-box;
+}
+
+.google-btn:focus {
+    outline: 2px solid #1a73e8;
+    outline-offset: 2px;
+}
+
+.google-btn-primary {
+    background-color: #1a73e8;
+    color: white;
+    box-shadow: 0 1px 2px rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
+}
+
+.google-btn-primary:hover {
+    background-color: #1557b0;
+    box-shadow: 0 2px 3px rgba(60,64,67,0.3), 0 6px 10px 4px rgba(60,64,67,0.15);
+}
+
+.google-btn-primary:active {
+    background-color: #1248a0;
+    box-shadow: 0 4px 4px rgba(60,64,67,0.3), 0 8px 12px 6px rgba(60,64,67,0.15);
+}
+
+.google-btn-primary:disabled {
+    background-color: #f1f3f4;
+    color: #5f6368;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.google-btn-secondary {
+    background-color: transparent;
+    color: #1a73e8;
+    border: 1px solid #dadce0;
+}
+
+.google-btn-secondary:hover {
+    background-color: #f8f9fa;
+    border-color: #1a73e8;
+}
+
+.loading-spinner {
+    display: none;
+    width: 16px;
+    height: 16px;
+    border: 2px solid #e8eaed;
+    border-top: 2px solid #1a73e8;
+    border-radius: 50%;
+    animation: google-spin 1s linear infinite;
+    margin-right: 8px;
+}
+
+@keyframes google-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.validation-message {
+    background: #fef7e0;
+    border: 1px solid #fdd663;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    color: #b06000;
+    font-family: 'Roboto', sans-serif;
+    display: none;
+}
+
+.validation-message.error {
+    background: #fce8e6;
+    border-color: #f28b82;
+    color: #d93025;
+}
+
+.validation-message.success {
+    background: #e6f4ea;
+    border-color: #81c995;
+    color: #137333;
+}
+
+.file-upload-disabled {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .google-container {
+        margin: 20px auto;
+        padding: 0 16px;
+    }
+    
+    .google-header {
+        padding: 20px 24px 12px;
+    }
+    
+    .google-body {
+        padding: 20px 24px 24px;
+    }
+    
+    .google-button-group {
+        flex-direction: column-reverse;
+    }
+    
+    .google-btn {
+        width: 100%;
+    }
+    
+    .google-file-upload {
+        padding: 24px 16px;
+    }
+    
+    .upload-icon {
+        font-size: 40px;
+        margin-bottom: 12px;
+    }
+}
+
+/* Accessibility improvements */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container mt-5" style="max-width: 600px;">
-    <div class="card shadow">
-        <div class="card-body">
-            <h2 class="card-title mb-4 text-center">Create a New Post</h2>
-            <form action="{{ url_for('create_post') }}" method="POST" enctype="multipart/form-data">
+<div class="google-container">
+    <div class="google-card">
+        <div class="google-header">
+            <h1 class="google-title">Create a new post</h1>
+        </div>
+        
+        <div class="google-body">
+            <div id="validationMessage" class="validation-message"></div>
+            
+            <form action="{{ url_for('create_post') }}" method="POST" enctype="multipart/form-data" id="createPostForm">
                 {{ form.hidden_tag() }}
-                <div class="mb-3">
-                    <label for="content" class="form-label">Content</label>
-                    {{ form.post_content(class="form-control", rows=7, placeholder="Enter Text")|e }}
-                    <div class="mt-1 text-end">
-                        <span id="wordCount" style="color: #6c757d;">0/250</span>
+                
+                <!-- Content Field -->
+                <div class="google-form-group">
+                    <label for="post_content" class="google-form-label">What's on your mind?</label>
+                    <div class="google-textarea-container">
+                        {{ form.post_content(class="google-textarea", id="post_content", placeholder="Share your thoughts with the world...", rows="5", maxlength="250") }}
+                        <div class="char-counter" id="wordCount">0/250</div>
                     </div>
                 </div>
-                <div class="mb-3">
-                    <label for="image" class="form-label">Upload an Image (Optional)</label>
-                    {{ form.image(class="form-control", accept=".jpg,.jpeg,.png", onchange="validateAndPreviewImage(event)") }}
-                    <small class="form-text text-muted">Accepted formats: JPEG, JPG, PNG only</small>
-                    <div id="imagePreview" class="mt-2" style="display: none;">
-                        <img id="preview" src="#" alt="Preview" class="img-fluid" style="max-height: 200px;">
-                        <button type="button" class="btn btn-sm btn-danger mt-2" onclick="clearImage()">Remove Image</button>
+                
+                <!-- Image Upload Field -->
+                <div class="google-form-group">
+                    <label for="image" class="google-form-label">Add a photo (optional)</label>
+                    <div class="google-file-upload" id="fileUploadArea">
+                        {{ form.image(id="image", accept="image/jpeg,image/jpg,image/png,image/gif,image/webp", onchange="handleFileInputChange(event)") }}
+                        <span class="upload-icon">📷</span>
+                        <span class="upload-text">Choose file or drag and drop</span>
+                        <div class="upload-subtext">
+                            JPEG, JPG, PNG, GIF, WEBP up to 5MB<br>
+                            <small>Recommended: 1080x1080 pixels</small>
+                        </div>
+                    </div>
+                    
+                    <div id="imagePreview" class="image-preview">
+                        <img id="preview" src="#" alt="Preview">
+                        <div class="image-preview-overlay">
+                            <button type="button" class="remove-image-btn" onclick="clearImage()" title="Remove image">×</button>
+                        </div>
                     </div>
                 </div>
-                <div class="d-grid gap-2">
-                    <button type="submit" class="btn btn-primary">Create Post</button>
+                
+                
+                
+                <!-- Buttons -->
+                <div class="google-button-group">
+                    <a href="{{ url_for('account') }}" class="google-btn google-btn-secondary">Cancel</a>
+                    <button type="submit" class="google-btn google-btn-primary" id="submitBtn">
+                        <div class="loading-spinner" id="loadingSpinner"></div>
+                        <span id="submitText">Create Post</span>
+                    </button>
                 </div>
             </form>
-            <div class="mt-3 text-center">
-                <a href="{{ url_for('account') }}" class="btn btn-link">Cancel</a>
-            </div>
         </div>
     </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
+<!-- Include the parent scripts first for sidebar functionality -->
+{{ super() }}
+
+<!-- Create post specific JavaScript -->
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const textArea = document.getElementById('post_content');
-    const wordCount = document.getElementById('wordCount');
-    const maxChars = 250;
+// Configuration
+const CONFIG = {
+    MAX_FILE_SIZE: 5 * 1024 * 1024, // 5MB
+    ALLOWED_TYPES: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+    ALLOWED_EXTENSIONS: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+    MAX_CHARS: 250
+};
 
-    // Sanitize input
-    function sanitizeInput(input) {
-        return input.replace(/<[^>]*>/g, '');
+// Global state
+let formState = {
+    initialized: false,
+    validFile: null,
+    validating: false
+};
+
+// Utility functions
+function getFileExtension(filename) {
+    return filename.toLowerCase().split('.').pop();
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function showValidationMessage(message, type = 'error') {
+    const validationMessage = document.getElementById('validationMessage');
+    if (validationMessage) {
+        validationMessage.textContent = message;
+        validationMessage.className = `validation-message ${type}`;
+        validationMessage.style.display = 'block';
+        
+        // Auto-hide warnings after 5 seconds
+        if (type === 'warning') {
+            setTimeout(() => {
+                hideValidationMessage();
+            }, 5000);
+        }
     }
+}
 
-    textArea.addEventListener('input', function(e) {
-        // Sanitize the input
-        this.value = sanitizeInput(this.value);
+function hideValidationMessage() {
+    const validationMessage = document.getElementById('validationMessage');
+    if (validationMessage) {
+        validationMessage.style.display = 'none';
+    }
+}
+
+function updateUploadAreaState(state, message = '') {
+    const fileUploadArea = document.getElementById('fileUploadArea');
+    if (!fileUploadArea) return;
+    
+    // Remove all state classes
+    fileUploadArea.classList.remove('validating', 'valid', 'invalid', 'has-file');
+    
+    const uploadIcon = fileUploadArea.querySelector('.upload-icon');
+    const uploadText = fileUploadArea.querySelector('.upload-text');
+    const uploadSubtext = fileUploadArea.querySelector('.upload-subtext');
+    
+    switch (state) {
+        case 'validating':
+            fileUploadArea.classList.add('validating');
+            if (uploadIcon) uploadIcon.textContent = '⏳';
+            if (uploadText) uploadText.textContent = 'Validating file...';
+            if (uploadSubtext) uploadSubtext.textContent = 'Please wait while we check your file';
+            break;
+            
+        case 'valid':
+            fileUploadArea.classList.add('valid', 'has-file');
+            if (uploadIcon) uploadIcon.textContent = '✅';
+            if (uploadText) uploadText.textContent = message || 'File ready to upload';
+            if (uploadSubtext) uploadSubtext.textContent = 'Click to change image';
+            break;
+            
+        case 'invalid':
+            fileUploadArea.classList.add('invalid');
+            if (uploadIcon) uploadIcon.textContent = '❌';
+            if (uploadText) uploadText.textContent = 'Invalid file';
+            if (uploadSubtext) uploadSubtext.textContent = message || 'Please choose a different file';
+            break;
+            
+        default: // reset
+            if (uploadIcon) uploadIcon.textContent = '📷';
+            if (uploadText) uploadText.textContent = 'Choose file or drag and drop';
+            if (uploadSubtext) {
+                uploadSubtext.innerHTML = 'JPEG, JPG, PNG, GIF, WEBP up to 5MB<br><small>Recommended: 1080x1080 pixels</small>';
+            }
+    }
+}
+
+function validateFile(file) {
+    return new Promise((resolve) => {
+        console.log('Starting file validation for:', file.name);
         
-        if (this.value.length > maxChars) {
-            this.value = this.value.substring(0, maxChars);
+        const errors = [];
+        
+        // Check file existence
+        if (!file) {
+            errors.push('No file selected');
+            resolve({ valid: false, errors });
+            return;
         }
         
-        const currentChars = this.value.length;
-        wordCount.textContent = `${currentChars}/${maxChars}`;
-        
-        if (currentChars >= 240) {
-            wordCount.style.color = '#dc3545';
-        } else {
-            wordCount.style.color = '#6c757d';
+        // Check file size
+        if (file.size > CONFIG.MAX_FILE_SIZE) {
+            errors.push(`File size (${formatFileSize(file.size)}) exceeds limit of ${formatFileSize(CONFIG.MAX_FILE_SIZE)}`);
         }
+        
+        // Check file extension
+        const extension = getFileExtension(file.name);
+        if (!CONFIG.ALLOWED_EXTENSIONS.includes(extension)) {
+            errors.push(`File type ".${extension}" is not allowed. Use: ${CONFIG.ALLOWED_EXTENSIONS.join(', ')}`);
+        }
+        
+        // Check MIME type
+        if (!CONFIG.ALLOWED_TYPES.includes(file.type)) {
+            errors.push(`Invalid file format (${file.type}). Expected image file.`);
+        }
+        
+        // If basic validation fails, return immediately
+        if (errors.length > 0) {
+            console.log('Basic validation failed:', errors);
+            resolve({ valid: false, errors });
+            return;
+        }
+        
+        // Advanced validation using FileReader
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                // Check file signature (magic bytes)
+                const arr = new Uint8Array(e.target.result.slice(0, 4));
+                let header = '';
+                for (let i = 0; i < arr.length; i++) {
+                    header += arr[i].toString(16).padStart(2, '0');
+                }
+                
+                // Common image file signatures
+                const validSignatures = [
+                    'ffd8ffe0', 'ffd8ffe1', 'ffd8ffe2', 'ffd8ffe3', 'ffd8ffe8', // JPEG
+                    '89504e47', // PNG
+                    '47494638', // GIF
+                    '52494646', // WEBP (RIFF)
+                ];
+                
+                const isValidSignature = validSignatures.some(sig => 
+                    header.toLowerCase().startsWith(sig.toLowerCase())
+                );
+                
+                if (!isValidSignature) {
+                    errors.push('File does not appear to be a valid image (invalid file signature)');
+                }
+                
+                console.log('File validation complete:', { valid: errors.length === 0, errors });
+                resolve({ valid: errors.length === 0, errors });
+                
+            } catch (error) {
+                console.error('Error during advanced validation:', error);
+                errors.push('Unable to validate file integrity');
+                resolve({ valid: false, errors });
+            }
+        };
+        
+        reader.onerror = function() {
+            console.error('FileReader error');
+            errors.push('Unable to read file');
+            resolve({ valid: false, errors });
+        };
+        
+        // Read first 4 bytes for signature check
+        reader.readAsArrayBuffer(file.slice(0, 4));
     });
+}
 
-    textArea.addEventListener('paste', function(e) {
-        e.preventDefault();
-        const text = sanitizeInput((e.clipboardData || window.clipboardData).getData('text'));
-        document.execCommand('insertText', false, text);
-    });
-});
-
-function validateAndPreviewImage(event) {
+async function handleFileInputChange(event) {
     const file = event.target.files[0];
-    const preview = document.getElementById('preview');
-    const previewContainer = document.getElementById('imagePreview');
+    console.log('File input changed:', file);
     
-    // Validate file type with more strict checking
-    const validExtensions = ['jpg', 'jpeg', 'png'];
-    const fileName = file?.name.toLowerCase();
-    const fileExtension = fileName?.split('.').pop();
+    if (!file) {
+        clearImage();
+        return;
+    }
     
-    if (!file || !validExtensions.includes(fileExtension)) {
-        alert('Please upload only JPEG, JPG or PNG images.');
-        clearImage();
+    // Prevent multiple validations
+    if (formState.validating) {
+        console.log('Already validating, skipping...');
         return;
     }
-
-    // Additional MIME type validation
-    const validMimeTypes = ['image/jpeg', 'image/png'];
-    if (!validMimeTypes.includes(file.type)) {
-        alert('Invalid image format. Please upload only JPEG, JPG or PNG images.');
+    
+    formState.validating = true;
+    hideValidationMessage();
+    updateUploadAreaState('validating');
+    
+    try {
+        // Validate the file
+        const validation = await validateFile(file);
+        
+        if (validation.valid) {
+            console.log('File validation passed');
+            formState.validFile = file;
+            
+            // Show preview
+            await createImagePreview(file);
+            updateUploadAreaState('valid', file.name);
+            showValidationMessage(`✅ Image "${file.name}" is ready to upload`, 'success');
+            
+        } else {
+            console.log('File validation failed:', validation.errors);
+            clearImage();
+            updateUploadAreaState('invalid', validation.errors[0]);
+            showValidationMessage(`❌ ${validation.errors[0]}`, 'error');
+        }
+        
+    } catch (error) {
+        console.error('Error during file handling:', error);
         clearImage();
-        return;
+        updateUploadAreaState('invalid');
+        showValidationMessage('❌ An error occurred while processing the file', 'error');
     }
+    
+    formState.validating = false;
+}
 
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-        alert('File size must be less than 5MB');
-        clearImage();
-        return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        preview.src = e.target.result;
-        previewContainer.style.display = 'block';
-    }
-    reader.readAsDataURL(file);
+function createImagePreview(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const preview = document.getElementById('preview');
+            const previewContainer = document.getElementById('imagePreview');
+            
+            if (preview && previewContainer) {
+                preview.src = e.target.result;
+                previewContainer.style.display = 'block';
+                console.log('Image preview created successfully');
+                resolve();
+            } else {
+                reject('Preview elements not found');
+            }
+        };
+        
+        reader.onerror = function() {
+            reject('Failed to read file for preview');
+        };
+        
+        reader.readAsDataURL(file);
+    });
 }
 
 function clearImage() {
+    console.log('Clearing image');
+    
+    formState.validFile = null;
+    
     const preview = document.getElementById('preview');
     const previewContainer = document.getElementById('imagePreview');
-    const fileInput = document.querySelector('input[type="file"]');
+    const fileInput = document.getElementById('image');
     
-    preview.src = '#';
-    previewContainer.style.display = 'none';
-    fileInput.value = '';
+    if (preview) preview.src = '#';
+    if (previewContainer) previewContainer.style.display = 'none';
+    if (fileInput) fileInput.value = '';
+    
+    updateUploadAreaState('reset');
+    hideValidationMessage();
+}
+
+function handleDragAndDrop() {
+    const fileUploadArea = document.getElementById('fileUploadArea');
+    if (!fileUploadArea) return;
+    
+    fileUploadArea.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.classList.add('drag-over');
+    });
+
+    fileUploadArea.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.classList.remove('drag-over');
+    });
+
+    fileUploadArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.classList.remove('drag-over');
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            const fileInput = document.getElementById('image');
+            if (fileInput) {
+                // Create new DataTransfer to assign file to input
+                const dt = new DataTransfer();
+                dt.items.add(files[0]);
+                fileInput.files = dt.files;
+                
+                // Trigger change event
+                handleFileInputChange({ target: { files: [files[0]] } });
+            }
+        }
+    });
+}
+
+function handleFormSubmission() {
+    const form = document.getElementById('createPostForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const loadingSpinner = document.getElementById('loadingSpinner');
+    const submitText = document.getElementById('submitText');
+    
+    if (!form) return;
+    
+    form.addEventListener('submit', function(e) {
+        console.log('Form submission attempted');
+        
+        // Check if we're still validating
+        if (formState.validating) {
+            e.preventDefault();
+            showValidationMessage('Please wait while file validation completes', 'warning');
+            return false;
+        }
+        
+        // Check content
+        const content = document.getElementById('post_content');
+        if (!content || !content.value.trim()) {
+            e.preventDefault();
+            showValidationMessage('Please enter some content for your post', 'error');
+            return false;
+        }
+        
+        // Show loading state
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            if (loadingSpinner) loadingSpinner.style.display = 'inline-block';
+            if (submitText) submitText.textContent = 'Creating...';
+        }
+        
+        console.log('Form submission proceeding');
+        return true;
+    });
+}
+
+function handleTextArea() {
+    const textArea = document.getElementById('post_content');
+    const wordCount = document.getElementById('wordCount');
+    
+    if (!textArea || !wordCount) return;
+    
+    function updateWordCount() {
+        const currentChars = textArea.value.length;
+        wordCount.textContent = `${currentChars}/${CONFIG.MAX_CHARS}`;
+        
+        wordCount.className = 'char-counter';
+        if (currentChars >= 240) {
+            wordCount.classList.add('danger');
+        } else if (currentChars >= 200) {
+            wordCount.classList.add('warning');
+        }
+    }
+    
+    textArea.addEventListener('input', function() {
+        // Auto-resize
+        this.style.height = 'auto';
+        this.style.height = Math.max(120, this.scrollHeight) + 'px';
+        
+        // Limit length
+        if (this.value.length > CONFIG.MAX_CHARS) {
+            this.value = this.value.substring(0, CONFIG.MAX_CHARS);
+        }
+        
+        updateWordCount();
+    });
+    
+    // Initialize
+    updateWordCount();
+}
+
+function initializeCreatePostForm() {
+    if (formState.initialized) return;
+    
+    console.log('Initializing create post form');
+    
+    try {
+        handleTextArea();
+        handleDragAndDrop();
+        handleFormSubmission();
+        
+        formState.initialized = true;
+        console.log('Create post form initialized successfully');
+        
+    } catch (error) {
+        console.error('Error initializing form:', error);
+    }
+}
+
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', initializeCreatePostForm);
+if (document.readyState !== 'loading') {
+    initializeCreatePostForm();
 }
 </script>
 {% endblock %}

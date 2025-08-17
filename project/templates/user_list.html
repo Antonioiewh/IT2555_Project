@@ -1,83 +1,73 @@
-<div class="container mt-4">
-    <div id="user-list">
-        <div class="row row-cols-1 row-cols-md-3 g-4">
-            {% for user in all_users %}
-            <div class="col">
-                <div class="card h-100 text-center shadow-sm">
-                    <div class="card-body d-flex flex-column align-items-center">
-                        <img src="{{ user.profile_pic_url or url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
-                             alt="Profile Picture"
-                             class="rounded-circle mb-3"
-                             width="100" height="100">
-                        <h5 class="card-title mb-1">{{ user.username }}</h5>
-                        {% if user.bio %}
-                        <p class="card-text text-muted small">{{ user.bio }}</p>
+<div class="row row-cols-1 row-cols-md-3 g-4">
+    {% for user in all_users %}
+    <div class="col">
+        <div class="card h-100 text-center shadow-sm">
+            <div class="card-body d-flex flex-column align-items-center">
+                <!-- Profile Picture -->
+                <a href="{{ url_for('view_profile', user_id=user.user_id) }}" class="text-decoration-none">
+                    {% if user.profile_pic_url %}
+                        <img src="{{ url_for('static', filename='uploads/' + user.profile_pic_url) }}"
+                    {% else %}
+                        <img src="{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
+                    {% endif %}
+                         alt="{{ user.username }}"
+                         class="rounded-circle mb-3 border"
+                         width="100" height="100"
+                         style="object-fit: cover;"
+                         onerror="this.src='{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}'">
+                </a>
+                
+                <!-- Username -->
+                <a href="{{ url_for('view_profile', user_id=user.user_id) }}" class="text-decoration-none">
+                    <h5 class="card-title mb-2 text-primary">{{ user.username }}</h5>
+                </a>
+                
+                <!-- Bio (if exists) -->
+                {% if user.bio %}
+                <p class="card-text text-muted small mb-3">
+                    {{ user.bio[:50] }}{% if user.bio|length > 50 %}...{% endif %}
+                </p>
+                {% endif %}
+                
+                <!-- Action Buttons -->
+                <div class="mt-auto d-flex flex-column gap-2 w-100">
+                    {% if user.user_id in accepted_friends %}
+                        <button type="button" class="btn btn-success btn-sm" disabled>
+                            <i class="bi bi-check-circle"></i> Friends
+                        </button>
+                    {% elif user.user_id in pending_requests %}
+                        {% if pending_requests[user.user_id] == 'sent' %}
+                            <button type="button" class="btn btn-secondary btn-sm" disabled>
+                                <i class="bi bi-hourglass-split"></i> Request Sent
+                            </button>
+                        {% else %}
+                            <button type="button" class="btn btn-warning btn-sm" disabled>
+                                <i class="bi bi-inbox"></i> Respond in Notifications
+                            </button>
                         {% endif %}
-                            {% if user.user_id in accepted_friends %}
-                                <button type="button" class="btn btn-success btn-sm mt-2" disabled>
-                                    <i class="bi bi-check-circle"></i> Accepted
-                                </button>
-                                <button type="button" class="btn btn-danger btn-sm mt-2 ms-2" data-bs-toggle="modal" data-bs-target="#unfriendModal-{{ user.user_id }}">
-                                    Unfriend
-                                </button>
-                                <!-- Modal for Unfriend Confirmation -->
-                                <div class="modal fade" id="unfriendModal-{{ user.user_id }}" tabindex="-1" aria-labelledby="unfriendModalLabel-{{ user.user_id }}" aria-hidden="true">
-                                    <div class="modal-dialog modal-dialog-centered">
-                                        <div class="modal-content">
-                                            <div class="modal-header">
-                                                <h5 class="modal-title" id="unfriendModalLabel-{{ user.user_id }}">Confirm Unfriend</h5>
-                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                            </div>
-                                            <div class="modal-body">
-                                                Are you sure you want to unfriend <strong>{{ user.username }}</strong>?
-                                            </div>
-                                            <div class="modal-footer">
-                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                <form method="post" action="{{ url_for('unfriend', friendship_id=accepted_friends[user.user_id]) }}" style="display:inline;">
-                                                    {{ form.hidden_tag() }}
-                                                    <button type="submit" class="btn btn-danger">Unfriend</button>
-                                                </form>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            {% elif user.user_id in pending_requests %}
-                                {% if pending_requests[user.user_id] == 'sent' %}
-                                    <!-- Sender sees Pending and Cancel -->
-                                    <button type="button" class="btn btn-secondary btn-sm mt-2" disabled>
-                                        <i class="bi bi-hourglass-split"></i> Pending
-                                    </button>
-                                    <form method="post" action="{{ url_for('cancel_friend_request', target_user_id=user.user_id) }}" style="display:inline;">
-                                        {{ form.hidden_tag() }}
-                                        <button type="submit" class="btn btn-danger btn-sm mt-2">
-                                            <i class="bi bi-x-circle"></i> Cancel Request
-                                        </button>
-                                    </form>
-                                    {% else %}
-                                    <!-- Receiver sees Request -->
-                                    <form method="post" action="{{ url_for('send_friend_request', target_user_id=user.user_id) }}">
-                                        {{ form.hidden_tag() }}
-                                        {{ form.submit(class="btn btn-primary btn-sm mt-2", value="Request") }}
-                                    </form>
-                                {% endif %}
-                            {% else %}
-                                <!-- No pending request, show Request button -->
-                                <form method="POST" action="{{ url_for('send_friend_request', target_user_id=user.user_id) }}">
-                                    {{ form.hidden_tag() }}
-                                    
-                                    {{ form.submit(class="btn btn-primary btn-sm mt-2", value="Request") }}
-                                </form>
-                            {% endif %}
-                    </div>
+                    {% else %}
+                        <form method="post" action="{{ url_for('send_friend_request', target_user_id=user.user_id) }}" class="w-100">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-primary btn-sm w-100">
+                                <i class="bi bi-person-plus"></i> Add Friend
+                            </button>
+                        </form>
+                    {% endif %}
+                    
+                    <a href="{{ url_for('view_profile', user_id=user.user_id) }}" class="btn btn-outline-primary btn-sm w-100">
+                        <i class="bi bi-eye"></i> View Profile
+                    </a>
                 </div>
             </div>
-            
-            {% else %}
-            <div class="col-12 text-center">
-                <div class="alert alert-info">No users found.</div>
-            </div>
-            {% endfor %}
         </div>
     </div>
-    
+    {% else %}
+    <div class="col-12">
+        <div class="alert alert-info text-center">
+            <i class="bi bi-people"></i>
+            <h5>No users found</h5>
+            <p>Try searching for users or check back later!</p>
+        </div>
+    </div>
+    {% endfor %}
 </div>

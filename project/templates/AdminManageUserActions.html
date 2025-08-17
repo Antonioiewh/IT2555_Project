@@ -2,95 +2,717 @@
 {% block title %}Admin - User Actions{% endblock %}
 
 {% block content %}
-<div class="container mt-5">
-    <h1 class="text-center mb-4">Admin Dashboard - User Actions</h1>
+<style>
+/* Google-inspired design system */
+:root {
+    --google-blue: #1a73e8;
+    --google-blue-hover: #1557b0;
+    --google-blue-light: #e8f0fe;
+    --google-grey-50: #f8f9fa;
+    --google-grey-100: #f1f3f4;
+    --google-grey-200: #e8eaed;
+    --google-grey-300: #dadce0;
+    --google-grey-400: #bdc1c6;
+    --google-grey-500: #9aa0a6;
+    --google-grey-600: #80868b;
+    --google-grey-700: #5f6368;
+    --google-grey-800: #3c4043;
+    --google-grey-900: #202124;
+    --google-green: #34a853;
+    --google-yellow: #fbbc04;
+    --google-red: #ea4335;
+    --google-orange: #ff6d01;
+    --google-shadow: 0 1px 2px 0 rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15);
+    --google-shadow-hover: 0 1px 3px 0 rgba(60,64,67,.3), 0 4px 8px 3px rgba(60,64,67,.15);
+}
 
-    <!-- Top Section: Statistics -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card shadow-sm border-0 rounded">
-                <div class="card-body">
-                    <h6 class="card-title text-uppercase text-muted">Total Logs</h6>
-                    <p class="card-text display-4 text-dark">{{ total_logs }}</p>
+.google-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px;
+    background-color: #fff;
+    min-height: 100vh;
+}
+
+.google-header {
+    margin-bottom: 32px;
+}
+
+.google-title {
+    font-size: 28px;
+    font-weight: 400;
+    color: var(--google-grey-800);
+    margin: 0 0 8px 0;
+    letter-spacing: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.google-subtitle {
+    font-size: 14px;
+    color: var(--google-grey-600);
+    margin: 0;
+}
+
+.user-actions-icon {
+    width: 32px;
+    height: 32px;
+    background: var(--google-blue);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 16px;
+}
+
+/* Statistics Cards */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 20px;
+    margin-bottom: 32px;
+}
+
+.stat-card {
+    background: #fff;
+    border: 1px solid var(--google-grey-200);
+    border-radius: 8px;
+    padding: 24px;
+    transition: box-shadow 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-card:hover {
+    box-shadow: var(--google-shadow-hover);
+}
+
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background: var(--google-blue);
+}
+
+.stat-card.attempts::before {
+    background: var(--google-yellow);
+}
+
+.stat-card.successes::before {
+    background: var(--google-green);
+}
+
+.stat-card.failures::before {
+    background: var(--google-red);
+}
+
+.stat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.stat-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--google-grey-600);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0;
+}
+
+.stat-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: white;
+}
+
+.stat-icon.total { background: var(--google-blue); }
+.stat-icon.attempts { background: var(--google-yellow); }
+.stat-icon.successes { background: var(--google-green); }
+.stat-icon.failures { background: var(--google-red); }
+
+.stat-value {
+    font-size: 36px;
+    font-weight: 400;
+    color: var(--google-grey-800);
+    margin: 0;
+    line-height: 1;
+}
+
+.stat-description {
+    font-size: 12px;
+    color: var(--google-grey-500);
+    margin-top: 8px;
+}
+
+/* Search Card */
+.search-card {
+    background: #fff;
+    border: 1px solid var(--google-grey-200);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 24px;
+    box-shadow: var(--google-shadow);
+}
+
+.search-form {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.search-input {
+    flex: 1;
+    border: 1px solid var(--google-grey-300);
+    border-radius: 4px;
+    padding: 12px 16px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s ease;
+}
+
+.search-input:focus {
+    border-color: var(--google-blue);
+    box-shadow: 0 0 0 1px var(--google-blue);
+}
+
+.search-btn {
+    background: var(--google-blue);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 12px 24px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.search-btn:hover {
+    background: var(--google-blue-hover);
+}
+
+/* Table Container */
+.table-container {
+    background: #fff;
+    border: 1px solid var(--google-grey-200);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: var(--google-shadow);
+}
+
+/* Table Styles */
+.google-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.google-table thead {
+    background: var(--google-grey-50);
+    border-bottom: 1px solid var(--google-grey-200);
+}
+
+.google-table th {
+    padding: 16px 20px;
+    text-align: left;
+    font-weight: 500;
+    color: var(--google-grey-700);
+    border: none;
+    white-space: nowrap;
+}
+
+.google-table th a {
+    color: var(--google-grey-700);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: color 0.2s ease;
+}
+
+.google-table th a:hover {
+    color: var(--google-blue);
+}
+
+.google-table tbody tr {
+    border-bottom: 1px solid var(--google-grey-200);
+    transition: background-color 0.2s ease;
+}
+
+.google-table tbody tr:hover {
+    background: var(--google-grey-50);
+}
+
+.google-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.google-table td {
+    padding: 16px 20px;
+    vertical-align: middle;
+    border: none;
+}
+
+/* Action Type Badges */
+.action-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.action-login-success {
+    background: rgba(52, 168, 83, 0.1);
+    color: var(--google-green);
+    border: 1px solid rgba(52, 168, 83, 0.3);
+}
+
+.action-login-failure {
+    background: rgba(234, 67, 53, 0.1);
+    color: var(--google-red);
+    border: 1px solid rgba(234, 67, 53, 0.3);
+}
+
+.action-login-attempt {
+    background: rgba(251, 188, 4, 0.1);
+    color: #f9ab00;
+    border: 1px solid rgba(251, 188, 4, 0.3);
+}
+
+.action-logout-success {
+    background: rgba(26, 115, 232, 0.1);
+    color: var(--google-blue);
+    border: 1px solid rgba(26, 115, 232, 0.3);
+}
+
+.action-other {
+    background: var(--google-grey-100);
+    color: var(--google-grey-600);
+    border: 1px solid var(--google-grey-300);
+}
+
+/* User ID Styling */
+.user-id {
+    font-weight: 500;
+    color: var(--google-blue);
+    background: var(--google-blue-light);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+/* Timestamp Styling */
+.timestamp {
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    color: var(--google-grey-700);
+    background: var(--google-grey-100);
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+/* Details Styling */
+.details-text {
+    font-size: 13px;
+    color: var(--google-grey-700);
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Row highlighting based on action type */
+.success-row {
+    background: linear-gradient(135deg, rgba(52, 168, 83, 0.02) 0%, rgba(52, 168, 83, 0.05) 100%);
+    border-left: 4px solid var(--google-green);
+}
+
+.failure-row {
+    background: linear-gradient(135deg, rgba(234, 67, 53, 0.02) 0%, rgba(234, 67, 53, 0.05) 100%);
+    border-left: 4px solid var(--google-red);
+}
+
+.attempt-row {
+    background: linear-gradient(135deg, rgba(251, 188, 4, 0.02) 0%, rgba(251, 188, 4, 0.05) 100%);
+    border-left: 4px solid var(--google-yellow);
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 64px 24px;
+    color: var(--google-grey-600);
+}
+
+.empty-state-icon {
+    font-size: 48px;
+    color: var(--google-grey-400);
+    margin-bottom: 16px;
+}
+
+.empty-state-title {
+    font-size: 20px;
+    font-weight: 400;
+    color: var(--google-grey-700);
+    margin-bottom: 8px;
+}
+
+.empty-state-subtitle {
+    font-size: 14px;
+    color: var(--google-grey-600);
+}
+
+/* Sort Icons */
+.sort-icon {
+    font-size: 12px;
+    opacity: 0.6;
+    transition: opacity 0.2s ease;
+}
+
+.google-table th a:hover .sort-icon {
+    opacity: 1;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .google-container {
+        padding: 16px;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    
+    .search-form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .table-container {
+        overflow-x: auto;
+    }
+    
+    .google-table th,
+    .google-table td {
+        padding: 12px 16px;
+        white-space: nowrap;
+    }
+    
+    .details-text {
+        max-width: 200px;
+    }
+}
+
+/* Real-time indicators */
+.recent-activity {
+    position: relative;
+}
+
+.recent-activity::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 100%;
+    background: var(--google-blue);
+    border-radius: 2px;
+}
+
+/* Loading animation */
+.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+/* Pulse animation for recent activities */
+.pulse {
+    animation: pulse-blue 2s infinite;
+}
+
+@keyframes pulse-blue {
+    0% { box-shadow: 0 0 0 0 rgba(26, 115, 232, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(26, 115, 232, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(26, 115, 232, 0); }
+}
+</style>
+
+<div class="google-container">
+    <!-- Header -->
+    <div class="google-header">
+        <h1 class="google-title">
+            <div class="user-actions-icon">
+                <i class="bi bi-activity"></i>
+            </div>
+            User Actions
+        </h1>
+        <p class="google-subtitle">Monitor and analyze user login activities and session management</p>
+    </div>
+
+    <!-- Statistics Grid -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-header">
+                <div class="stat-label">Total Logs</div>
+                <div class="stat-icon total">
+                    <i class="bi bi-file-text"></i>
                 </div>
             </div>
+            <div class="stat-value">{{ total_logs }}</div>
+            <div class="stat-description">All user actions recorded</div>
         </div>
-        <div class="col-md-3">
-            <div class="card shadow-sm border-0 rounded">
-                <div class="card-body">
-                    <h6 class="card-title text-uppercase text-muted">Login Attempts</h6>
-                    <p class="card-text display-4 text-secondary">{{ login_attempts }}</p>
+        
+        <div class="stat-card attempts">
+            <div class="stat-header">
+                <div class="stat-label">Login Attempts</div>
+                <div class="stat-icon attempts">
+                    <i class="bi bi-person-check"></i>
                 </div>
             </div>
+            <div class="stat-value">{{ login_attempts }}</div>
+            <div class="stat-description">Total authentication attempts</div>
         </div>
-        <div class="col-md-3">
-            <div class="card shadow-sm border-0 rounded">
-                <div class="card-body">
-                    <h6 class="card-title text-uppercase text-muted">Login Successes</h6>
-                    <p class="card-text display-4 text-success">{{ login_successes }}</p>
+        
+        <div class="stat-card successes">
+            <div class="stat-header">
+                <div class="stat-label">Login Successes</div>
+                <div class="stat-icon successes">
+                    <i class="bi bi-check-circle"></i>
                 </div>
             </div>
+            <div class="stat-value">{{ login_successes }}</div>
+            <div class="stat-description">Successful authentications</div>
         </div>
-        <div class="col-md-3">
-            <div class="card shadow-sm border-0 rounded">
-                <div class="card-body">
-                    <h6 class="card-title text-uppercase text-muted">Login Failures</h6>
-                    <p class="card-text display-4 text-danger">{{ login_failures }}</p>
+        
+        <div class="stat-card failures">
+            <div class="stat-header">
+                <div class="stat-label">Login Failures</div>
+                <div class="stat-icon failures">
+                    <i class="bi bi-x-circle"></i>
                 </div>
             </div>
+            <div class="stat-value">{{ login_failures }}</div>
+            <div class="stat-description">Failed authentication attempts</div>
         </div>
     </div>
 
-    <!-- Search Bar -->
-    <div class="card shadow-sm border-0 mb-4 rounded">
-        <div class="card-body">
-            <form method="get" action="/manage_UserActions">
-                <div class="input-group">
-                    <input type="text" name="search" class="form-control" placeholder="Search (e.g., user_id=1,log_type=login_attempt,date=2025-06-16)" value="{{ search_query }}">
-                    <button class="btn btn-primary" type="submit">Search</button>
-                </div>
-            </form>
-        </div>
+    <!-- Search Card -->
+    <div class="search-card">
+        <form method="get" action="/manage_UserActions" class="search-form">
+            <input type="text" 
+                   name="search" 
+                   class="search-input" 
+                   placeholder="Search actions (e.g., user_id=1, log_type=login_attempt, date=2025-08-16)" 
+                   value="{{ search_query }}">
+            <button type="submit" class="search-btn">
+                <i class="bi bi-search"></i>
+                Search
+            </button>
+        </form>
     </div>
 
-    <!-- Logs Table -->
+    <!-- User Actions Table -->
     {% if logs %}
-    <div class="table-responsive">
-        <table class="table table-hover table-striped align-middle">
-            <thead class="table-dark">
-                    <tr>
-                        <th scope="col">
-                            <a href="?sort_by=id&order={{ 'asc' if sort_by != 'id' or order == 'desc' else 'desc' }}&search={{ search_query }}" class="text-white text-decoration-none">
-                                ID
-                                <i class="bi {% if sort_by == 'id' and order == 'asc' %}bi-caret-up-fill{% elif sort_by == 'id' and order == 'desc' %}bi-caret-down-fill{% else %}bi-caret-down-fill{% endif %}" style="font-size: 0.8rem;"></i>
-                            </a>
-                        </th>
-                        <th scope="col">User ID</th>
-                        <th scope="col">Action Type</th>
-                        <th scope="col">
-                            <a href="?sort_by=log_timestamp&order={{ 'asc' if sort_by != 'log_timestamp' or order == 'desc' else 'desc' }}&search={{ search_query }}" class="text-white text-decoration-none">
-                                Timestamp
-                                <i class="bi {% if sort_by == 'log_timestamp' and order == 'asc' %}bi-caret-up-fill{% elif sort_by == 'log_timestamp' and order == 'desc' %}bi-caret-down-fill{% else %}bi-caret-down-fill{% endif %}" style="font-size: 0.8rem;"></i>
-                            </a>
-                        </th>
-                        <th scope="col">Details</th>
-                    </tr>
-                </thead>
+    <div class="table-container">
+        <table class="google-table">
+            <thead>
+                <tr>
+                    <th>
+                        <a href="?sort_by=id&order={{ 'asc' if sort_by != 'id' or order == 'desc' else 'desc' }}&search={{ search_query }}">
+                            ID
+                            <i class="bi {% if sort_by == 'id' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %} sort-icon"></i>
+                        </a>
+                    </th>
+                    <th>User ID</th>
+                    <th>Action Type</th>
+                    <th>
+                        <a href="?sort_by=log_timestamp&order={{ 'asc' if sort_by != 'log_timestamp' or order == 'desc' else 'desc' }}&search={{ search_query }}">
+                            Timestamp
+                            <i class="bi {% if sort_by == 'log_timestamp' and order == 'asc' %}bi-caret-up-fill{% else %}bi-caret-down-fill{% endif %} sort-icon"></i>
+                        </a>
+                    </th>
+                    <th>Details</th>
+                </tr>
+            </thead>
             <tbody>
                 {% for log in logs %}
-                <tr>
-                    <th scope="row">{{ log.log_id }}</th>
-                    <td>{{ log.user_id }}</td>
-                    <td>{{ log.log_type }}</td>
-                    <td>{{ log.log_timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-                    <td>{{ log.details }}</td>
+                <tr {% if 'success' in log.log_type %}class="success-row"{% elif 'failure' in log.log_type %}class="failure-row"{% elif 'attempt' in log.log_type %}class="attempt-row"{% endif %}>
+                    <td>
+                        <strong style="color: var(--google-grey-800);">#{{ log.log_id }}</strong>
+                    </td>
+                    <td>
+                        <span class="user-id">{{ log.user_id }}</span>
+                    </td>
+                    <td>
+                        <span class="action-badge 
+                            {% if 'login_success' in log.log_type %}action-login-success
+                            {% elif 'login_failure' in log.log_type %}action-login-failure
+                            {% elif 'login_attempt' in log.log_type %}action-login-attempt
+                            {% elif 'logout_success' in log.log_type %}action-logout-success
+                            {% else %}action-other
+                            {% endif %}">
+                            {% if 'login_success' in log.log_type %}
+                                <i class="bi bi-check-circle" style="margin-right: 4px; font-size: 10px;"></i>
+                            {% elif 'login_failure' in log.log_type %}
+                                <i class="bi bi-x-circle" style="margin-right: 4px; font-size: 10px;"></i>
+                            {% elif 'login_attempt' in log.log_type %}
+                                <i class="bi bi-person-check" style="margin-right: 4px; font-size: 10px;"></i>
+                            {% elif 'logout_success' in log.log_type %}
+                                <i class="bi bi-box-arrow-right" style="margin-right: 4px; font-size: 10px;"></i>
+                            {% else %}
+                                <i class="bi bi-activity" style="margin-right: 4px; font-size: 10px;"></i>
+                            {% endif %}
+                            {{ log.log_type.replace('_', ' ').title() }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="timestamp">{{ log.log_timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</span>
+                    </td>
+                    <td>
+                        <div class="details-text" title="{{ log.details }}">
+                            {{ log.details }}
+                        </div>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
     {% else %}
-    <p class="text-center text-muted">No user action logs found in the database.</p>
+    <div class="table-container">
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <i class="bi bi-activity"></i>
+            </div>
+            <div class="empty-state-title">No user actions found</div>
+            <div class="empty-state-subtitle">
+                {% if search_query %}
+                    No actions match your search criteria. Try adjusting your search terms.
+                {% else %}
+                    No user actions have been recorded yet.
+                {% endif %}
+            </div>
+        </div>
+    </div>
     {% endif %}
 </div>
+
+<script>
+// Real-time monitoring functionality
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-refresh functionality
+    const refreshInterval = 30000; // 30 seconds
+    
+    function refreshUserActions() {
+        const currentUrl = new URL(window.location);
+        fetch(currentUrl.pathname + currentUrl.search)
+            .then(response => response.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const newDoc = parser.parseFromString(html, 'text/html');
+                const newTable = newDoc.querySelector('.table-container');
+                const newStats = newDoc.querySelector('.stats-grid');
+                
+                if (newTable && newStats) {
+                    document.querySelector('.table-container').replaceWith(newTable);
+                    document.querySelector('.stats-grid').replaceWith(newStats);
+                    
+                    // Highlight new entries
+                    const newRows = document.querySelectorAll('.google-table tbody tr');
+                    newRows.forEach((row, index) => {
+                        if (index < 3) { // Highlight first 3 rows as "recent"
+                            row.classList.add('recent-activity');
+                        }
+                    });
+                }
+            })
+            .catch(error => console.error('Error refreshing user actions:', error));
+    }
+    
+    // Uncomment to enable auto-refresh
+    // setInterval(refreshUserActions, refreshInterval);
+    
+    // Add keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey && e.key === 'r') {
+            e.preventDefault();
+            location.reload();
+        }
+        
+        // Ctrl+F to focus search
+        if (e.ctrlKey && e.key === 'f') {
+            e.preventDefault();
+            document.querySelector('.search-input').focus();
+        }
+    });
+    
+    // Add click functionality for detailed view
+    document.querySelectorAll('.google-table tbody tr').forEach(row => {
+        row.addEventListener('click', function() {
+            const details = this.querySelector('.details-text').title;
+            if (details) {
+                // Create a more detailed view modal
+                showActionDetails(details);
+            }
+        });
+    });
+    
+    // Mark recent activities (last 5 minutes)
+    const now = new Date();
+    document.querySelectorAll('.timestamp').forEach(timestampEl => {
+        const timestamp = new Date(timestampEl.textContent);
+        const diffInMinutes = (now - timestamp) / (1000 * 60);
+        
+        if (diffInMinutes <= 5) {
+            timestampEl.closest('tr').classList.add('recent-activity');
+        }
+    });
+});
+
+function showActionDetails(details) {
+    // Simple alert for now - could be enhanced with a modal
+    alert('Action Details: ' + details);
+}
+
+// Real-time notification for login failures
+function checkForSuspiciousActivity() {
+    const failureRows = document.querySelectorAll('.failure-row');
+    const recentFailures = Array.from(failureRows).filter(row => {
+        const timestamp = new Date(row.querySelector('.timestamp').textContent);
+        const now = new Date();
+        const diffInMinutes = (now - timestamp) / (1000 * 60);
+        return diffInMinutes <= 10; // Last 10 minutes
+    });
+    
+    if (recentFailures.length >= 3) {
+        console.warn('Multiple login failures detected in the last 10 minutes');
+        // Could trigger notifications or alerts here
+    }
+}
+
+// Run suspicious activity check
+setTimeout(checkForSuspiciousActivity, 1000);
+</script>
 {% endblock %}

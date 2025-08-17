@@ -275,8 +275,14 @@
         <li class="friend-link"
             data-user-id="{{ friend.user_id }}"
             data-chat-id="{{ friend_chat_ids.get(friend.user_id, '') }}">
-          <img src="{{ friend.profile_pic_url or url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
-              alt="Profile" class="friend-profile">
+          <!-- UPDATED: Use consistent profile picture URL construction -->
+          {% if friend.profile_pic_url %}
+            <img src="{{ url_for('static', filename='uploads/' + friend.profile_pic_url) }}"
+          {% else %}
+            <img src="{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
+          {% endif %}
+               alt="Profile" class="friend-profile"
+               onerror="this.src='{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}'">
           <div class="friend-info">
             <div class="friend-name">{{ friend.username }}</div>
             {% if friend.is_online %}
@@ -288,12 +294,6 @@
         </li>
       {% endfor %}
     </ul>
-    <!-- test code-->
-    {% for friend in friends %}
-    <li class="friend-link" data-user-id="{{ friend.user_id }}" data-chat-id="{{ friend_chat_ids[friend.user_id] }}">
-        {{ friend.username }} (chat_id: {{ friend_chat_ids[friend.user_id] }})
-    </li>
-    {% endfor %}
   </div>
 
   <!-- Main Chat Container -->
@@ -355,7 +355,6 @@
 
 <script>
 
-
 const myChatIds = {{ my_chat_ids|tojson }};
 const socket = io(window.location.origin, {
     withCredentials: true,
@@ -370,14 +369,11 @@ myChatIds.forEach(chatId => {
     socket.emit('join_chat', {chat_id: chatId});
 });
 
-
-
 let currentChatId = null;
 const secretKey = 'YOUR_SHARED_SECRET_KEY'; // Replace with a per-chat key for real E2EE
 const myUserId = {{ current_user.user_id }};
 
 // Send message handler
-// This part changed , may nuke the function idfk
 document.getElementById('chat-form').addEventListener('submit', function(e) {
   e.preventDefault();
   const input = document.getElementById('chat-input');
@@ -388,7 +384,6 @@ document.getElementById('chat-form').addEventListener('submit', function(e) {
   let ciphertext = CryptoJS.AES.encrypt(plaintext, secretKey).toString();
   socket.emit('send_message', { chat_id: currentChatId, message: ciphertext });
   console.log('Sending to chat:', currentChatId);
-
 
   const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
   
@@ -505,7 +500,6 @@ function appendMessage(who, text, sentAt, messageId = null, isDeleted = false) {
   row.className = 'message-row' + (who === 'me' ? ' me' : '');
   row.style.position = 'relative';
 
-
   let bubble = document.createElement('div');
   bubble.className = 'message-bubble';
   bubble.textContent = text;
@@ -554,7 +548,6 @@ function appendMessage(who, text, sentAt, messageId = null, isDeleted = false) {
   chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-
 document.getElementById('friend-search-input').addEventListener('input', function() {
     const filter = this.value.toLowerCase();
     document.querySelectorAll('.friend-list li.friend-link').forEach(function(li) {
@@ -587,8 +580,10 @@ document.getElementById('add-chat-btn').onclick = function() {
               });
         };
         let img = document.createElement('img');
-        img.src = friend.profile_pic_url || '/static/imgs/blank-profile-picture-973460_1280.webp';
+        // UPDATED: Use consistent profile picture URL construction in JavaScript
+        img.src = friend.profile_pic_url ? `/static/uploads/${friend.profile_pic_url}` : '/static/imgs/blank-profile-picture-973460_1280.webp';
         img.className = 'chat-modal-user-img';
+        img.onerror = function() { this.src = '/static/imgs/blank-profile-picture-973460_1280.webp'; };
         let name = document.createElement('span');
         name.className = 'chat-modal-user-name';
         name.textContent = friend.username;
@@ -621,8 +616,10 @@ function updateFriendsToReaddModal() {
             });
         };
         let img = document.createElement('img');
-        img.src = friend.profile_pic_url || '/static/imgs/blank-profile-picture-973460_1280.webp';
+        // UPDATED: Use consistent profile picture URL construction in JavaScript
+        img.src = friend.profile_pic_url ? `/static/uploads/${friend.profile_pic_url}` : '/static/imgs/blank-profile-picture-973460_1280.webp';
         img.className = 'chat-modal-user-img';
+        img.onerror = function() { this.src = '/static/imgs/blank-profile-picture-973460_1280.webp'; };
         let name = document.createElement('span');
         name.className = 'chat-modal-user-name';
         name.textContent = friend.username;
@@ -710,8 +707,6 @@ function openChat(link) {
     // clear chat box before loading new messages
     const chatBox = document.getElementById('chat-box');
     chatBox.innerHTML = '';
-
-    
     
     // Fetch chat history
     fetch(`/chat_history/${friendUserId}`)
@@ -753,7 +748,6 @@ function openChat(link) {
           });
       });
     };
-
 
     // delete chat
     document.querySelector('.btn.btn-danger:last-child').onclick = function() {

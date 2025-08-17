@@ -3220,6 +3220,7 @@ def inject_datetime():
     }
 
 # Create Event Route
+# Create Event Route
 @app.route('/create_event', methods=['GET', 'POST'])
 @user_required
 def create_event():
@@ -3235,13 +3236,13 @@ def create_event():
             lat = float(latitude) if latitude else None
             lng = float(longitude) if longitude else None
             
-            # Create new event
+            # Create new event - FIX: Use correct form field names
             new_event = Event(
                 user_id=current_user.user_id,
-                title=form.title.data,
-                description=form.description.data,
-                event_datetime=form.event_datetime.data,
-                location=form.location.data,
+                title=form.event_name.data,  # Changed from form.title.data
+                description=form.event_description.data,  # Changed from form.description.data
+                event_datetime=form.event_start_time.data,  # Changed from form.event_datetime.data
+                location=form.event_location.data,  # Changed from form.location.data
                 latitude=lat,
                 longitude=lng,
                 is_reminder=False,

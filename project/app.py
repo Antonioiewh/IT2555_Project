@@ -129,8 +129,39 @@ socketio = SocketIO(app, cors_allowed_origins=[
     "http://localhost",
     "https://localhost",
     "http://127.0.0.1",
-    ""
-])
+    "https://127.0.0.1"
+],  
+message_queue=REDIS_URL,     # <— important when running >1 instance
+ping_interval=25,
+ping_timeout=60 )
+
+connected_sids = {}  # { user_id: set([sid, ...]) }
+
+@socketio.on('connect')
+def on_connect():
+    if getattr(current_user, 'is_authenticated', False):
+        connected_sids.setdefault(current_user.user_id, set()).add(request.sid)
+        print(f"Socket connected user {current_user.user_id} sid {request.sid}")
+
+@socketio.on('disconnect')
+def on_disconnect():
+    if getattr(current_user, 'is_authenticated', False):
+        s = connected_sids.get(current_user.user_id)
+        if s:
+            s.discard(request.sid)
+            if not s:
+                connected_sids.pop(current_user.user_id, None)
+        print(f"Socket disconnected user {current_user.user_id} sid {request.sid}")
+
+def emit_to_user(user_id, event, payload):
+    sids = connected_sids.get(user_id)
+    if not sids:
+        return
+    for sid in list(sids):
+        try:
+            socketio.emit(event, payload, room=sid)
+        except Exception:
+            continue
 
 # No longer used!
 def allowed_file(filename):
@@ -1718,7 +1749,8 @@ def notifications():
         .join(User, User.user_id == Friendship.action_user_id)
         .filter(
             Notification.user_id == current_user.user_id,
-            Notification.type == 'friend_request'
+            Notification.type == 'friend_request',
+            Notification.is_read == False
         )
         .order_by(Notification.created_at.desc())
         .all()
@@ -1729,6 +1761,45 @@ def notifications():
     for notif in grouped['event_notification']:
         event = Event.query.get(notif.source_id) if notif.source_id else None
         event_notifs_with_details.append((notif, event))
+
+    #unread message stacks 
+    rows = (Notification.query
+        .filter_by(user_id=current_user.user_id, type='message', is_read=False)
+        .order_by(Notification.created_at.desc())
+        .all()
+    )
+
+    by_sender = {}
+    for n in rows:
+        sid = n.source_id or 0
+        info = by_sender.get(sid)
+        if not info:
+            by_sender[sid] = {
+                'sender_user_id': sid,
+                'latest_message': n.message,
+                'latest_created_at': n.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'count': 0,      # unread count
+                'unread': 0
+            }
+            info = by_sender[sid]
+        info['count'] += 1
+        info['unread'] += 1
+
+    sender_ids = [sid for sid in by_sender.keys() if sid]
+    users = {u.user_id: u for u in User.query.filter(User.user_id.in_(sender_ids)).all()}
+    message_stacks = []
+    for sid, info in by_sender.items():
+        u = users.get(sid)
+        message_stacks.append({
+            **info,
+            'sender_username': u.username if u else 'Unknown',
+            'sender_profile_pic': (url_for('static', filename=f'uploads/{u.profile_pic_url}')
+                                   if (u and u.profile_pic_url)
+                                   else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp'))
+        })
+
+    message_unread_count = sum(stack['unread'] for stack in message_stacks)
+
     
     form = FriendRequestForm()
     
@@ -1738,6 +1809,8 @@ def notifications():
             friend_request_notifs=friend_request_notifs,
             event_notifs=event_notifs_with_details,
             message_notifs=grouped['message'],
+            message_stacks=message_stacks,              
+            message_unread_count=message_unread_count,    
             post_activity_notifs=grouped['post_activity'],
             report_status_notifs=grouped['report_status'],
             admin_notifs=grouped['admin_notification']
@@ -2076,76 +2149,6 @@ def clear_block(blocker_id, blocked_id, chat_id=None):
         db.session.rollback()
         return False
 
-
-def set_block(blocker_id, blocked_id, chat_id=None):
-    """Create or reactivate a BlockedUser record and set friendship.status='blocked'."""
-    block = BlockedUser.query.filter_by(blocker_id=blocker_id, blocked_id=blocked_id).first()
-    if not block:
-        block = BlockedUser(blocker_id=blocker_id, blocked_id=blocked_id, chat_id=chat_id, active=True, created_at=datetime.utcnow())
-        db.session.add(block)
-    else:
-        block.active = True
-        block.chat_id = chat_id
-        block.removed_at = None
-
-    user1, user2 = sorted([blocker_id, blocked_id])
-    friendship = Friendship.query.filter_by(user_id1=user1, user_id2=user2).first()
-    if friendship:
-        friendship.status = 'blocked'
-        friendship.action_user_id = blocker_id
-    db.session.commit()
-
-    # notify both parties (if connected) so clients update UI / leave rooms if needed
-    try:
-        other_sid = connected_sids.get(blocked_id)
-        if other_sid:
-            socketio.emit('blocked', {'chat_id': chat_id, 'by': blocker_id}, room=other_sid)
-        my_sid = connected_sids.get(blocker_id)
-        if my_sid:
-            socketio.emit('blocked', {'chat_id': chat_id, 'by': blocker_id}, room=my_sid)
-    except Exception:
-        db.session.rollback()
-
-def clear_block(blocker_id, blocked_id, chat_id=None):
-    """Clear an active BlockedUser record and notify both parties."""
-    try:
-        block = BlockedUser.query.filter_by(blocker_id=blocker_id, blocked_id=blocked_id, active=True).first()
-        if not block:
-            return False
-
-        block.active = False
-        block.removed_at = datetime.utcnow()
-        db.session.commit()
-
-        # If friendship row exists and was 'blocked', restore to 'accepted' (safe default)
-        user1, user2 = sorted([blocker_id, blocked_id])
-        friendship = Friendship.query.filter_by(user_id1=user1, user_id2=user2).first()
-        if friendship and friendship.status == 'blocked':
-            friendship.status = 'accepted'
-            friendship.action_user_id = None
-            try:
-                db.session.commit()
-            except Exception:
-                db.session.rollback()
-
-        # Notify both users so clients can re-join rooms / update UI
-        try:
-            # use emit_to_user helper if present (safely fall back to socketio.emit)
-            try:
-                emit_to_user(blocker_id, 'unblocked', {'chat_id': chat_id, 'by': blocker_id, 'unblocked_id': blocked_id})
-                emit_to_user(blocked_id, 'unblocked', {'chat_id': chat_id, 'by': blocker_id, 'unblocked_id': blocked_id})
-            except NameError:
-                # emit_to_user not defined yet — fall back
-                socketio.emit('unblocked', {'chat_id': chat_id, 'by': blocker_id, 'unblocked_id': blocked_id}, room=connected_sids.get(blocker_id))
-                socketio.emit('unblocked', {'chat_id': chat_id, 'by': blocker_id, 'unblocked_id': blocked_id}, room=connected_sids.get(blocked_id))
-        except Exception:
-            # don't let notification failure break flow
-            pass
-
-        return True
-    except Exception:
-        db.session.rollback()
-        return False
 
 @app.route('/unblock_user_friend/<int:friend_id>', methods=['POST'])
 @user_required
@@ -2660,7 +2663,7 @@ def handle_send_message(data):
         return
     
 
-    # New: if either direction has an active block, silently drop for both ends
+    #  if either direction has an active block, silently drop for both ends
     if is_any_active_block_between(sender_id, other_user_id):
         msg = Message(
             chat_id=chat_id,
@@ -2689,6 +2692,18 @@ def handle_send_message(data):
         'sent_at': msg.sent_at.strftime('%H:%M')
     }
     socketio.emit('receive_message', payload, room=str(msg.chat_id))
+
+    # notif for message to other party
+    try:
+        others = ChatParticipant.query.filter(
+            ChatParticipant.chat_id == chat_id,
+            ChatParticipant.user_id != sender_id,
+            ChatParticipant.is_in_chat == True
+        ).all()
+        for other in others:
+            add_message_notification(other.user_id, sender_id, 'New message')
+    except Exception as e:
+        current_app.logger.warning(f'notify on send_message failed: {e}')
 
 
 def is_blocked(user_id1, user_id2):
@@ -3036,8 +3051,12 @@ def unread_message_notifications_count():
 @user_required
 def api_message_notification_stacks():
     try:
-        rows = Notification.query.filter_by(user_id=current_user.user_id, type='message')\
-            .order_by(Notification.created_at.desc()).all()
+        rows = (Notification.query
+            .filter_by(user_id=current_user.user_id, type='message', is_read=False)
+            .order_by(Notification.created_at.desc())
+            .all()
+        )
+        
         by_sender = {}
         for n in rows:
             sid = n.source_id or 0
@@ -3051,9 +3070,8 @@ def api_message_notification_stacks():
                     'unread': 0
                 }
                 info = by_sender[sid]
-            info['count'] += 1
-            if not n.is_read:
-                info['unread'] += 1
+            info['count'] += 1   
+            info['unread'] += 1
         sender_ids = [sid for sid in by_sender.keys() if sid]
         users = {u.user_id: u for u in User.query.filter(User.user_id.in_(sender_ids)).all()}
         stacks = []
@@ -3062,7 +3080,9 @@ def api_message_notification_stacks():
             stacks.append({
                 **info,
                 'sender_username': u.username if u else 'Unknown',
-                'sender_profile_pic': (url_for('static', filename=f'uploads/{u.profile_pic_url}') if (u and u.profile_pic_url) else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp'))
+                'sender_profile_pic': (url_for('static', filename=f'uploads/{u.profile_pic_url}')
+                                       if (u and u.profile_pic_url)
+                                       else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp'))
             })
         return jsonify({'ok': True, 'items': stacks})
     except Exception as e:
@@ -3091,27 +3111,6 @@ def mark_message_notifications_read():
         db.session.rollback()
         current_app.logger.error(f'mark_message_notifications_read: {e}')
         return jsonify({'ok': False}), 500
-
-# when sending a message, also notify the recipient(s)
-@socketio.on('send_message')
-def socket_send_message(data):
-    
-    try:
-        chat_id = int(data.get('chat_id'))
-        sender_id = current_user.user_id
-        # E2EE: server can't read plaintext; use generic preview
-        preview = 'New message'
-        others = ChatParticipant.query.filter(
-            ChatParticipant.chat_id == chat_id,
-            ChatParticipant.user_id != sender_id,
-            ChatParticipant.is_in_chat == True
-        ).all()
-        for other in others:
-            add_message_notification(other.user_id, sender_id, preview)
-    except Exception as e:
-        current_app.logger.warning(f'notify on send_message failed: {e}')
-
-
 
 
 # Find the manage_report route (around line 1600) and replace the POST handling section:

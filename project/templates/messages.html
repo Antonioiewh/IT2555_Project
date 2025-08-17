@@ -149,6 +149,13 @@ html, body { height: 100%; }
   opacity: .85;
 }
 
+.friend-link.has-unread .friend-name::after{
+  content:'';
+  display:inline-block;
+  width:8px; height:8px; margin-left:8px;
+  background:#1a73e8; border-radius:50%; vertical-align:middle;
+}
+
 /* Chat container column */
 .chat-container{
   display:flex;
@@ -413,6 +420,15 @@ html, body { height: 100%; }
 }
 .popover-menu .menu-item:hover{ background:#f3f4f6; }
 .popover-menu .menu-item.danger{ color:#c5221f; }
+
+.popover-menu.popover-portal{
+  position: fixed;               
+  z-index: 3000;                
+  right: auto; top: 0; left: 0; 
+}
+.popover-menu.popover-portal .arrow{
+  display: none; 
+}
 
 /* Modal (add chat) */
 .chat-modal{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(17,24,39,.35); z-index:1050; }
@@ -701,7 +717,15 @@ socket.on('connect', () => {
 
 // Register listeners unconditionally (no if (window.socket) guards)
 socket.on('receive_message', async (data) => {
-  if (!data || String(data.chat_id) !== String(currentChatId)) return;
+  if (!data) return;
+
+  // If message is for another chat, mark that chat as having unseen messages
+  if (!currentChatId || String(data.chat_id) !== String(currentChatId)) {
+    const li = document.querySelector(`.friend-link[data-chat-id="${data.chat_id}"]`)
+           || document.querySelector(`.friend-link[data-user-id="${data.sender_id}"]`);
+    if (li) li.classList.add('has-unread');
+    return;
+  }
   const keyStr = getChatKey(data.chat_id) || await loadChatKey(data.chat_id) || DEFAULT_CHAT_KEY;
   const isDeleted = data.message_text === 'Message deleted';
   const text = isDeleted ? 'Message deleted' : await decryptWithKey(data.message_text, keyStr);
@@ -737,6 +761,15 @@ socket.on('unblocked', (data) => {
       loadChatHistoryByFriendId(activeLink.dataset.userId);
     }
     updateBlockButton(false);
+  }
+});
+
+socket.on('join_error', (data) => {
+  console.warn('join_error', data);
+  if (data?.error === 'deleted_for_you' || data?.error === 'no_mapping') {
+    // Offer to re-add this chat
+    try { openChatModal(); updateFriendsToReaddModal?.(); } catch(e) {}
+    showToast('Chat was removed on your side. Use Add-chat to re-create.', 'info');
   }
 });
 
@@ -1140,9 +1173,13 @@ function appendMessage(who, text, sentAt, messageId = null, isDeleted = false) {
     bubble.addEventListener('mouseleave', () => { moreBtn.style.display = 'none'; });
     moreBtn.onclick = function(e){
       e.stopPropagation();
+      // Remove any existing popovers
       document.querySelectorAll('.popover-menu').forEach(p => p.remove());
+
+      // Build popover and attach to body (portal)
       const pop = document.createElement('div');
-      pop.className = 'popover-menu';
+      pop.className = 'popover-menu popover-portal';
+      pop.style.visibility = 'hidden'; // avoid flicker before positioning
       pop.innerHTML = `
         <div class="arrow" aria-hidden="true"></div>
         <button class="menu-item danger">
@@ -1150,15 +1187,56 @@ function appendMessage(who, text, sentAt, messageId = null, isDeleted = false) {
           <span>Delete message</span>
         </button>
       `;
+      document.body.appendChild(pop);
+
+      // Wire delete
       const btn = pop.querySelector('.menu-item');
       btn.onclick = function(ev){
         ev.stopPropagation();
         if (messageId) socket.emit('delete_message', { message_id: messageId });
         pop.remove();
       };
-      bubble.appendChild(pop);
-      const close = (evt) => { if (!pop.contains(evt.target)) { pop.remove(); document.removeEventListener('click', close); } };
-      setTimeout(() => document.addEventListener('click', close), 0);
+
+      // Position near the "more" button, clamp to viewport
+      const r = moreBtn.getBoundingClientRect();
+      const vw = window.innerWidth, vh = window.innerHeight;
+
+      // Initial desired position: below and left-aligned to the button
+      let top = r.bottom + 8;
+      let left;
+
+      // After mount, measure width
+      const w = pop.offsetWidth;
+      const h = pop.offsetHeight;
+
+      // Prefer aligning right edge to the button's right, like original
+      left = r.right - w;
+
+      // Clamp horizontally
+      if (left < 8) left = Math.max(8, r.left);                // shift right if offscreen
+      if (left + w > vw - 8) left = vw - w - 8;                 // keep inside right edge
+
+      // If bottom overflows, open upward
+      if (top + h > vh - 8) top = Math.max(8, r.top - h - 8);
+
+      pop.style.left = `${left}px`;
+      pop.style.top  = `${top}px`;
+      pop.style.visibility = 'visible';
+
+      // Close on outside click/scroll/resize
+      const close = (evt) => {
+        if (!pop.contains(evt.target)) {
+          pop.remove();
+          document.removeEventListener('click', close, true);
+          window.removeEventListener('scroll', close, true);
+          window.removeEventListener('resize', close, true);
+        }
+      };
+      setTimeout(() => {
+        document.addEventListener('click', close, true);
+        window.addEventListener('scroll', close, true);
+        window.addEventListener('resize', close, true);
+      }, 0);
     };
   }
 
@@ -1169,24 +1247,6 @@ function appendMessage(who, text, sentAt, messageId = null, isDeleted = false) {
   // Update options counters after each render
   renderOptionsTracker();
 }
-
-// Refresh counters when switching chats
-const _origOpenChat = window.openChat;
-window.openChat = function(link){
-  _origOpenChat.call(this, link);
-  ensureChatIndexes(link.dataset.chatId || currentChatId);
-  renderOptionsTracker();
-};
-
-// Also re-render after history load
-const _origLoadHistory = window.loadChatHistoryByFriendId;
-window.loadChatHistoryByFriendId = async function(fid){
-  const r = await _origLoadHistory.call(this, fid);
-  ensureChatIndexes(currentChatId);
-  renderOptionsTracker();
-  return r;
-};
-
 
 function classifyKind(ext){ if(['jpg','jpeg','png','gif','webp'].includes(ext)) return 'image'; if(['mp4','webm'].includes(ext)) return 'video'; return 'document'; }
 
@@ -1568,14 +1628,6 @@ document.getElementById('add-chat-btn')?.addEventListener('click', () => {
 });
 
 
-// Delegate clicks on sidebar items (so newly inserted lis work)
-document.getElementById('friend-list')?.addEventListener('click', (e) => {
-  const li = e.target.closest('.friend-link');
-  if (!li) return;
-  if (typeof openChat === 'function') openChat(li);
-});
-
-
 function updateFriendsToReaddModal() {
   const picker = document.getElementById('friend-picker-list');
   if (!picker) return;
@@ -1740,7 +1792,18 @@ function openChat(link) {
   ensureChatKey(currentChatId, friendUserId)
     .then(() => loadChatHistoryByFriendId(friendUserId))
     .catch(() => loadChatHistoryByFriendId(friendUserId));
-  
+
+  //mark notification from this friend as read and clear unseen dot
+  try {
+    const friendUserIdNum = Number(link.dataset.userId);
+    fetch('/api/notifications/messages/mark_read', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'X-CSRFToken': csrfToken },
+      body: JSON.stringify({ sender_id: friendUserIdNum })
+    }).then(() => {
+      link.classList.remove('has-unread');
+    });
+  } catch(e) {}
 
     console.log('Switched to chat:', currentChatId);
   // options buttons wiring (block/clear/delete/report)
@@ -1784,17 +1847,63 @@ document.getElementById('friend-list')?.addEventListener('click', (e) => {
 });
 
 // Open chat on load (query param or first with chat-id), else show placeholder
-window.addEventListener('DOMContentLoaded', function() {
+window.addEventListener('DOMContentLoaded', async function() {
   const params = new URLSearchParams(location.search);
   const friendId = params.get('friend_id');
-  const target = friendId
-    ? document.querySelector(`.friend-link[data-user-id="${friendId}"][data-chat-id]`)
-    : document.querySelector('.friend-link[data-chat-id]');
-  if (target) openChat(target);
-  else showPlaceholder();
+
+  if (!friendId) {
+    const first = document.querySelector('.friend-link[data-chat-id]');
+    if (first) openChat(first); else showPlaceholder();
+    return;
+  }
+
+  // Try an existing sidebar entry
+  let li = document.querySelector(`.friend-link[data-user-id="${friendId}"]`);
+  if (li && li.dataset.chatId) { openChat(li); return; }
+
+  // Resolve chat id if mapping exists
+  try {
+    const r = await fetch(`/get_chat_id/${Number(friendId)}`);
+    const j = await r.json();
+    if (j && j.chat_id) {
+      if (!li) {
+        // Create minimal entry so openChat can activate/join
+        li = document.createElement('li');
+        li.className = 'friend-link';
+        li.setAttribute('data-user-id', String(friendId));
+        li.innerHTML = `
+          <img src="/static/imgs/blank-profile-picture-973460_1280.webp" class="friend-profile" alt="Profile">
+          <div class="friend-info"><div class="friend-name">Friend ${friendId}</div><div class="friend-status">Offline</div></div>
+        `;
+        document.getElementById('friend-list')?.prepend(li);
+      }
+      li.setAttribute('data-chat-id', String(j.chat_id));
+      openChat(li);
+      return;
+    }
+  } catch(e) { /* ignore */ }
+
+  // No mapping or it was deleted for you -> prompt re-add
+  showPlaceholder();
+  try { openChatModal(); updateFriendsToReaddModal?.(); } catch(e) {}
 });
 
-// CSS variables
+// Pre-mark friend items that have unread message notifications
+fetch('/api/notifications/message_stacks', { credentials:'same-origin' })
+  .then(r => r.json())
+  .then(j => {
+    if (j && j.ok && Array.isArray(j.items)) {
+      j.items.forEach(it => {
+        if (it.unread > 0) {
+          const li = document.querySelector(`.friend-link[data-user-id="${it.sender_user_id}"]`);
+          if (li) li.classList.add('has-unread');
+        }
+      });
+    }
+  })
+  .catch(()=>{});
+
+// ----------CSS variables------------------
 (function setHeaderVar(){
   const header = document.querySelector('nav.navbar, .navbar, header[role="banner"], header');
   if (header) {

@@ -1,0 +1,100 @@
+{% extends "UserBase.html" %}
+{% block content %}
+<div class="container mt-4">
+    <div class="card mb-4">
+        <div class="card-body text-center">
+            <img src="{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') if not user.profile_pic_url else user.profile_pic_url }}" 
+                 alt="Profile Picture" class="rounded-circle" width="150" height="150">
+            <h3 class="mt-3">{{ user.username }}</h3>
+            <a href="/edit_profile" class="btn btn-primary mt-2">Edit Profile</a>
+        </div>
+    </div>
+    <h4>Your Posts</h4>
+    {% for post in posts %}
+        <div class="card mb-3 post-card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start">
+            <div class="flex-grow-1">
+                <p class="post-content">{{ post.post_content }}</p>
+                {% for img in post.images %}
+                    <img src="{{ url_for('static', filename=img.image_url) }}" alt="Post Image" class="img-fluid mb-2" style="max-width:200px;">
+                {% endfor %}
+                <small class="text-muted">Posted on {{ post.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+            </div>
+            {% if post.user_id == current_user.user_id %}
+            <div class="dropdown post-dropdown">
+                <button class="btn btn-link" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fas fa-ellipsis-v fa-lg"></i>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li>
+                        <a class="dropdown-item" href="{{ url_for('edit_post', post_id=post.post_id) }}">
+                            <i class="fas fa-edit me-2"></i>Edit Post
+                        </a>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <form action="{{ url_for('delete_post', post_id=post.post_id) }}" method="POST" style="display: inline;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="button" class="dropdown-item text-danger" onclick="confirmDelete(this.form)">
+                                <i class="fas fa-trash-alt me-2"></i>Delete Post
+                            </button>
+                        </form>
+                    </li>
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+    {% else %}
+        <p>You have not posted anything yet.</p>
+    {% endfor %}
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body text-center p-4">
+                <h5>Are you sure you want to delete this post?</h5>
+                <p class="text-muted">This action cannot be undone and the post will be deleted permanently!</p>
+                <div class="mt-4">
+                    <form id="deletePostForm" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-danger mb-2 w-100">Delete post</button>
+                    </form>
+                    <button type="button" class="btn btn-secondary w-100" data-bs-dismiss="modal">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize all dropdowns
+    var dropdownElementList = [].slice.call(document.querySelectorAll('[data-bs-toggle="dropdown"]'))
+    var dropdownList = dropdownElementList.map(function (dropdownToggleEl) {
+        return new bootstrap.Dropdown(dropdownToggleEl)
+    });
+
+    // Delete confirmation function
+    window.confirmDelete = function(form) {
+        const modal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+        const deleteForm = document.getElementById('deletePostForm');
+        deleteForm.action = form.action;
+        
+        document.querySelector('#deleteConfirmModal .btn-danger').onclick = function() {
+            form.submit();
+        };
+        
+        modal.show();
+    }
+});
+</script>
+{% endblock %}

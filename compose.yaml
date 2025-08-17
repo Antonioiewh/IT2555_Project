@@ -36,7 +36,7 @@ services:
         condition: service_healthy
     networks:
       - flask-sql
-    command: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 --reload app:app
+    command: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 --reload app:app 
     env_file:
       - ./project/.env
 
@@ -107,7 +107,6 @@ services:
     restart: always
     networks:
       - flask-sql
-
 
 
 

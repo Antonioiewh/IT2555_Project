@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Security Error</title>
+    <title>Access Forbidden</title>
     <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <style>
@@ -15,7 +15,7 @@
         
         body {
             font-family: 'Google Sans', Arial, sans-serif;
-            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -36,7 +36,7 @@
         .error-icon {
             width: 80px;
             height: 80px;
-            background: #9b59b6;
+            background: #e74c3c;
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -49,7 +49,7 @@
         .error-code {
             font-size: 64px;
             font-weight: 700;
-            color: #9b59b6;
+            color: #e74c3c;
             margin-bottom: 16px;
             line-height: 1;
         }
@@ -69,22 +69,22 @@
         }
         
         .security-info {
-            background: #f8f9fa;
-            border: 1px solid #e9ecef;
+            background: #ffebee;
+            border: 1px solid #ffcdd2;
             border-radius: 8px;
             padding: 16px;
             margin-bottom: 32px;
         }
         
         .security-info h4 {
-            color: #495057;
+            color: #c62828;
             margin-bottom: 8px;
             font-size: 14px;
             font-weight: 500;
         }
         
         .security-info p {
-            color: #6c757d;
+            color: #c62828;
             font-size: 14px;
             margin: 0;
         }
@@ -152,30 +152,30 @@
 <body>
     <div class="error-container">
         <div class="error-icon">
-            <span class="material-icons">shield</span>
+            <span class="material-icons">block</span>
         </div>
         
-        <div class="error-code">500</div>
+        <div class="error-code">403</div>
         
-        <h1 class="error-title">Security Error</h1>
+        <h1 class="error-title">Access Forbidden</h1>
         
         <p class="error-message">
-            A security error has occurred while processing your request. Our protection systems are working to keep the platform safe.
+            You don't have permission to access this resource. This could be due to security restrictions or insufficient privileges.
         </p>
         
         <div class="security-info">
-            <h4>What happened?</h4>
-            <p>Your request triggered our security systems. If you're experiencing repeated issues, please try again later or contact support.</p>
+            <h4>Security Notice</h4>
+            <p>This request has been blocked by our security system. If you believe this is an error, please contact support.</p>
         </div>
         
         <div class="action-buttons">
-            <button class="btn btn-primary" onclick="location.reload()">
-                <span class="material-icons">refresh</span>
-                Try Again
-            </button>
-            <a href="/" class="btn btn-secondary">
+            <a href="/" class="btn btn-primary">
                 <span class="material-icons">home</span>
                 Go Home
+            </a>
+            <a href="javascript:history.back()" class="btn btn-secondary">
+                <span class="material-icons">arrow_back</span>
+                Go Back
             </a>
         </div>
     </div>

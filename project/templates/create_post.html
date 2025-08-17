@@ -185,6 +185,21 @@
     color: #34a853;
 }
 
+.google-file-upload.validating {
+    border-color: #f9ab00;
+    background: #fef7e0;
+}
+
+.google-file-upload.valid {
+    border-color: #34a853;
+    background: #f0f8f0;
+}
+
+.google-file-upload.invalid {
+    border-color: #ea4335;
+    background: #fce8e6;
+}
+
 .image-preview {
     margin-top: 16px;
     border-radius: 8px;
@@ -334,6 +349,11 @@
     color: #137333;
 }
 
+.file-upload-disabled {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
     .google-container {
@@ -401,13 +421,13 @@
                 
                 <!-- Image Upload Field -->
                 <div class="google-form-group">
-                    <label for="image" class="google-form-label">Add a photo</label>
+                    <label for="image" class="google-form-label">Add a photo (optional)</label>
                     <div class="google-file-upload" id="fileUploadArea">
-                        {{ form.image(id="image", accept=".jpg,.jpeg,.png,.gif,.webp", onchange="validateAndPreviewImage(event)", multiple=false) }}
+                        {{ form.image(id="image", accept="image/jpeg,image/jpg,image/png,image/gif,image/webp", onchange="handleFileInputChange(event)") }}
                         <span class="upload-icon">📷</span>
                         <span class="upload-text">Choose file or drag and drop</span>
                         <div class="upload-subtext">
-                            JPEG, JPG, PNG, GIF, WEBP up to 10MB<br>
+                            JPEG, JPG, PNG, GIF, WEBP up to 5MB<br>
                             <small>Recommended: 1080x1080 pixels</small>
                         </div>
                     </div>
@@ -420,12 +440,7 @@
                     </div>
                 </div>
                 
-                <!-- reCAPTCHA (if you have it) -->
-                {% if form.recaptcha %}
-                <div class="google-form-group">
-                    {{ form.recaptcha }}
-                </div>
-                {% endif %}
+                
                 
                 <!-- Buttons -->
                 <div class="google-button-group">
@@ -447,10 +462,34 @@
 
 <!-- Create post specific JavaScript -->
 <script>
-// Global variables to avoid scope issues
-let formInitialized = false;
+// Configuration
+const CONFIG = {
+    MAX_FILE_SIZE: 5 * 1024 * 1024, // 5MB
+    ALLOWED_TYPES: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+    ALLOWED_EXTENSIONS: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+    MAX_CHARS: 250
+};
 
-// Global functions - define these first
+// Global state
+let formState = {
+    initialized: false,
+    validFile: null,
+    validating: false
+};
+
+// Utility functions
+function getFileExtension(filename) {
+    return filename.toLowerCase().split('.').pop();
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
 function showValidationMessage(message, type = 'error') {
     const validationMessage = document.getElementById('validationMessage');
     if (validationMessage) {
@@ -458,10 +497,10 @@ function showValidationMessage(message, type = 'error') {
         validationMessage.className = `validation-message ${type}`;
         validationMessage.style.display = 'block';
         
-        // Auto-hide after 5 seconds for warnings
+        // Auto-hide warnings after 5 seconds
         if (type === 'warning') {
             setTimeout(() => {
-                validationMessage.style.display = 'none';
+                hideValidationMessage();
             }, 5000);
         }
     }
@@ -474,295 +513,355 @@ function hideValidationMessage() {
     }
 }
 
-function validateAndPreviewImage(event) {
-    console.log('validateAndPreviewImage called');
-    
-    const file = event.target.files[0];
-    console.log('Selected file:', file);
-    
-    const preview = document.getElementById('preview');
-    const previewContainer = document.getElementById('imagePreview');
+function updateUploadAreaState(state, message = '') {
     const fileUploadArea = document.getElementById('fileUploadArea');
+    if (!fileUploadArea) return;
     
-    if (!file) {
-        console.log('No file selected');
-        clearImage();
-        return;
-    }
+    // Remove all state classes
+    fileUploadArea.classList.remove('validating', 'valid', 'invalid', 'has-file');
     
-    // Validate file type
-    const validExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-    const fileName = file.name.toLowerCase();
-    const fileExtension = fileName.split('.').pop();
+    const uploadIcon = fileUploadArea.querySelector('.upload-icon');
+    const uploadText = fileUploadArea.querySelector('.upload-text');
+    const uploadSubtext = fileUploadArea.querySelector('.upload-subtext');
     
-    console.log('File validation:', {
-        name: fileName,
-        extension: fileExtension,
-        mimeType: file.type,
-        size: file.size
-    });
-    
-    if (!validExtensions.includes(fileExtension)) {
-        console.log('Invalid file extension');
-        showValidationMessage('Please upload only JPEG, JPG, PNG, GIF, or WEBP images.');
-        clearImage();
-        return;
-    }
-
-    // Additional MIME type validation
-    const validMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    if (!validMimeTypes.includes(file.type)) {
-        console.log('Invalid MIME type');
-        showValidationMessage('Invalid image format. Please upload only JPEG, JPG, PNG, GIF, or WEBP images.');
-        clearImage();
-        return;
-    }
-
-    // Validate file size (max 10MB to match backend)
-    if (file.size > 10 * 1024 * 1024) {
-        console.log('File too large');
-        showValidationMessage('File size must be less than 10MB');
-        clearImage();
-        return;
-    }
-
-    console.log('File validation passed, creating preview');
-
-    // Show preview
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        console.log('FileReader loaded successfully');
-        if (preview) preview.src = e.target.result;
-        if (previewContainer) previewContainer.style.display = 'block';
-        
-        // Update upload area styling
-        if (fileUploadArea) {
-            fileUploadArea.classList.add('has-file');
+    switch (state) {
+        case 'validating':
+            fileUploadArea.classList.add('validating');
+            if (uploadIcon) uploadIcon.textContent = '⏳';
+            if (uploadText) uploadText.textContent = 'Validating file...';
+            if (uploadSubtext) uploadSubtext.textContent = 'Please wait while we check your file';
+            break;
             
-            const uploadIcon = fileUploadArea.querySelector('.upload-icon');
-            const uploadText = fileUploadArea.querySelector('.upload-text');
-            const uploadSubtext = fileUploadArea.querySelector('.upload-subtext');
-            
+        case 'valid':
+            fileUploadArea.classList.add('valid', 'has-file');
             if (uploadIcon) uploadIcon.textContent = '✅';
-            if (uploadText) uploadText.textContent = file.name;
+            if (uploadText) uploadText.textContent = message || 'File ready to upload';
             if (uploadSubtext) uploadSubtext.textContent = 'Click to change image';
+            break;
+            
+        case 'invalid':
+            fileUploadArea.classList.add('invalid');
+            if (uploadIcon) uploadIcon.textContent = '❌';
+            if (uploadText) uploadText.textContent = 'Invalid file';
+            if (uploadSubtext) uploadSubtext.textContent = message || 'Please choose a different file';
+            break;
+            
+        default: // reset
+            if (uploadIcon) uploadIcon.textContent = '📷';
+            if (uploadText) uploadText.textContent = 'Choose file or drag and drop';
+            if (uploadSubtext) {
+                uploadSubtext.innerHTML = 'JPEG, JPG, PNG, GIF, WEBP up to 5MB<br><small>Recommended: 1080x1080 pixels</small>';
+            }
+    }
+}
+
+function validateFile(file) {
+    return new Promise((resolve) => {
+        console.log('Starting file validation for:', file.name);
+        
+        const errors = [];
+        
+        // Check file existence
+        if (!file) {
+            errors.push('No file selected');
+            resolve({ valid: false, errors });
+            return;
         }
         
-        hideValidationMessage();
-        console.log('Image preview updated successfully');
-    };
+        // Check file size
+        if (file.size > CONFIG.MAX_FILE_SIZE) {
+            errors.push(`File size (${formatFileSize(file.size)}) exceeds limit of ${formatFileSize(CONFIG.MAX_FILE_SIZE)}`);
+        }
+        
+        // Check file extension
+        const extension = getFileExtension(file.name);
+        if (!CONFIG.ALLOWED_EXTENSIONS.includes(extension)) {
+            errors.push(`File type ".${extension}" is not allowed. Use: ${CONFIG.ALLOWED_EXTENSIONS.join(', ')}`);
+        }
+        
+        // Check MIME type
+        if (!CONFIG.ALLOWED_TYPES.includes(file.type)) {
+            errors.push(`Invalid file format (${file.type}). Expected image file.`);
+        }
+        
+        // If basic validation fails, return immediately
+        if (errors.length > 0) {
+            console.log('Basic validation failed:', errors);
+            resolve({ valid: false, errors });
+            return;
+        }
+        
+        // Advanced validation using FileReader
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                // Check file signature (magic bytes)
+                const arr = new Uint8Array(e.target.result.slice(0, 4));
+                let header = '';
+                for (let i = 0; i < arr.length; i++) {
+                    header += arr[i].toString(16).padStart(2, '0');
+                }
+                
+                // Common image file signatures
+                const validSignatures = [
+                    'ffd8ffe0', 'ffd8ffe1', 'ffd8ffe2', 'ffd8ffe3', 'ffd8ffe8', // JPEG
+                    '89504e47', // PNG
+                    '47494638', // GIF
+                    '52494646', // WEBP (RIFF)
+                ];
+                
+                const isValidSignature = validSignatures.some(sig => 
+                    header.toLowerCase().startsWith(sig.toLowerCase())
+                );
+                
+                if (!isValidSignature) {
+                    errors.push('File does not appear to be a valid image (invalid file signature)');
+                }
+                
+                console.log('File validation complete:', { valid: errors.length === 0, errors });
+                resolve({ valid: errors.length === 0, errors });
+                
+            } catch (error) {
+                console.error('Error during advanced validation:', error);
+                errors.push('Unable to validate file integrity');
+                resolve({ valid: false, errors });
+            }
+        };
+        
+        reader.onerror = function() {
+            console.error('FileReader error');
+            errors.push('Unable to read file');
+            resolve({ valid: false, errors });
+        };
+        
+        // Read first 4 bytes for signature check
+        reader.readAsArrayBuffer(file.slice(0, 4));
+    });
+}
+
+async function handleFileInputChange(event) {
+    const file = event.target.files[0];
+    console.log('File input changed:', file);
     
-    reader.onerror = function(e) {
-        console.error('FileReader error:', e);
-        showValidationMessage('Error reading file. Please try again.', 'error');
-    };
+    if (!file) {
+        clearImage();
+        return;
+    }
     
-    reader.readAsDataURL(file);
+    // Prevent multiple validations
+    if (formState.validating) {
+        console.log('Already validating, skipping...');
+        return;
+    }
+    
+    formState.validating = true;
+    hideValidationMessage();
+    updateUploadAreaState('validating');
+    
+    try {
+        // Validate the file
+        const validation = await validateFile(file);
+        
+        if (validation.valid) {
+            console.log('File validation passed');
+            formState.validFile = file;
+            
+            // Show preview
+            await createImagePreview(file);
+            updateUploadAreaState('valid', file.name);
+            showValidationMessage(`✅ Image "${file.name}" is ready to upload`, 'success');
+            
+        } else {
+            console.log('File validation failed:', validation.errors);
+            clearImage();
+            updateUploadAreaState('invalid', validation.errors[0]);
+            showValidationMessage(`❌ ${validation.errors[0]}`, 'error');
+        }
+        
+    } catch (error) {
+        console.error('Error during file handling:', error);
+        clearImage();
+        updateUploadAreaState('invalid');
+        showValidationMessage('❌ An error occurred while processing the file', 'error');
+    }
+    
+    formState.validating = false;
+}
+
+function createImagePreview(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const preview = document.getElementById('preview');
+            const previewContainer = document.getElementById('imagePreview');
+            
+            if (preview && previewContainer) {
+                preview.src = e.target.result;
+                previewContainer.style.display = 'block';
+                console.log('Image preview created successfully');
+                resolve();
+            } else {
+                reject('Preview elements not found');
+            }
+        };
+        
+        reader.onerror = function() {
+            reject('Failed to read file for preview');
+        };
+        
+        reader.readAsDataURL(file);
+    });
 }
 
 function clearImage() {
-    console.log('clearImage called');
+    console.log('Clearing image');
+    
+    formState.validFile = null;
     
     const preview = document.getElementById('preview');
     const previewContainer = document.getElementById('imagePreview');
-    const fileUploadArea = document.getElementById('fileUploadArea');
     const fileInput = document.getElementById('image');
     
-    // Clear preview
     if (preview) preview.src = '#';
     if (previewContainer) previewContainer.style.display = 'none';
     if (fileInput) fileInput.value = '';
     
-    // Reset upload area styling
-    if (fileUploadArea) {
-        fileUploadArea.classList.remove('has-file');
+    updateUploadAreaState('reset');
+    hideValidationMessage();
+}
+
+function handleDragAndDrop() {
+    const fileUploadArea = document.getElementById('fileUploadArea');
+    if (!fileUploadArea) return;
+    
+    fileUploadArea.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.classList.add('drag-over');
+    });
+
+    fileUploadArea.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.classList.remove('drag-over');
+    });
+
+    fileUploadArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.classList.remove('drag-over');
         
-        const uploadIcon = fileUploadArea.querySelector('.upload-icon');
-        const uploadText = fileUploadArea.querySelector('.upload-text');
-        const uploadSubtext = fileUploadArea.querySelector('.upload-subtext');
-        
-        if (uploadIcon) uploadIcon.textContent = '📷';
-        if (uploadText) uploadText.textContent = 'Choose file or drag and drop';
-        if (uploadSubtext) {
-            uploadSubtext.innerHTML = 'JPEG, JPG, PNG, GIF, WEBP up to 10MB<br><small>Recommended: 1080x1080 pixels</small>';
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            const fileInput = document.getElementById('image');
+            if (fileInput) {
+                // Create new DataTransfer to assign file to input
+                const dt = new DataTransfer();
+                dt.items.add(files[0]);
+                fileInput.files = dt.files;
+                
+                // Trigger change event
+                handleFileInputChange({ target: { files: [files[0]] } });
+            }
         }
-    }
-    
-    console.log('Image cleared successfully');
+    });
 }
 
-function handleFileSelection(file) {
-    console.log('handleFileSelection called with file:', file);
-    
-    const fileInput = document.getElementById('image');
-    
-    if (file && fileInput) {
-        // Create DataTransfer and assign file
-        const dt = new DataTransfer();
-        dt.items.add(file);
-        fileInput.files = dt.files;
-        
-        console.log('File assigned to input:', fileInput.files[0]);
-        
-        // Trigger validation and preview
-        validateAndPreviewImage({ target: { files: [file] } });
-    }
-}
-
-function initializeCreatePostForm() {
-    if (formInitialized) return;
-    formInitialized = true;
-    
+function handleFormSubmission() {
     const form = document.getElementById('createPostForm');
-    const textArea = document.getElementById('post_content');
-    const wordCount = document.getElementById('wordCount');
     const submitBtn = document.getElementById('submitBtn');
     const loadingSpinner = document.getElementById('loadingSpinner');
     const submitText = document.getElementById('submitText');
-    const fileUploadArea = document.getElementById('fileUploadArea');
-    const maxChars = 250;
+    
+    if (!form) return;
+    
+    form.addEventListener('submit', function(e) {
+        console.log('Form submission attempted');
+        
+        // Check if we're still validating
+        if (formState.validating) {
+            e.preventDefault();
+            showValidationMessage('Please wait while file validation completes', 'warning');
+            return false;
+        }
+        
+        // Check content
+        const content = document.getElementById('post_content');
+        if (!content || !content.value.trim()) {
+            e.preventDefault();
+            showValidationMessage('Please enter some content for your post', 'error');
+            return false;
+        }
+        
+        // Show loading state
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            if (loadingSpinner) loadingSpinner.style.display = 'inline-block';
+            if (submitText) submitText.textContent = 'Creating...';
+        }
+        
+        console.log('Form submission proceeding');
+        return true;
+    });
+}
 
-    if (!form || !textArea) {
-        console.error('Form elements not found');
-        return;
-    }
-
-    // Sanitize input function
-    function sanitizeInput(input) {
-        return input.replace(/<[^>]*>/g, '');
-    }
-
-    // Update character counter
+function handleTextArea() {
+    const textArea = document.getElementById('post_content');
+    const wordCount = document.getElementById('wordCount');
+    
+    if (!textArea || !wordCount) return;
+    
     function updateWordCount() {
         const currentChars = textArea.value.length;
-        if (wordCount) {
-            wordCount.textContent = `${currentChars}/${maxChars}`;
-            
-            // Update counter styling
-            wordCount.className = 'char-counter';
-            if (currentChars >= 240) {
-                wordCount.classList.add('danger');
-            } else if (currentChars >= 200) {
-                wordCount.classList.add('warning');
-            }
+        wordCount.textContent = `${currentChars}/${CONFIG.MAX_CHARS}`;
+        
+        wordCount.className = 'char-counter';
+        if (currentChars >= 240) {
+            wordCount.classList.add('danger');
+        } else if (currentChars >= 200) {
+            wordCount.classList.add('warning');
         }
     }
-
-    // Text area input handling
-    textArea.addEventListener('input', function(e) {
-        e.stopPropagation();
-        
-        // Auto-resize textarea
-        this.style.height = 'auto';
-        this.style.height = Math.max(120, this.scrollHeight) + 'px';
-        
-        // Sanitize the input
-        this.value = sanitizeInput(this.value);
-        
-        if (this.value.length > maxChars) {
-            this.value = this.value.substring(0, maxChars);
-        }
-        
-        updateWordCount();
-    });
-
-    // Paste event handling
-    textArea.addEventListener('paste', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        const text = sanitizeInput((e.clipboardData || window.clipboardData).getData('text'));
-        
-        const start = this.selectionStart;
-        const end = this.selectionEnd;
-        const value = this.value;
-        
-        const availableSpace = maxChars - (value.length - (end - start));
-        const textToInsert = text.substring(0, availableSpace);
-        
-        this.value = value.substring(0, start) + textToInsert + value.substring(end);
-        this.selectionStart = this.selectionEnd = start + textToInsert.length;
-        
-        updateWordCount();
-        this.style.height = 'auto';
-        this.style.height = Math.max(120, this.scrollHeight) + 'px';
-    });
-
-    // Form submission handling
-    if (form) {
-        form.addEventListener('submit', function(e) {
-            console.log('Form submission started');
-            
-            const fileInput = document.getElementById('image');
-            console.log('File input files:', fileInput ? fileInput.files : 'No file input');
-            
-            // Show loading state
-            if (submitBtn) {
-                submitBtn.disabled = true;
-                if (loadingSpinner) loadingSpinner.style.display = 'inline-block';
-                if (submitText) submitText.textContent = 'Creating...';
-            }
-        });
-    }
-
-    // Drag and drop functionality
-    if (fileUploadArea) {
-        fileUploadArea.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.add('drag-over');
-        });
-
-        fileUploadArea.addEventListener('dragleave', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('drag-over');
-        });
-
-        fileUploadArea.addEventListener('drop', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('drag-over');
-            
-            const files = e.dataTransfer.files;
-            console.log('Files dropped:', files.length);
-            
-            if (files.length > 0) {
-                handleFileSelection(files[0]);
-            }
-        });
-
-        fileUploadArea.addEventListener('click', function(e) {
-            e.stopPropagation();
-            if (e.target.type !== 'file') {
-                const fileInput = document.getElementById('image');
-                if (fileInput) {
-                    fileInput.click();
-                }
-            }
-        });
-    }
-
-    // Initialize word count
-    updateWordCount();
     
-    console.log('Create post form initialized successfully');
+    textArea.addEventListener('input', function() {
+        // Auto-resize
+        this.style.height = 'auto';
+        this.style.height = Math.max(120, this.scrollHeight) + 'px';
+        
+        // Limit length
+        if (this.value.length > CONFIG.MAX_CHARS) {
+            this.value = this.value.substring(0, CONFIG.MAX_CHARS);
+        }
+        
+        updateWordCount();
+    });
+    
+    // Initialize
+    updateWordCount();
+}
+
+function initializeCreatePostForm() {
+    if (formState.initialized) return;
+    
+    console.log('Initializing create post form');
+    
+    try {
+        handleTextArea();
+        handleDragAndDrop();
+        handleFormSubmission();
+        
+        formState.initialized = true;
+        console.log('Create post form initialized successfully');
+        
+    } catch (error) {
+        console.error('Error initializing form:', error);
+    }
 }
 
 // Initialize when DOM is ready
-document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(function() {
-        initializeCreatePostForm();
-    }, 100);
-});
-
-// Also initialize if DOM is already loaded
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() {
-        setTimeout(initializeCreatePostForm, 100);
-    });
-} else {
-    setTimeout(initializeCreatePostForm, 100);
+document.addEventListener('DOMContentLoaded', initializeCreatePostForm);
+if (document.readyState !== 'loading') {
+    initializeCreatePostForm();
 }
 </script>
 {% endblock %}

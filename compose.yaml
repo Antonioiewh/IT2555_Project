@@ -94,8 +94,14 @@ services:
       - "80:80" # Expose Nginx on port 80
       - "443:443" # Expose Nginx on port 443
     volumes:
-      # Optional: Mount a volume for Nginx/ModSecurity logs to persist them
-      - ./project/templates/rate_limit.html:/usr/share/nginx/html/rate_limit.html:ro # Custom error page for rate limiting
+      # Custom error pages for ModSecurity
+      - ./project/templates/nginx_errors/429_error.html:/usr/share/nginx/html/429.html:ro
+      - ./project/templates/nginx_errors/403_error.html:/usr/share/nginx/html/403.html:ro
+      - ./project/templates/nginx_errors/406_error.html:/usr/share/nginx/html/406.html:ro
+      - ./project/templates/nginx_errors/500_error.html:/usr/share/nginx/html/50x.html:ro
+
+      # Existing volumes
+      - ./project/templates/rate_limit.html:/usr/share/nginx/html/rate_limit.html:ro # Keep for backward compatibility
       - ./nginxproxy/custom_modsec_rules:/etc/nginx/modsec/custom_modsec_rules # If you create custom rules
       - ./certs:/etc/nginx/certs:ro 
       - ./modsec_logs:/var/log/nginx/modsec_audit_data 

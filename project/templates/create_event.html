@@ -165,7 +165,7 @@
     padding: 20px 24px;
     border-bottom: 1px solid #e8eaed;
     display: flex;
-    justify-content: between;
+    justify-content: space-between;
     align-items: center;
 }
 .map-modal-title {
@@ -358,39 +358,29 @@
             {{ form.hidden_tag() }}
             
             <div class="google-form-group">
-                <label for="title" class="google-label">Event Title</label>
-                {{ form.title(class="google-input", id="title", placeholder="Enter event title") }}
-                {% if form.title.errors %}
-                    {% for error in form.title.errors %}
+                <label for="event_name" class="google-label">Event Name</label>
+                {{ form.event_name(class="google-input", id="event_name", placeholder="Enter event name") }}
+                {% if form.event_name.errors %}
+                    {% for error in form.event_name.errors %}
                         <div class="google-error">{{ error }}</div>
                     {% endfor %}
                 {% endif %}
             </div>
             
             <div class="google-form-group">
-                <label for="description" class="google-label">Description</label>
-                {{ form.description(class="google-textarea", id="description", placeholder="Describe your event") }}
-                {% if form.description.errors %}
-                    {% for error in form.description.errors %}
+                <label for="event_description" class="google-label">Description</label>
+                {{ form.event_description(class="google-textarea", id="event_description", placeholder="Describe your event in detail") }}
+                {% if form.event_description.errors %}
+                    {% for error in form.event_description.errors %}
                         <div class="google-error">{{ error }}</div>
                     {% endfor %}
                 {% endif %}
             </div>
             
             <div class="google-form-group">
-                <label for="event_datetime" class="google-label">Date & Time</label>
-                {{ form.event_datetime(class="google-input", id="event_datetime", type="datetime-local") }}
-                {% if form.event_datetime.errors %}
-                    {% for error in form.event_datetime.errors %}
-                        <div class="google-error">{{ error }}</div>
-                    {% endfor %}
-                {% endif %}
-            </div>
-            
-            <div class="google-form-group">
-                <label for="location" class="google-label">Location</label>
+                <label for="event_location" class="google-label">Location</label>
                 <div class="location-input-group">
-                    {{ form.location(class="google-input", id="location", placeholder="Enter location or click to select on map", readonly=true) }}
+                    {{ form.event_location(class="google-input", id="event_location", placeholder="Enter location or click to select on map", readonly=true) }}
                     <button type="button" class="map-selector-btn" onclick="openMapModal()">
                         <span class="material-icons">location_on</span>
                         Select on Map
@@ -402,8 +392,18 @@
                     <div class="location-coords" id="displayCoords"></div>
                 </div>
                 
-                {% if form.location.errors %}
-                    {% for error in form.location.errors %}
+                {% if form.event_location.errors %}
+                    {% for error in form.event_location.errors %}
+                        <div class="google-error">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            
+            <div class="google-form-group">
+                <label for="event_start_time" class="google-label">Event Date & Time</label>
+                {{ form.event_start_time(class="google-input", id="event_start_time") }}
+                {% if form.event_start_time.errors %}
+                    {% for error in form.event_start_time.errors %}
                         <div class="google-error">{{ error }}</div>
                     {% endfor %}
                 {% endif %}
@@ -413,10 +413,17 @@
             <input type="hidden" id="latitude" name="latitude" value="">
             <input type="hidden" id="longitude" name="longitude" value="">
             
-            <button type="submit" class="google-btn google-btn-primary">
-                <span class="material-icons">add_circle</span>
-                Create Event
-            </button>
+            <!-- reCAPTCHA -->
+            <div class="google-form-group">
+                {{ form.recaptcha }}
+                {% if form.recaptcha.errors %}
+                    {% for error in form.recaptcha.errors %}
+                        <div class="google-error">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            
+            {{ form.submit(class="google-btn google-btn-primary") }}
         </form>
         
         <div class="google-link-section">
@@ -564,7 +571,7 @@ function initFullscreenMap() {
         map.setZoom(15);
         marker.setPosition(currentLocation);
         
-        const currentAddress = document.getElementById('location').value;
+        const currentAddress = document.getElementById('event_location').value;
         updateModalSelection(new google.maps.LatLng(currentLocation.lat, currentLocation.lng), currentAddress);
     }
 }
@@ -603,7 +610,7 @@ function confirmLocation() {
     if (!currentSelectedLocation) return;
     
     // Update form fields
-    document.getElementById('location').value = currentSelectedLocation.address;
+    document.getElementById('event_location').value = currentSelectedLocation.address;
     document.getElementById('latitude').value = currentSelectedLocation.lat;
     document.getElementById('longitude').value = currentSelectedLocation.lng;
     
@@ -640,6 +647,18 @@ document.getElementById('mapModal').addEventListener('click', function(e) {
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         closeMapModal();
+    }
+});
+
+// Set minimum date to today for start time
+document.addEventListener('DOMContentLoaded', function() {
+    const now = new Date();
+    const isoString = now.toISOString().slice(0, 16); // Format: YYYY-MM-DDTHH:MM
+    
+    const startTimeInput = document.getElementById('event_start_time');
+    
+    if (startTimeInput) {
+        startTimeInput.min = isoString;
     }
 });
 </script>

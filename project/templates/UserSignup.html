@@ -251,6 +251,8 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const passwordField = document.getElementById('signup-password');
+    const passwordToggle = document.getElementById('signupPasswordToggle');
+    const passwordToggleIcon = document.getElementById('signupPasswordToggleIcon');
     const form = document.getElementById('signupForm');
     
     // Password validation function
@@ -285,25 +287,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Form submission validation
-    form.addEventListener('submit', function(e) {
-        if (passwordField) {
-            const requirements = validatePasswordRequirements(passwordField.value);
-            const allMet = Object.values(requirements).every(req => req);
-            
-            if (!allMet) {
-                e.preventDefault();
-                alert('Please ensure your password meets all requirements.');
-                return false;
-            }
-        }
-        
-        return true;
-    });
-    const passwordField = document.getElementById('password');
-    const passwordToggle = document.getElementById('passwordToggle');
-    const passwordToggleIcon = document.getElementById('passwordToggleIcon');
-
+    // Password toggle functionality
     if (passwordToggle && passwordField && passwordToggleIcon) {
         passwordToggle.addEventListener('click', function() {
             // Toggle password visibility
@@ -322,12 +306,25 @@ document.addEventListener('DOMContentLoaded', function() {
         passwordToggle.setAttribute('aria-label', 'Show password');
     }
 
-
-
-}
-    
-
-);
+    // Form submission validation
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            if (passwordField) {
+                const requirements = validatePasswordRequirements(passwordField.value);
+                const allMet = Object.values(requirements).every(req => req);
+                
+                if (!allMet) {
+                    e.preventDefault();
+                    alert('Please ensure your password meets all requirements.');
+                    return false;
+                }
+            }
+            
+            return true;
+        });
+    }
+});
 </script>
+
 
 {% endblock %}

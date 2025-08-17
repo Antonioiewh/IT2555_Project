@@ -592,7 +592,17 @@
                         </a>
                     </div>
                 {% endif %}
-
+                {% if current_user.is_authenticated %}
+                    <!-- ✅ ADD HOME LINK AT TOP FOR ALL AUTHENTICATED USERS -->
+                    <div class="nav-item">
+                        <a href="{{ url_for('home') }}" class="nav-link-google">
+                            <i class="bi bi-house nav-icon"></i>
+                            Home
+                        </a>
+                    </div>
+                    
+                    <div class="nav-divider"></div>
+                {% endif %}
                 {% if current_user.is_authenticated and current_user.has_role('admin') %}
                     <!-- Admin Menu -->
                     <div class="nav-section-title">Administration</div>

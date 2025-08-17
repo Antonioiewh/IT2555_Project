@@ -163,7 +163,8 @@ socketio = SocketIO(app, cors_allowed_origins=[
     "http://localhost",
     "https://localhost",
     "http://127.0.0.1",
-    "https://127.0.0.1"
+    "https://127.0.0.1",
+    "https://glowing-briefly-cicada.ngrok-free.app"
 ],  
 message_queue=REDIS_URL,     # <— important when running >1 instance
 ping_interval=25,
@@ -4015,13 +4016,13 @@ def create_event():
             lat = float(latitude) if latitude else None
             lng = float(longitude) if longitude else None
             
-            # Create new event - FIX: Use correct form field names
+            # ✅ Create new event with CORRECT field names
             new_event = Event(
                 user_id=current_user.user_id,
-                title=form.event_name.data,  # Changed from form.title.data
-                description=form.event_description.data,  # Changed from form.description.data
-                event_datetime=form.event_start_time.data,  # Changed from form.event_datetime.data
-                location=form.event_location.data,  # Changed from form.location.data
+                title=form.event_name.data,           # ✅ Correct field name
+                description=form.event_description.data,  # ✅ Correct field name
+                event_datetime=form.event_start_time.data, # ✅ Correct field name
+                location=form.event_location.data,    # ✅ Correct field name
                 latitude=lat,
                 longitude=lng,
                 is_reminder=False,
@@ -4032,13 +4033,24 @@ def create_event():
             db.session.add(new_event)
             db.session.commit()
             
+            print(f"✅ EVENT CREATED: ID={new_event.event_id}, Title='{new_event.title}'")
+            
             flash(f"Event '{new_event.title}' created successfully!", 'success')
             return redirect(url_for('events_dashboard'))
             
         except Exception as e:
             db.session.rollback()
-            print(f"Error creating event: {str(e)}")
+            print(f"❌ ERROR creating event: {str(e)}")
+            import traceback
+            traceback.print_exc()
             flash('An error occurred while creating the event. Please try again.', 'danger')
+    else:
+        # ✅ Add form validation error debugging
+        if request.method == 'POST':
+            print(f"❌ FORM VALIDATION FAILED:")
+            for field, errors in form.errors.items():
+                print(f"  {field}: {errors}")
+            flash('Please check the form for errors.', 'error')
     
     return render_template('create_event.html', form=form)
 

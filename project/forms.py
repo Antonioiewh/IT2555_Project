@@ -154,9 +154,6 @@ class EventForm(FlaskForm):
     event_description = TextAreaField('Description', validators=[DataRequired(), Length(min=10, max=1000)])
     event_location = StringField('Location', validators=[DataRequired(), Length(min=5, max=200)])
     event_start_time = DateTimeLocalField('Start Time', validators=[DataRequired()], format='%Y-%m-%dT%H:%M')
-    event_end_time = DateTimeLocalField('End Time', validators=[DataRequired()], format='%Y-%m-%dT%H:%M')
-    max_participants = IntegerField('Max Participants', validators=[DataRequired()], default=50)
-    is_public = BooleanField('Public Event', default=True)
     recaptcha = RecaptchaField()
     submit = SubmitField('Create Event')
 

@@ -71,7 +71,9 @@
     .profile-stats {
         display: flex;
         margin-bottom: 30px; /* Increased from 20px */
+        gap: 60px; /* ✅ ADD CONSISTENT GAP BETWEEN STATS */
     }
+    
     .stat {
         display: flex;
         flex-direction: column;
@@ -79,24 +81,30 @@
         text-align: center;
         min-width: 80px; /* Ensure consistent width */
     }
+    
     .stat-number {
         font-size: 24px; /* Larger, more prominent numbers */
         font-weight: 700;
         color: #262626;
-        line-height: 1;
-        margin-bottom: 4px;
+        line-height: 1.2; /* ✅ BETTER LINE HEIGHT */
+        margin-bottom: 8px; /* ✅ ADD SPACE BETWEEN NUMBER AND LABEL */
     }
+    
     .stat-label {
         font-size: 16px;
         color: #8e8e8e;
         font-weight: 500;
         text-transform: none; /* Remove uppercase for cleaner look */
+        line-height: 1;
     }
+    
+    /* ✅ REMOVE THE OLD stat-item STYLES - REPLACE WITH ABOVE */
+    /* DELETE THESE OLD STYLES:
     .stat-item {
-        margin-right: 50px; /* Increased from 40px */
+        margin-right: 50px;
         color: #262626;
         text-decoration: none;
-        font-size: 18px; /* Increased font size */
+        font-size: 18px;
     }
 
     .stat-item:hover {
@@ -105,10 +113,11 @@
     }
 
     .stat-number {
-        font-weight: 700; /* Bolder */
-        margin-right: 8px; /* Increased spacing */
-        font-size: 20px; /* Larger numbers */
+        font-weight: 700;
+        margin-right: 8px;
+        font-size: 20px;
     }
+    */
 
     .profile-bio {
         color: #262626;

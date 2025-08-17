@@ -514,6 +514,21 @@
         transform: translateY(-10px);
     }
 
+    /*This is for notification , can use for others also.*/
+       .nav-notif-dot {
+        display:inline-block; 
+        width:10px; height:10px; 
+        border-radius:50%;
+        background:#ea4335; 
+        position:absolute;
+        right:16px;
+        top:50%;
+        transform: translateY(-50%);
+        visibility:hidden;
+        box-shadow: 0 0 0 2px #fff; 
+    }
+
+
     /* Responsive flash messages */
     @media (max-width: 768px) {
         .flash-messages-container {
@@ -693,10 +708,10 @@
                     </div>
                     
                     <div class="nav-item">
-                        <a href="/Notifications" class="nav-link-google">
-                            <i class="bi bi-bell nav-icon"></i>
+                        <a href="{{ url_for('notifications') }}" id="nav-notifications-link" class="nav-link-google">
+                            <i class="bi bi-bell nav-icon" aria-hidden="true"></i>
                             Notifications
-                            <span class="google-badge" style="display: none;" id="notifBadge"></span>
+                            <span id="nav-notif-dot" class="nav-notif-dot" aria-hidden="true"></span>
                         </a>
                     </div>
                     
@@ -909,6 +924,22 @@
             }
         });
     });
+
+    (function(){
+        async function refreshNotifDot(){
+            try{
+            const r = await fetch('{{ url_for("unread_message_notifications_count") }}', { credentials:'same-origin' });
+            const j = await r.json();
+            const dot = document.getElementById('nav-notif-dot');
+            if (!dot) return;
+            dot.style.visibility = (j && j.ok && j.count > 0) ? 'visible' : 'hidden';
+            }catch(e){}
+        }
+        document.addEventListener('DOMContentLoaded', () => {
+            refreshNotifDot();
+            setInterval(refreshNotifDot, 20000); // poll every 20s
+        });
+        })();
     </script>
     {% endblock %}
 </body>

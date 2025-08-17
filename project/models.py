@@ -325,6 +325,7 @@ class ChatParticipant(db.Model):
     chat_id = db.Column(db.Integer, db.ForeignKey('chats.chat_id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     cleared_at = db.Column(db.DateTime, nullable=True)
+    is_in_chat = db.Column(db.Boolean, nullable=False, default=True)
     __table_args__ = (db.UniqueConstraint('chat_id', 'user_id', name='_chat_user_uc'),)
 
     def __repr__(self):
@@ -353,6 +354,50 @@ class Message(db.Model):
 
     def __repr__(self):
         return f"<Message {self.message_id} in Chat:{self.chat_id} from User:{self.sender_id}>"
+    
+class BlockedUser(db.Model):
+    __tablename__ = 'blocked_users'
+    id = db.Column(db.Integer, primary_key=True)
+    blocker_id = db.Column(db.Integer, db.ForeignKey('users.user_id', ondelete='CASCADE'), nullable=False)
+    blocked_id = db.Column(db.Integer, db.ForeignKey('users.user_id', ondelete='CASCADE'), nullable=False)
+    chat_id = db.Column(db.Integer, db.ForeignKey('chats.chat_id', ondelete='SET NULL'), nullable=True)
+    reason = db.Column(db.String(255), nullable=True)
+    active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    removed_at = db.Column(db.DateTime, nullable=True)
+
+    # relationships (optional, helpful in ORM usage)
+    blocker = db.relationship('User', foreign_keys=[blocker_id], backref=db.backref('blocks_made', lazy='dynamic'))
+    blocked = db.relationship('User', foreign_keys=[blocked_id], backref=db.backref('blocks_received', lazy='dynamic'))
+    chat = db.relationship('Chat', foreign_keys=[chat_id])
+
+    __table_args__ = (
+        db.UniqueConstraint('blocker_id', 'blocked_id', name='uq_blocker_blocked'),
+    )
+
+class UserPublicKey(db.Model):
+    __tablename__ = 'user_public_keys'
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), primary_key=True)
+    alg = db.Column(db.String(32), nullable=False, default='P-256')
+    public_key_spki_b64 = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = db.relationship('User', backref=db.backref('public_key', uselist=False))
+
+class ChatKeyEnvelope(db.Model):
+    __tablename__ = 'chat_key_envelopes'
+    id = db.Column(db.Integer, primary_key=True)
+    chat_id = db.Column(db.Integer, db.ForeignKey('chats.chat_id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    key_version = db.Column(db.Integer, nullable=False, default=1)
+    envelope_b64 = db.Column(db.Text, nullable=False)  # chat key encrypted to this user’s public key (base64)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('chat_id', 'user_id', 'key_version', name='uq_chat_user_version'),
+    )
 
 # **************************************
 # 8. Friend System

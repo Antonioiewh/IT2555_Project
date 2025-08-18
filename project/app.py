@@ -720,6 +720,16 @@ def login():
 
             if user and user.check_password(password):
                 # Implement the login flow logic
+                if user.is_terminated():
+                    flash('Your account has been permanently terminated. Access is denied.', 'error')
+                    app.logger.warning(f"Login attempt by terminated user: {username} from IP: {request.remote_addr}")
+                    return render_template('UserLogin.html', form=form)
+                
+                if user.is_suspended():
+                    flash('Your account is currently suspended. Please contact support for assistance.', 'warning')
+                    app.logger.warning(f"Login attempt by suspended user: {username} from IP: {request.remote_addr}")
+                    return render_template('UserLogin.html', form=form)
+                
                 has_2fa = bool(user.totp_secret)
                 has_passkeys = WebAuthnCredential.query.filter_by(user_id=user.user_id).first() is not None
                 
@@ -3087,6 +3097,63 @@ def manage_user(user_id):
 
     return render_template('AdminChangeUserStatus.html', user=user, form=form)
 
+@app.route('/admin/suspend_user/<int:user_id>', methods=['POST'])
+@admin_required
+def suspend_user(user_id):
+    """Suspend a user account"""
+    user = User.query.get_or_404(user_id)
+    
+    if user.has_role('admin'):
+        flash('Cannot suspend an admin user.', 'error')
+        return redirect(url_for('manage_users'))
+    
+    user.current_status = 'suspended'
+    db.session.commit()
+    
+    # Log the action
+    app.logger.info(f"User {user.username} suspended by {current_user.username}")
+    
+    flash(f'User {user.username} has been suspended.', 'success')
+    return redirect(url_for('manage_users'))
+
+@app.route('/admin/terminate_user/<int:user_id>', methods=['POST'])
+@admin_required
+def terminate_user(user_id):
+    """Terminate a user account permanently"""
+    user = User.query.get_or_404(user_id)
+    
+    if user.has_role('admin'):
+        flash('Cannot terminate an admin user.', 'error')
+        return redirect(url_for('manage_users'))
+    
+    user.current_status = 'terminated'
+    db.session.commit()
+    
+    # Log the action
+    app.logger.critical(f"User {user.username} terminated by {current_user.username}")
+    
+    flash(f'User {user.username} has been permanently terminated.', 'success')
+    return redirect(url_for('manage_users'))
+
+@app.route('/admin/reactivate_user/<int:user_id>', methods=['POST'])
+@admin_required
+def reactivate_user(user_id):
+    """Reactivate a suspended user account"""
+    user = User.query.get_or_404(user_id)
+    
+    if user.current_status == 'terminated':
+        flash('Cannot reactivate a terminated user.', 'error')
+        return redirect(url_for('manage_users'))
+    
+    user.current_status = 'offline'
+    db.session.commit()
+    
+    # Log the action
+    app.logger.info(f"User {user.username} reactivated by {current_user.username}")
+    
+    flash(f'User {user.username} has been reactivated.', 'success')
+    return redirect(url_for('manage_users'))
+
 @app.route('/reports_dashboard', methods=['GET'])
 @admin_required
 def manage_reports():
@@ -4016,13 +4083,13 @@ def create_event():
             lat = float(latitude) if latitude else None
             lng = float(longitude) if longitude else None
             
-            # ✅ Create new event with CORRECT field names
+
             new_event = Event(
                 user_id=current_user.user_id,
-                title=form.event_name.data,           # ✅ Correct field name
-                description=form.event_description.data,  # ✅ Correct field name
-                event_datetime=form.event_start_time.data, # ✅ Correct field name
-                location=form.event_location.data,    # ✅ Correct field name
+                title=form.event_name.data,           
+                description=form.event_description.data,  
+                event_datetime=form.event_start_time.data, 
+                location=form.event_location.data,   
                 latitude=lat,
                 longitude=lng,
                 is_reminder=False,
@@ -4045,7 +4112,6 @@ def create_event():
             traceback.print_exc()
             flash('An error occurred while creating the event. Please try again.', 'danger')
     else:
-        # ✅ Add form validation error debugging
         if request.method == 'POST':
             print(f"❌ FORM VALIDATION FAILED:")
             for field, errors in form.errors.items():

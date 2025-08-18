@@ -34,7 +34,8 @@ class User(UserMixin, db.Model):
     profile_pic_url = db.Column(db.String(255), nullable=True)
     banner_url = db.Column(db.String(255), nullable=True)
     bio = db.Column(db.Text, nullable=True)
-    current_status = db.Column(db.String(50), nullable=False, default='offline')
+    current_status = db.Column(db.Enum('online', 'offline', 'suspended', 'terminated'), 
+                              nullable=False, default='offline')
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_active_at = db.Column(db.DateTime, nullable=True)
@@ -87,7 +88,28 @@ class User(UserMixin, db.Model):
             if any(perm.permission_name == permission_name for perm in role.permissions):
                 return True
         return False
-
+    
+    def is_suspended(self):
+        """Check if user is suspended"""
+        return self.current_status == 'suspended'
+    
+    def is_terminated(self):
+        """Check if user is terminated"""
+        return self.current_status == 'terminated'
+    
+    def can_login(self):
+        """Check if user can log in"""
+        return self.current_status in ['online', 'offline']
+    
+    def get_status_display(self):
+        """Get human-readable status"""
+        status_map = {
+            'online': 'Online',
+            'offline': 'Offline', 
+            'suspended': 'Suspended',
+            'terminated': 'Terminated'
+        }
+        return status_map.get(self.current_status, self.current_status.title())
     def __repr__(self):
         return f"<User {self.username}>"
 

@@ -3,7 +3,6 @@
 
 {% block content %}
 <style>
-/* Google-inspired design system */
 :root {
     --google-blue: #1a73e8;
     --google-blue-hover: #1557b0;
@@ -67,7 +66,6 @@
     font-size: 16px;
 }
 
-/* Statistics Cards */
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -157,7 +155,6 @@
     margin-top: 8px;
 }
 
-/* Search Card */
 .search-card {
     background: #fff;
     border: 1px solid var(--google-grey-200);
@@ -207,7 +204,6 @@
     background: var(--google-blue-hover);
 }
 
-/* Table Container */
 .table-container {
     background: #fff;
     border: 1px solid var(--google-grey-200);
@@ -216,7 +212,6 @@
     box-shadow: var(--google-shadow);
 }
 
-/* Table Styles */
 .google-table {
     width: 100%;
     border-collapse: collapse;
@@ -269,7 +264,6 @@
     border: none;
 }
 
-/* Action Type Badges */
 .action-badge {
     display: inline-flex;
     align-items: center;
@@ -321,7 +315,6 @@
     font-size: 12px;
 }
 
-/* Timestamp Styling */
 .timestamp {
     font-family: 'Courier New', monospace;
     font-size: 12px;
@@ -331,7 +324,6 @@
     border-radius: 4px;
 }
 
-/* Details Styling */
 .details-text {
     font-size: 13px;
     color: var(--google-grey-700);
@@ -341,7 +333,6 @@
     white-space: nowrap;
 }
 
-/* Row highlighting based on action type */
 .success-row {
     background: linear-gradient(135deg, rgba(52, 168, 83, 0.02) 0%, rgba(52, 168, 83, 0.05) 100%);
     border-left: 4px solid var(--google-green);
@@ -357,7 +348,6 @@
     border-left: 4px solid var(--google-yellow);
 }
 
-/* Empty State */
 .empty-state {
     text-align: center;
     padding: 64px 24px;
@@ -382,7 +372,6 @@
     color: var(--google-grey-600);
 }
 
-/* Sort Icons */
 .sort-icon {
     font-size: 12px;
     opacity: 0.6;
@@ -393,7 +382,6 @@
     opacity: 1;
 }
 
-/* Responsive Design */
 @media (max-width: 768px) {
     .google-container {
         padding: 16px;
@@ -441,13 +429,11 @@
     border-radius: 2px;
 }
 
-/* Loading animation */
 .loading {
     opacity: 0.6;
     pointer-events: none;
 }
 
-/* Pulse animation for recent activities */
 .pulse {
     animation: pulse-blue 2s infinite;
 }

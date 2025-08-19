@@ -9,7 +9,6 @@
     padding: 0 24px;
 }
 .hero-banner {
-    /* UPDATED: Dynamic background based on user's banner */
     background: {% if current_user.banner_url %}
         linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.3)), 
         url('{{ url_for('static', filename='uploads/' + current_user.banner_url) }}') center/cover no-repeat
@@ -355,7 +354,6 @@
     font-size: 18px;
 }
 
-/* FIXED: Banner Upload Modal Styles */
 .banner-modal {
     display: none;
     position: fixed;
@@ -375,7 +373,7 @@
     width: 90%;
     max-width: 800px;
     max-height: 90vh;
-    overflow-y: auto; /* ADDED: Allow scrolling if content is too tall */
+    overflow-y: auto; 
     box-shadow: 0 20px 60px rgba(0,0,0,0.3);
     display: flex;
     flex-direction: column;
@@ -387,7 +385,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    flex-shrink: 0; /* ADDED: Prevent header from shrinking */
+    flex-shrink: 0; 
 }
 .banner-modal-header h3 {
     margin: 0;
@@ -410,7 +408,7 @@
 .banner-modal-body {
     padding: 32px;
     flex: 1; /* ADDED: Allow body to expand */
-    overflow-y: auto; /* ADDED: Allow scrolling within body */
+    overflow-y: auto; 
 }
 .banner-upload-area {
     border: 2px dashed #667eea;
@@ -451,7 +449,7 @@
 }
 .banner-preview-container {
     width: 100%;
-    height: 250px; /* REDUCED: Smaller height to fit better */
+    height: 250px; 
     border: 1px solid #e2e8f0;
     border-radius: 8px;
     overflow: hidden;
@@ -463,7 +461,7 @@
     gap: 12px;
     justify-content: center;
     margin-bottom: 24px;
-    flex-wrap: wrap; /* ADDED: Allow wrapping on small screens */
+    flex-wrap: wrap; 
 }
 .banner-crop-btn {
     padding: 8px 16px;
@@ -484,18 +482,16 @@
     background: #f7fafc;
     border-top: 1px solid #e2e8f0;
     display: flex;
-    justify-content: space-between; /* CHANGED: Space between for better layout */
+    justify-content: space-between; 
     align-items: center;
     gap: 12px;
-    flex-shrink: 0; /* ADDED: Prevent footer from shrinking */
-    flex-wrap: wrap; /* ADDED: Allow wrapping on small screens */
+    flex-shrink: 0;
+    flex-wrap: wrap; 
 }
 .banner-footer-left {
-    /* ADDED: Container for remove button */
     flex: 1;
 }
 .banner-footer-right {
-    /* ADDED: Container for action buttons */
     display: flex;
     gap: 12px;
     flex-wrap: wrap;
@@ -703,12 +699,10 @@
             <h3 class="widget-title">Your Activity</h3>
             <div class="widget-stats">
                 <div class="stat-item">
-                    <!-- FIXED: Show current user's actual post count, not posts on current page -->
                     <span class="stat-number" id="user-post-count">{{ current_user_post_count }}</span>
                     <span class="stat-label">Posts</span>
                 </div>
                 <div class="stat-item">
-                    <!-- FIXED: Show current user's actual friend count -->
                     <span class="stat-number" id="user-friend-count">{{ current_user_friend_count }}</span>
                     <span class="stat-label">Friends</span>
                 </div>

@@ -10,7 +10,6 @@
 
 {% block content %}
 <style>
-/* Google-style login form */
 .google-login-container {
     min-height: 80vh;
     display: flex;
@@ -192,7 +191,6 @@
     display: block;
 }
 
-/* Alert styling to match Google design */
 .google-alert {
     position: fixed;
     top: 20px;
@@ -264,7 +262,6 @@
     color: #3c4043;
 }
 
-/* Responsive design */
 @media (max-width: 768px) {
     .google-login-card {
         padding: 32px 24px;
@@ -278,14 +275,12 @@
     }
 }
 
-/* ReCAPTCHA styling */
 .g-recaptcha {
     margin: 20px 0;
     display: flex;
     justify-content: center;
 }
 
-/* Form validation styling */
 .form-control.is-invalid {
     border-color: #ea4335;
 }
@@ -567,7 +562,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('=== STARTING PASSKEY LOGIN ===');
                 console.log('Username:', username);
                 
-                // Step 1: Begin passkey authentication
+                // Begin passkey authentication
                 const beginResponse = await fetch('/passkey/begin_login', {
                     method: 'POST',
                     headers: {
@@ -606,7 +601,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     throw new Error('Server response missing allowCredentials - invalid format');
                 }
 
-                // Step 2: Convert base64 to buffers
+                // Convert base64 to buffers
                 console.log('=== CONVERTING BASE64 DATA ===');
                 console.log('Challenge before conversion:', publicKey.challenge);
                 publicKey.challenge = b64ToBuf(publicKey.challenge);
@@ -629,11 +624,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 console.log('=== REQUESTING CREDENTIAL FROM AUTHENTICATOR ===');
                 
-                // Step 3: Get credential from authenticator
+                // Get credential from authenticator
                 const credential = await navigator.credentials.get({publicKey});
                 console.log('Credential received:', credential);
 
-                // Step 4: Send response to server
+                // Send response to server
                 console.log('=== SENDING RESPONSE TO SERVER ===');
                 const assertion = {
                     id: credential.id,

@@ -34,7 +34,8 @@ class User(UserMixin, db.Model):
     profile_pic_url = db.Column(db.String(255), nullable=True)
     banner_url = db.Column(db.String(255), nullable=True)
     bio = db.Column(db.Text, nullable=True)
-    current_status = db.Column(db.String(50), nullable=False, default='offline')
+    current_status = db.Column(db.Enum('online', 'offline', 'suspended', 'terminated'), 
+                              nullable=False, default='offline')
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_active_at = db.Column(db.DateTime, nullable=True)
@@ -87,7 +88,28 @@ class User(UserMixin, db.Model):
             if any(perm.permission_name == permission_name for perm in role.permissions):
                 return True
         return False
-
+    
+    def is_suspended(self):
+        """Check if user is suspended"""
+        return self.current_status == 'suspended'
+    
+    def is_terminated(self):
+        """Check if user is terminated"""
+        return self.current_status == 'terminated'
+    
+    def can_login(self):
+        """Check if user can log in"""
+        return self.current_status in ['online', 'offline']
+    
+    def get_status_display(self):
+        """Get human-readable status"""
+        status_map = {
+            'online': 'Online',
+            'offline': 'Offline', 
+            'suspended': 'Suspended',
+            'terminated': 'Terminated'
+        }
+        return status_map.get(self.current_status, self.current_status.title())
     def __repr__(self):
         return f"<User {self.username}>"
 
@@ -272,7 +294,7 @@ class Notification(db.Model):
     
     notification_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
-    type = db.Column(db.String(50), nullable=False)  # ✅ Changed from smaller size to 50
+    type = db.Column(db.String(50), nullable=False)  
     source_id = db.Column(db.Integer, nullable=True)
     message = db.Column(db.Text, nullable=False)
     is_read = db.Column(db.Boolean, default=False, nullable=False)
@@ -325,6 +347,7 @@ class ChatParticipant(db.Model):
     chat_id = db.Column(db.Integer, db.ForeignKey('chats.chat_id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     cleared_at = db.Column(db.DateTime, nullable=True)
+    is_in_chat = db.Column(db.Boolean, nullable=False, default=True)
     __table_args__ = (db.UniqueConstraint('chat_id', 'user_id', name='_chat_user_uc'),)
 
     def __repr__(self):
@@ -353,6 +376,50 @@ class Message(db.Model):
 
     def __repr__(self):
         return f"<Message {self.message_id} in Chat:{self.chat_id} from User:{self.sender_id}>"
+    
+class BlockedUser(db.Model):
+    __tablename__ = 'blocked_users'
+    id = db.Column(db.Integer, primary_key=True)
+    blocker_id = db.Column(db.Integer, db.ForeignKey('users.user_id', ondelete='CASCADE'), nullable=False)
+    blocked_id = db.Column(db.Integer, db.ForeignKey('users.user_id', ondelete='CASCADE'), nullable=False)
+    chat_id = db.Column(db.Integer, db.ForeignKey('chats.chat_id', ondelete='SET NULL'), nullable=True)
+    reason = db.Column(db.String(255), nullable=True)
+    active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    removed_at = db.Column(db.DateTime, nullable=True)
+
+    # relationships (optional, helpful in ORM usage)
+    blocker = db.relationship('User', foreign_keys=[blocker_id], backref=db.backref('blocks_made', lazy='dynamic'))
+    blocked = db.relationship('User', foreign_keys=[blocked_id], backref=db.backref('blocks_received', lazy='dynamic'))
+    chat = db.relationship('Chat', foreign_keys=[chat_id])
+
+    __table_args__ = (
+        db.UniqueConstraint('blocker_id', 'blocked_id', name='uq_blocker_blocked'),
+    )
+
+class UserPublicKey(db.Model):
+    __tablename__ = 'user_public_keys'
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), primary_key=True)
+    alg = db.Column(db.String(32), nullable=False, default='P-256')
+    public_key_spki_b64 = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = db.relationship('User', backref=db.backref('public_key', uselist=False))
+
+class ChatKeyEnvelope(db.Model):
+    __tablename__ = 'chat_key_envelopes'
+    id = db.Column(db.Integer, primary_key=True)
+    chat_id = db.Column(db.Integer, db.ForeignKey('chats.chat_id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    key_version = db.Column(db.Integer, nullable=False, default=1)
+    envelope_b64 = db.Column(db.Text, nullable=False)  # chat key encrypted to this user’s public key (base64)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('chat_id', 'user_id', 'key_version', name='uq_chat_user_version'),
+    )
 
 # **************************************
 # 8. Friend System

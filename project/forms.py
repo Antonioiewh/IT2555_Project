@@ -4,7 +4,7 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField, IntegerField,SelectField,TextAreaField,HiddenField
 from wtforms.validators import DataRequired, Length, Email, EqualTo,ValidationError, Optional
 from flask_wtf.file import FileField, FileAllowed, FileRequired
-from flask_wtf.recaptcha import RecaptchaField # Import RecaptchaField
+from flask_wtf.recaptcha import RecaptchaField 
 from wtforms.fields import DateTimeLocalField, BooleanField
 import re
 
@@ -154,9 +154,6 @@ class EventForm(FlaskForm):
     event_description = TextAreaField('Description', validators=[DataRequired(), Length(min=10, max=1000)])
     event_location = StringField('Location', validators=[DataRequired(), Length(min=5, max=200)])
     event_start_time = DateTimeLocalField('Start Time', validators=[DataRequired()], format='%Y-%m-%dT%H:%M')
-    event_end_time = DateTimeLocalField('End Time', validators=[DataRequired()], format='%Y-%m-%dT%H:%M')
-    max_participants = IntegerField('Max Participants', validators=[DataRequired()], default=50)
-    is_public = BooleanField('Public Event', default=True)
     recaptcha = RecaptchaField()
     submit = SubmitField('Create Event')
 

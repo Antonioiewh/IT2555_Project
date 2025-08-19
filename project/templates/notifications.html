@@ -503,7 +503,6 @@
     color: #ff9800;
 }
 
-/* Notification item type-specific styling */
 .google-notification-item.notification-friend-request .google-notification-icon {
     background: #e8f0fe;
     color: #4285f4;
@@ -529,7 +528,6 @@
     color: #ff9800;
 }
 
-/* Responsive Design */
 @media (max-width: 768px) {
     .google-main {
         padding: 20px 16px;
@@ -610,6 +608,9 @@
         padding: 60px 20px;
     }
 }
+
+
+
 </style>
 
 <div class="google-container">
@@ -679,7 +680,7 @@
                                     <span class="material-icons google-dropdown-item-icon notification-message">message</span>
                                     <span class="google-dropdown-item-text">Messages</span>
                                 </div>
-                                <span class="google-dropdown-item-count">{{ message_notifs|length if message_notifs else 0 }}</span>
+                                <span class="google-dropdown-item-count">{{ message_unread_count or 0 }}</span>
                             </div>
                             
                             <div class="google-dropdown-item" onclick="selectNotificationType('post_activity', 'Post Activity', 'favorite', 0)" data-type="post_activity">
@@ -834,42 +835,34 @@
 
                 <!-- Message Notifications Tab -->
                 <div id="tab-message" class="google-tab-content">
-                    {% if message_notifs %}
-                        {% for notification in message_notifs %}
-                            <div class="google-notification-item notification-message {% if not notification.is_read %}unread{% endif %}" 
-                                 data-notification-id="{{ notification.notification_id }}">
-                                <div class="google-notification-icon">
-                                    <span class="material-icons">message</span>
-                                </div>
+                    {% if message_stacks %}
+                        {% for it in message_stacks %}
+                            <div class="google-notification-item notification-message unread">
+                                <div class="google-notification-icon"><span class="material-icons">message</span></div>
                                 <div class="google-notification-content">
                                     <div class="google-notification-title">
-                                        New Message
+                                        {{ it.sender_username }}
+                                        <span class="google-dropdown-count" style="margin-left:8px;">{{ it.count }}</span>
                                     </div>
-                                    <div class="google-notification-message">
-                                        {{ notification.message }}
-                                    </div>
+                                    <div class="google-notification-message">{{ it.latest_message or 'New message' }}</div>
                                     <div class="google-notification-meta">
-                                        <span>{{ notification.created_at.strftime('%B %d, %Y at %I:%M %p') }}</span>
-                                        {% if not notification.is_read %}
-                                            <span style="color: #34a853; font-weight: 500;">• New</span>
-                                        {% endif %}
+                                        <span>{{ it.latest_created_at }}</span>
+                                        <span style="color:#34a853;font-weight:500;">• New</span>
                                     </div>
                                     <div class="google-notification-actions">
-                                        <button onclick="deleteNotification({{ notification.notification_id }})" class="google-btn google-btn-delete google-btn-small">
-                                            <span class="material-icons" style="font-size: 16px;">delete</span>
-                                            Delete
-                                        </button>
+                                        <a href="{{ url_for('messages') }}?friend_id={{ it.sender_user_id }}" class="google-btn google-btn-primary google-btn-small">
+                                            <span class="material-icons" style="font-size:16px;">chat</span>
+                                            Open chat
+                                        </a>
                                     </div>
                                 </div>
                             </div>
                         {% endfor %}
                     {% else %}
                         <div class="google-empty-state">
-                            <div class="google-empty-icon">
-                                <span class="material-icons" style="font-size: inherit;">message</span>
-                            </div>
+                            <div class="google-empty-icon"><span class="material-icons" style="font-size: inherit;">message</span></div>
                             <h3 class="google-empty-title">No message notifications</h3>
-                            <p class="google-empty-subtitle">Message notifications will appear here when implemented.</p>
+                            <p class="google-empty-subtitle">Messages will appear here.</p>
                         </div>
                     {% endif %}
                 </div>
@@ -1261,7 +1254,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Set initial counts (removed admin notification count)
     const friendRequestCount = {{ friend_request_notifs|length if friend_request_notifs else 0 }};
     const eventNotifCount = {{ event_notifs|length if event_notifs else 0 }};
-    const messageCount = {{ message_notifs|length if message_notifs else 0 }};
+    const messageCount = {{ message_unread_count or 0 }};
     const postActivityCount = {{ post_activity_notifs|length if post_activity_notifs else 0 }};
     const reportStatusCount = {{ report_status_notifs|length if report_status_notifs else 0 }};
     

@@ -387,7 +387,6 @@
     }
 }
 
-/* Accessibility improvements */
 @media (prefers-reduced-motion: reduce) {
     * {
         animation-duration: 0.01ms !important;
@@ -457,10 +456,7 @@
 {% endblock %}
 
 {% block scripts %}
-<!-- Include the parent scripts first for sidebar functionality -->
 {{ super() }}
-
-<!-- Create post specific JavaScript -->
 <script>
 // Configuration
 const CONFIG = {

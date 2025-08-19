@@ -294,7 +294,7 @@ class Notification(db.Model):
     
     notification_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
-    type = db.Column(db.String(50), nullable=False)  # ✅ Changed from smaller size to 50
+    type = db.Column(db.String(50), nullable=False)  
     source_id = db.Column(db.Integer, nullable=True)
     message = db.Column(db.Text, nullable=False)
     is_read = db.Column(db.Boolean, default=False, nullable=False)

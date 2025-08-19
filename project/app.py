@@ -27,6 +27,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicNumbers, SECP256R1
+
 # -- profile imports --
 import imghdr
 import bleach
@@ -105,8 +106,8 @@ from message_validator import validate_attachment, save_attachment
 # Flask app configuration
 app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
-app.config['RECAPTCHA_PUBLIC_KEY'] = '6LefCKcrAAAAAK-REXMG_5i6aqTW_ewYwRbEecB6'
-app.config['RECAPTCHA_PRIVATE_KEY'] = '6LefCKcrAAAAAGaO2Rac8zgqVqhjsy9oxp31fThl' #this in .env!
+app.config['RECAPTCHA_PUBLIC_KEY'] = os.getenv('RECAPTCHA_PUBLIC_KEY')
+app.config['RECAPTCHA_PRIVATE_KEY'] = os.getenv('RECAPTCHA_PRIVATE_KEY')
 app.config['GOOGLE_MAPS_API_KEY'] = os.getenv('GOOGLE_MAPS_API_KEY')
 
 
@@ -114,7 +115,7 @@ app.config['GOOGLE_MAPS_API_KEY'] = os.getenv('GOOGLE_MAPS_API_KEY')
 DB_USER = os.getenv('MYSQL_USER', 'flaskuser')
 DB_PASSWORD = os.getenv('MYSQL_PASSWORD', 'password')
 DB_NAME = os.getenv('MYSQL_DATABASE', 'flaskdb')
-DB_HOST = os.getenv('MYSQL_HOST', 'mysql')  # 'mysql' is the service name in docker-compose
+DB_HOST = os.getenv('MYSQL_HOST', 'mysql') 
 app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 CONTAINER_ID = os.environ.get('HOSTNAME', socket.gethostname())
@@ -763,7 +764,7 @@ def login():
                     user.last_active_at = datetime.utcnow()
                     db.session.commit()
 
-                    # ✅ Send event reminders on login
+                    # Send event reminders on login
                     send_user_event_reminders(user.user_id)
 
                     log_user_login_success(user.user_id, details=f"User logged in successfully with password only from host: {session['bound_hostname']}")
@@ -1653,7 +1654,7 @@ def report_user():
                 return redirect(url_for('login'))
             
             new_report = Report(
-                reporter_id=current_user.user_id,  # ✅ This must not be NULL
+                reporter_id=current_user.user_id, 
                 reported_user_id=reported_user.user_id,
                 report_type=form.report_type.data,
                 description=form.description.data,
@@ -1677,7 +1678,7 @@ def report_user():
             
             db.session.commit()
             
-            app.logger.info(f"✅ Report #{new_report.report_id} created successfully with notification")
+            app.logger.info(f"Report #{new_report.report_id} created successfully with notification")
             
             report_submitted = True
             reported_username = reported_user.username
@@ -4295,7 +4296,7 @@ def delete_event(event_id):
         for participant in participants:
             notif = Notification(
                 user_id=participant.user_id,
-                type='event_notification',  # ✅ Standardized type
+                type='event_notification',  
                 source_id=event_id,
                 message=f"The event '{event.title}' you joined has been cancelled.",
                 created_at=datetime.utcnow(),
@@ -4337,14 +4338,14 @@ def send_event_reminders():
         # Notify event creator
         creator_notif_exists = Notification.query.filter_by(
             user_id=event.user_id,
-            type='event_notification',  # ✅ Standardized type
+            type='event_notification',  
             source_id=event.event_id
         ).filter(Notification.message.like(f"%Your event '{event.title}' is happening tomorrow%")).first()
         
         if not creator_notif_exists:
             creator_notif = Notification(
                 user_id=event.user_id,
-                type='event_notification',  # ✅ Standardized type
+                type='event_notification',  
                 source_id=event.event_id,
                 message=f"Reminder: Your event '{event.title}' is happening tomorrow!",
                 created_at=datetime.utcnow(),
@@ -4361,14 +4362,14 @@ def send_event_reminders():
         for participant in participants:
             participant_notif_exists = Notification.query.filter_by(
                 user_id=participant.user_id,
-                type='event_notification',  # ✅ Standardized type
+                type='event_notification',  
                 source_id=event.event_id
             ).filter(Notification.message.like(f"%'{event.title}' you joined is happening tomorrow%")).first()
             
             if not participant_notif_exists:
                 participant_notif = Notification(
                     user_id=participant.user_id,
-                    type='event_notification',  # ✅ Standardized type
+                    type='event_notification',  
                     source_id=event.event_id,
                     message=f"Reminder: '{event.title}' you joined is happening tomorrow!",
                     created_at=datetime.utcnow(),
@@ -4418,7 +4419,7 @@ def send_user_event_reminders(user_id):
                 source_id=event.event_id
             ).filter(
                 Notification.message.like(f"%Your event '{event.title}' is happening%"),
-                Notification.created_at >= now - timedelta(hours=1)  # Don't spam - only if no recent reminder
+                Notification.created_at >= now - timedelta(hours=1) 
             ).first()
             
             if not existing_notif:

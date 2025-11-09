@@ -127,6 +127,7 @@ ALLOWED_SESSION_DOMAINS = [
     'glowing-briefly-cicada.ngrok-free.app'
 ]
 
+
 @app.before_request
 def set_session_domain():
     """Dynamically set session cookie domain based on request host"""
@@ -4478,8 +4479,145 @@ def send_user_event_reminders(user_id):
         print(f"Error sending user event reminders: {e}")
         db.session.rollback()
 
+class DatabaseHA:
+    def __init__(self, orchestrator_url="http://orchestrator:3000"):
+        self.orchestrator_url = orchestrator_url
+        
+    def get_master_host(self, cluster_alias="main"):
+        """Get current master from orchestrator"""
+        try:
+            response = requests.get(f"{self.orchestrator_url}/api/cluster-info/{cluster_alias}")
+            if response.status_code == 200:
+                data = response.json()
+                for instance in data:
+                    if instance.get('IsMaster', False):
+                        return instance.get('Key', {}).get('Hostname', 'mysql')
+            return 'mysql'  # fallback
+        except:
+            return 'mysql'  # fallback
+    
+    def get_replica_hosts(self, cluster_alias="main"):
+        """Get available replicas from orchestrator"""
+        try:
+            response = requests.get(f"{self.orchestrator_url}/api/cluster-info/{cluster_alias}")
+            if response.status_code == 200:
+                data = response.json()
+                replicas = []
+                for instance in data:
+                    if not instance.get('IsMaster', False) and instance.get('IsLastCheckValid', False):
+                        replicas.append(instance.get('Key', {}).get('Hostname'))
+                return replicas
+            return []
+        except:
+            return []
 
+# Initialize HA manager
+db_ha = DatabaseHA()
 
+def with_db_failover(func):
+    """Decorator to handle database failover"""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            if "lost connection" in str(e).lower() or "can't connect" in str(e).lower():
+                # Trigger orchestrator to check topology
+                try:
+                    requests.post(f"{db_ha.orchestrator_url}/api/discover/mysql/{db_ha.get_master_host()}/3306")
+                except:
+                    pass
+                # Update database URI if needed
+                new_master = db_ha.get_master_host()
+                if new_master != 'mysql':
+                    app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace('mysql', new_master)
+                    db.session.remove()
+                    db.create_all()
+                # Retry the operation
+                return func(*args, **kwargs)
+            raise e
+    return wrapper
+
+# Apply to critical routes
+@app.route('/api/health')
+@with_db_failover
+def health_check():
+    """Health check endpoint with HA support"""
+    try:
+        # Test database connection
+        db.session.execute('SELECT 1')
+        master_host = db_ha.get_master_host()
+        replicas = db_ha.get_replica_hosts()
+        
+        return jsonify({
+            'status': 'healthy',
+            'database': {
+                'master': master_host,
+                'replicas': replicas,
+                'connection': 'ok'
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e)
+        }), 500
+@app.route('/api/db-health')
+def db_health():
+    """Database health check endpoint"""
+    try:
+        # Test database connection
+        result = db.session.execute(text('SELECT 1')).scalar()
+        if result == 1:
+            return jsonify({
+                'status': 'healthy',
+                'database': 'mysql',
+                'connection': 'ok',
+                'timestamp': datetime.now().isoformat()
+            })
+        else:
+            raise Exception('Unexpected result from health check query')
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
+@app.route('/api/system-health')
+def system_health():
+    """Complete system health check"""
+    health_status = {
+        'database': 'unknown',
+        'redis': 'unknown',
+        'overall': 'unknown'
+    }
+    
+    try:
+        # Check database
+        db.session.execute(text('SELECT 1')).scalar()
+        health_status['database'] = 'healthy'
+    except:
+        health_status['database'] = 'unhealthy'
+    
+    try:
+        # Check Redis if you're using it
+        import redis
+        r = redis.Redis(host='redis', port=6379, db=0)
+        r.ping()
+        health_status['redis'] = 'healthy'
+    except:
+        health_status['redis'] = 'unhealthy'
+    
+    # Determine overall health
+    if health_status['database'] == 'healthy' and health_status['redis'] == 'healthy':
+        health_status['overall'] = 'healthy'
+        status_code = 200
+    else:
+        health_status['overall'] = 'degraded'
+        status_code = 503
+    
+    return jsonify(health_status), status_code
 # Initialize scheduler for event reminders
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=send_event_reminders, trigger="interval", hours=24)

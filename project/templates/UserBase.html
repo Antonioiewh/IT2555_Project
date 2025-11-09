@@ -592,7 +592,7 @@
                     <div class="nav-section-title">Administration</div>
                     
                     <div class="nav-item">
-                        <a href="/users_dashboard" class="nav-link-google">
+                        <a href="/admin/users_dashboard" class="nav-link-google">
                             <i class="bi bi-people nav-icon"></i>
                             Manage users
                         </a>
@@ -609,15 +609,15 @@
                         </button>
                         <div class="collapse" id="logsCollapse">
                             <div class="nested-nav">
-                                <a href="/manage_ModSecLogs" class="nav-link-google">
+                                <a href="/admin/manage_ModSecLogs" class="nav-link-google">
                                     <i class="bi bi-shield-lock nav-icon"></i>
                                     ModSec Logs
                                 </a>
-                                <a href="/manage_ErrorLogs" class="nav-link-google">
+                                <a href="/admin/manage_ErrorLogs" class="nav-link-google">
                                     <i class="bi bi-exclamation-circle nav-icon"></i>
                                     Error Logs
                                 </a>
-                                <a href="/manage_UserActions" class="nav-link-google">
+                                <a href="/admin/manage_UserActions" class="nav-link-google">
                                     <i class="bi bi-person-lines-fill nav-icon"></i>
                                     User Logs
                                 </a>
@@ -626,7 +626,7 @@
                     </div>
                     
                     <div class="nav-item">
-                        <a href="/reports_dashboard" class="nav-link-google">
+                        <a href="/admin/reports_dashboard" class="nav-link-google">
                             <i class="bi bi-flag nav-icon"></i>
                             Manage reports
                         </a>
@@ -643,7 +643,7 @@
                     
                     <div class="nav-section-title">Security</div>
                     <div class="nav-item">
-                        <a href="{{ url_for('test_upload') }}" class="nav-link-google">
+                        <a href="{{ url_for('admin.test_upload') }}" class="nav-link-google">
                             <i class="bi bi-shield-check nav-icon"></i>
                             Security Test
                         </a>

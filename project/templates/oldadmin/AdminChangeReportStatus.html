@@ -501,7 +501,7 @@
                     Update Report Status
                 </h3>
                 
-                <form method="post" action="{{ url_for('manage_report', report_id=report.report_id) }}">
+                <form method="post" action="{{ url_for('admin.manage_report', report_id=report.report_id) }}">
                     {{ form.hidden_tag() }}
                     
                     <!-- Current Status Display -->
@@ -554,7 +554,7 @@
                     
                     <!-- Action Buttons -->
                     <div class="action-buttons">
-                        <a href="{{ url_for('manage_reports') }}" class="btn-secondary">
+                        <a href="{{ url_for('admin.manage_reports') }}" class="btn-secondary">
                             <i class="bi bi-arrow-left"></i>
                             Back to Reports
                         </a>
@@ -614,7 +614,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         if (e.key === 'Escape') {
-            window.location.href = "{{ url_for('manage_reports') }}";
+            window.location.href = "{{ url_for('admin.manage_reports') }}";
         }
     });
 });

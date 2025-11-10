@@ -126,7 +126,6 @@ def account_security():
 
 # --- User Reporting ---
 @user_bp.route('/report_user', methods=['GET', 'POST'])
-@login_required
 @user_required
 def report_user():
     form = ReportForm()
@@ -189,7 +188,7 @@ def report_user():
             current_app.logger.error(f"❌ Error creating report: {str(e)}")
             flash('An error occurred while submitting your report. Please try again.', 'error')
             
-    return render_template('user/UserReport.html',
+    return render_template('users/UserReport.html',
                           form=form,
                           report_submitted=report_submitted,
                           reported_username=reported_username)
@@ -243,3 +242,4 @@ def verify_2fa():
             flash('Invalid 2FA code. Please try again.', 'error')
     
     return render_template('UserVerify2FA.html', form=form)
+

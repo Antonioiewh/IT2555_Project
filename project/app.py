@@ -64,9 +64,8 @@ import cbor2
 # e.g. /admin/users_dashboard
 # NOTE: URL_FOR ->/<blueprint_prefix>.<orginal_route_function>
 # e.g. url_for('admin.users_dashboard')
-from admin import admin_bp
-# --- Custom Module Imports ---
 
+# --- Custom Module Imports ---
 
 # Models
 from models import (
@@ -103,90 +102,31 @@ from user_actions import (
 # Log parsing utilities
 from parse_test import parse_modsec_audit_log, parse_error_log
 
+# file validate
 from file_validate import validate_file_security, scan_upload
 
 #message validators
 from message_validator import validate_attachment, save_attachment
 
+# helper functions
+from functions import get_relative_time,b64encode_all,get_fido2_server,send_user_event_reminders
+from app_factory import create_app
+
 
 # --- Configuration ---
 # Flask app configuration
-app = Flask(__name__)
-app.config['TEMPLATES_AUTO_RELOAD'] = True
-app.config['RECAPTCHA_PUBLIC_KEY'] = os.getenv('RECAPTCHA_PUBLIC_KEY')
-app.config['RECAPTCHA_PRIVATE_KEY'] = os.getenv('RECAPTCHA_PRIVATE_KEY')
-app.config['GOOGLE_MAPS_API_KEY'] = os.getenv('GOOGLE_MAPS_API_KEY')
-
-
-# Database configuration
-DB_USER = os.getenv('MYSQL_USER', 'flaskuser')
-DB_PASSWORD = os.getenv('MYSQL_PASSWORD', 'password')
-DB_NAME = os.getenv('MYSQL_DATABASE', 'flaskdb')
-DB_HOST = os.getenv('MYSQL_HOST', 'mysql') 
-app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-CONTAINER_ID = os.environ.get('HOSTNAME', socket.gethostname())
-BASE_SECRET = os.getenv('SECRET_KEY', 'a_very_secret_key_for_dev')
-app.config['SECRET_KEY'] = f"{BASE_SECRET}-{CONTAINER_ID}"
-ALLOWED_SESSION_DOMAINS = [
-    'localhost',
-    '127.0.0.1',
-    'glowing-briefly-cicada.ngrok-free.app'
-]
-# BPS
-app.register_blueprint(admin_bp)
-
-@app.before_request
-def set_session_domain():
-    """Dynamically set session cookie domain based on request host"""
-    host = request.headers.get('Host', '').lower()
-    
-    # Remove port from host (localhost:5000 -> localhost)
-    if ':' in host:
-        host = host.split(':')[0]
-    
-    # Check if host is in allowed domains
-    if host in ALLOWED_SESSION_DOMAINS:
-        app.config['SESSION_COOKIE_DOMAIN'] = host
-    else:
-        # Default to localhost for unknown domains
-        app.config['SESSION_COOKIE_DOMAIN'] = 'localhost'
-# CHANGE FOR DOMAIN
-app.config['SESSION_COOKIE_SECURE'] = True  # Set to True with HTTPS
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # Changed from 'Lax' to 'Strict'
-app.config['SESSION_PERMANENT'] = False
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
-app.config['SESSION_COOKIE_NAME'] = f'session_{CONTAINER_ID}'
-
-
-REDIS_URL = os.getenv('REDIS_URL', 'redis://redis:6379/0')
-# -- img -- uploads
-app.config['UPLOAD_FOLDER'] = 'static/uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-
-# Initialize database
-db.init_app(app)
-
-# Socket.IO configuration - NEED ADD DOMAIN WHEN USE - MESSAGE
-socketio = SocketIO(app, cors_allowed_origins=[
-    "http://localhost",
-    "https://localhost",
-    "http://127.0.0.1",
-    "https://127.0.0.1",
-    "https://glowing-briefly-cicada.ngrok-free.app"
-],  
-message_queue=REDIS_URL,     # <— important when running >1 instance
-ping_interval=25,
-ping_timeout=60 )
-
+app = create_app()
+socketio = app.socketio
 connected_sids = {}  # { user_id: set([sid, ...]) }
 
+
+# socketio events
 @socketio.on('connect')
 def on_connect():
     if getattr(current_user, 'is_authenticated', False):
         connected_sids.setdefault(current_user.user_id, set()).add(request.sid)
         print(f"Socket connected user {current_user.user_id} sid {request.sid}")
+
 
 @socketio.on('disconnect')
 def on_disconnect():
@@ -208,12 +148,7 @@ def emit_to_user(user_id, event, payload):
         except Exception:
             continue
 
-# No longer used!
-def allowed_file(filename):
-    """Check if file extension is allowed"""
-    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 
 # CSRF protection
@@ -223,8 +158,9 @@ csrf = CSRFProtect(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'  # Redirect to login if user not authenticated
 
-
-#CHANGE FOR DOMAIN - before request
+# BEFORE REQ FUNCS
+# CHANGE FOR DOMAIN - before request
+# note: seriously tho why is this here
 @app.before_request
 def validate_host():
     """STRICTLY enforce only exact localhost hostname"""
@@ -298,6 +234,7 @@ def check_session_timeout():
                 flash('Session expired - please log in again', 'info')
                 return redirect(url_for('login'))
             
+
 # -- Return container ID to templates --
 @app.context_processor
 def inject_container_id():
@@ -319,81 +256,11 @@ def google_maps_api_key():
 
 
 
-# Replace both b64encode_all function definitions with this single improved version:
-def b64encode_all(data, _seen=None):
-    """Recursively encode all bytes objects in a data structure to base64 strings with recursion protection"""
-    if _seen is None:
-        _seen = set()
-    
-    # Prevent infinite recursion by tracking objects we've already seen
-    obj_id = id(data)
-    if obj_id in _seen:
-        return str(data)  # Return string representation if we've seen this object before
-    
-    if isinstance(data, bytes):
-        return base64.b64encode(data).decode('utf-8')
-    elif isinstance(data, dict):
-        _seen.add(obj_id)
-        result = {}
-        try:
-            for key, value in data.items():
-                result[key] = b64encode_all(value, _seen)
-        finally:
-            _seen.discard(obj_id)
-        return result
-    elif isinstance(data, list):
-        _seen.add(obj_id)
-        result = []
-        try:
-            for item in data:
-                result.append(b64encode_all(item, _seen))
-        finally:
-            _seen.discard(obj_id)
-        return result
-    elif hasattr(data, 'value') and not isinstance(data, type):
-        # Handle enum-like objects
-        try:
-            return str(data.value)
-        except:
-            return str(data)
-    elif hasattr(data, '__dict__') and not isinstance(data, type):
-        # Handle objects with attributes, but with recursion protection
-        _seen.add(obj_id)
-        try:
-            obj_dict = {}
-            # Limit the attributes we process to avoid complex internal objects
-            safe_attrs = []
-            for attr_name in dir(data):
-                if (not attr_name.startswith('_') and 
-                    not callable(getattr(data, attr_name, None)) and
-                    attr_name not in ['__class__', '__module__', '__dict__', '__weakref__']):
-                    safe_attrs.append(attr_name)
-                    if len(safe_attrs) > 20:  # Limit to prevent excessive processing
-                        break
-            
-            for attr_name in safe_attrs:
-                try:
-                    attr_value = getattr(data, attr_name)
-                    obj_dict[attr_name] = b64encode_all(attr_value, _seen)
-                except Exception:
-                    # Skip attributes that can't be accessed or converted
-                    continue
-            return obj_dict
-        except Exception:
-            return str(data)
-        finally:
-            _seen.discard(obj_id)
-    else:
-        return data
+
 
 # -- Fido2 WebAuthn Server Setup --
+# in functions.py
 
-def get_fido2_server():
-    from flask import request
-    rp_id = request.host.split(':')[0]
-    rp_name = "SimpleBook"
-    rp = PublicKeyCredentialRpEntity(rp_id, rp_name)
-    return Fido2Server(rp)
 
 
 
@@ -401,37 +268,6 @@ def get_fido2_server():
 # --- login,signup,home ---
 
 # Helper function for relative time
-def get_relative_time(post_date):
-    from datetime import datetime, timezone
-    import math
-    
-    now = datetime.now(timezone.utc)
-    if post_date.tzinfo is None:
-        post_date = post_date.replace(tzinfo=timezone.utc)
-    
-    diff = now - post_date
-    
-    if diff.days > 0:
-        if diff.days == 1:
-            return "1 day ago"
-        elif diff.days < 7:
-            return f"{diff.days} days ago"
-        elif diff.days < 30:
-            weeks = diff.days // 7
-            return f"{weeks} week{'s' if weeks > 1 else ''} ago"
-        else:
-            months = diff.days // 30
-            return f"{months} month{'s' if months > 1 else ''} ago"
-    
-    hours = diff.seconds // 3600
-    if hours > 0:
-        return f"{hours} hour{'s' if hours > 1 else ''} ago"
-    
-    minutes = diff.seconds // 60
-    if minutes > 0:
-        return f"{minutes} minute{'s' if minutes > 1 else ''} ago"
-    
-    return "Just now"
 
 
 # load posts
@@ -628,7 +464,7 @@ def home():
                 'content': post.post_content,
                 'image_url': image_url,
                 'date': post.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-                'relative_date': get_relative_time(post.created_at),
+                'relative_date': get_relative_time(post.created_at), # imported from functions.py
                 'user': {
                     'user_id': post.user.user_id,
                     'username': post.user.username,
@@ -749,12 +585,12 @@ def login():
                         # If they reach here via normal form submission, proceed to 2FA as fallback
                         session['pending_2fa_user_id'] = user.user_id
                         session['login_method'] = 'password_fallback_from_passkey'
-                        return redirect(url_for('verify_2fa'))
+                        return redirect(url_for('user.verify_2fa'))
                     else:
                         # User has only 2FA - redirect to 2FA page
                         session['pending_2fa_user_id'] = user.user_id
                         session['login_method'] = 'password'
-                        return redirect(url_for('verify_2fa'))
+                        return redirect(url_for('user.verify_2fa'))
                 else:
                     # User has no 2FA - direct login
                     user.failed_login_attempts = 0
@@ -861,54 +697,7 @@ def signup():
 
     return render_template('UserSignup.html', form=form)
 
-@app.route('/verify_2fa', methods=['GET', 'POST'])
-def verify_2fa():
-    
-    if 'pending_2fa_user_id' not in session:
-        return redirect(url_for('login'))
-
-    user = User.query.get(session['pending_2fa_user_id'])
-    if not user or not user.totp_secret:
-        return redirect(url_for('login'))
-
-    form = Enable2FAForm()
-    if form.validate_on_submit():
-        code = form.totp_code.data
-        totp = pyotp.TOTP(user.totp_secret)
-        if totp.verify(code):
-            # Clear failed login attempts and lockout
-            user.failed_login_attempts = 0
-            user.lockout_until = None
-            
-            # SECURE SESSION SETUP
-            session.permanent = False
-            session['user_ip'] = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
-            session['session_created'] = datetime.utcnow().isoformat()
-            session['container_id'] = socket.gethostname()
-            
-            # Update user status to online and last active time
-            user.current_status = 'online'
-            user.last_active_at = datetime.utcnow()
-            
-            login_user(user)
-            session.pop('pending_2fa_user_id', None)
-            session.pop('login_method', None)  # Clean up login method too
-            
-            # Commit all user updates
-            db.session.commit()
-            
-            # Send event reminders on login
-            send_user_event_reminders(user.user_id)
-            
-            # Log successful 2FA login
-            log_user_login_success(user.user_id, details="User logged in successfully with 2FA.")
-            
-            next_page = request.args.get('next')
-            return redirect(next_page or url_for('home'))
-        else:
-            flash('Invalid 2FA code. Please try again.', 'error')
-    
-    return render_template('UserVerify2FA.html', form=form)
+#verify 2fa in
 
 @app.route('/check_user_auth_methods', methods=['POST'])
 @csrf.exempt
@@ -936,23 +725,7 @@ def check_user_auth_methods():
         print(f"Error checking user auth methods: {e}")
         return jsonify({"has_2fa": False, "has_passkeys": False})
 
-# -- User security management --
-@app.route('/account_security', methods=['GET', 'POST'])
-@user_required
-def account_security():
-    has_2fa = bool(current_user.totp_secret)
-    
-    # Get user's passkeys
-    user_passkeys = WebAuthnCredential.query.filter_by(user_id=current_user.user_id).all()
-    
-    form = Disable2FAForm()
-    form1 = RemovePassKeyForm()
-    
-    return render_template('UserAccountSecurity.html', 
-                         has_2fa=has_2fa, 
-                         form=form, 
-                         form1=form1,
-                         user_passkeys=user_passkeys)
+
 
 @app.route('/enable_2fa', methods=['GET', 'POST'])
 @user_required
@@ -982,7 +755,7 @@ def enable_2fa():
             current_user.totp_secret = totp_secret
             db.session.commit()
             session.pop('pending_totp_secret', None)  # Remove from session
-            return redirect(url_for('account_security'))
+            return redirect(url_for('user.account_security'))
     return render_template('UserEnable2FA.html', qr_b64=qr_b64, secret=totp_secret, form=form)
 
 @app.route('/disable_2fa', methods=['POST'])
@@ -992,7 +765,7 @@ def disable_2fa():
     if form.validate_on_submit():
         current_user.totp_secret = None
         db.session.commit()
-        return redirect(url_for('account_security'))
+        return redirect(url_for('user.account_security'))
     return render_template('UserDisable2FA.html', form=form)
 
 
@@ -1116,7 +889,7 @@ def remove_passkey(cred_id):
 
     else:
         pass
-    return redirect(url_for('account_security'))
+    return redirect(url_for('user.account_security'))
 
 # --- Passkey when logging in ---
 @app.route('/passkey/begin_login', methods=['POST'])
@@ -1388,7 +1161,6 @@ def passkey_finish_login():
         return jsonify({"error": f"Failed to complete passkey authentication: {str(e)}"}), 500
 
 # --- change password ---
-
 @app.route('/change_password', methods=['GET', 'POST'])
 @login_required
 def change_password():
@@ -1446,7 +1218,7 @@ def change_password():
                     pass
                 
                 flash('Password changed successfully!', 'success')
-                return redirect(url_for('account_security'))
+                return redirect(url_for('user.account_security'))
                 
             except Exception as e:
                 db.session.rollback()
@@ -1634,74 +1406,7 @@ def begin_passkey_auth_for_password_change():
 
 
 # --- User Reporting ---
-@app.route('/report_user', methods=['GET', 'POST'])
-@login_required
-@user_required
-def report_user():
-    form = ReportForm()
-    report_submitted = False
-    reported_username = None
-
-    # this is name fill for report user from message should not cause issue.
-    if request.method == 'GET':
-        q_username = request.args.get('username')
-        if q_username:
-            form.reported_username.data = q_username
-
-    if form.validate_on_submit():
-        try:
-            # Lookup user by username
-            reported_user = User.query.filter_by(username=form.reported_username.data).first()
-            if not reported_user:
-                flash('User not found.', 'error')
-                return render_template('UserReport.html', form=form, report_submitted=False, reported_username=None)
-            
-            # FIXED: Ensure reporter_id is always set
-            if not current_user.user_id:
-                app.logger.error("Current user has no user_id - this should not happen")
-                flash('Authentication error. Please log in again.', 'error')
-                return redirect(url_for('login'))
-            
-            new_report = Report(
-                reporter_id=current_user.user_id, 
-                reported_user_id=reported_user.user_id,
-                report_type=form.report_type.data,
-                description=form.description.data,
-                submitted_at=datetime.utcnow(),
-                status='open'
-            )
-            db.session.add(new_report)
-            db.session.flush()  # Get the report_id
-            
-            app.logger.info(f"📝 Creating report - Reporter: {current_user.user_id}, Reported: {reported_user.user_id}, Report ID: {new_report.report_id}")
-            
-            submission_notification = Notification(
-                user_id=current_user.user_id,  # Notify the reporter
-                type='report_status',
-                source_id=new_report.report_id,
-                message=f"Your report #{new_report.report_id} against {reported_user.username} has been submitted and is being reviewed.",
-                created_at=datetime.utcnow(),
-                is_read=False
-            )
-            db.session.add(submission_notification)
-            
-            db.session.commit()
-            
-            app.logger.info(f"Report #{new_report.report_id} created successfully with notification")
-            
-            report_submitted = True
-            reported_username = reported_user.username
-            form = ReportForm()  # Reset form
-            
-        except Exception as e:
-            db.session.rollback()
-            app.logger.error(f"❌ Error creating report: {str(e)}")
-            flash('An error occurred while submitting your report. Please try again.', 'error')
-            
-    return render_template('UserReport.html',
-                          form=form,
-                          report_submitted=report_submitted,
-                          reported_username=reported_username)
+# in user.py
 
 # -- User friends management --
 @app.route('/UserFriends')

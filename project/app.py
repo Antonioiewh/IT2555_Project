@@ -59,8 +59,13 @@ from fido2.client import ClientData
 from fido2.ctap2 import AuthenticatorData
 import cbor2
 
-# --- Custom Module Imports ---
+# IMPORTANT FOR ROUTES
+# NOTE: HREF -> /<prefix>/<orginal_route>
+# e.g. /admin/users_dashboard
+# NOTE: URL_FOR ->/<blueprint_prefix>.<orginal_route_function>
+# e.g. url_for('admin.users_dashboard')
 
+# --- Custom Module Imports ---
 
 # Models
 from models import (
@@ -68,6 +73,7 @@ from models import (
     Notification, Report, Chat, ChatParticipant, Message, 
     Friendship, AdminAction, UserLog, ModSecLog, ErrorLog, 
     WebAuthnCredential, user_role_assignments,Event,FriendChatMap,BlockedUser,UserPublicKey, ChatKeyEnvelope
+
 
 )
 from decorators import user_required, admin_required, editor_required, role_required, admin_or_editor_required
@@ -96,88 +102,31 @@ from user_actions import (
 # Log parsing utilities
 from parse_test import parse_modsec_audit_log, parse_error_log
 
+# file validate
 from file_validate import validate_file_security, scan_upload
 
 #message validators
 from message_validator import validate_attachment, save_attachment
 
+# helper functions
+from functions import get_relative_time,b64encode_all,get_fido2_server,send_user_event_reminders
+from app_factory import create_app
+
 
 # --- Configuration ---
 # Flask app configuration
-app = Flask(__name__)
-app.config['TEMPLATES_AUTO_RELOAD'] = True
-app.config['RECAPTCHA_PUBLIC_KEY'] = os.getenv('RECAPTCHA_PUBLIC_KEY')
-app.config['RECAPTCHA_PRIVATE_KEY'] = os.getenv('RECAPTCHA_PRIVATE_KEY')
-app.config['GOOGLE_MAPS_API_KEY'] = os.getenv('GOOGLE_MAPS_API_KEY')
-
-
-# Database configuration
-DB_USER = os.getenv('MYSQL_USER', 'flaskuser')
-DB_PASSWORD = os.getenv('MYSQL_PASSWORD', 'password')
-DB_NAME = os.getenv('MYSQL_DATABASE', 'flaskdb')
-DB_HOST = os.getenv('MYSQL_HOST', 'mysql') 
-app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-CONTAINER_ID = os.environ.get('HOSTNAME', socket.gethostname())
-BASE_SECRET = os.getenv('SECRET_KEY', 'a_very_secret_key_for_dev')
-app.config['SECRET_KEY'] = f"{BASE_SECRET}-{CONTAINER_ID}"
-ALLOWED_SESSION_DOMAINS = [
-    'localhost',
-    '127.0.0.1',
-    'glowing-briefly-cicada.ngrok-free.app'
-]
-
-@app.before_request
-def set_session_domain():
-    """Dynamically set session cookie domain based on request host"""
-    host = request.headers.get('Host', '').lower()
-    
-    # Remove port from host (localhost:5000 -> localhost)
-    if ':' in host:
-        host = host.split(':')[0]
-    
-    # Check if host is in allowed domains
-    if host in ALLOWED_SESSION_DOMAINS:
-        app.config['SESSION_COOKIE_DOMAIN'] = host
-    else:
-        # Default to localhost for unknown domains
-        app.config['SESSION_COOKIE_DOMAIN'] = 'localhost'
-# CHANGE FOR DOMAIN
-app.config['SESSION_COOKIE_SECURE'] = True  # Set to True with HTTPS
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # Changed from 'Lax' to 'Strict'
-app.config['SESSION_PERMANENT'] = False
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
-app.config['SESSION_COOKIE_NAME'] = f'session_{CONTAINER_ID}'
-
-
-REDIS_URL = os.getenv('REDIS_URL', 'redis://redis:6379/0')
-# -- img -- uploads
-app.config['UPLOAD_FOLDER'] = 'static/uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-
-# Initialize database
-db.init_app(app)
-
-# Socket.IO configuration - NEED ADD DOMAIN WHEN USE - MESSAGE
-socketio = SocketIO(app, cors_allowed_origins=[
-    "http://localhost",
-    "https://localhost",
-    "http://127.0.0.1",
-    "https://127.0.0.1",
-    "https://glowing-briefly-cicada.ngrok-free.app"
-],  
-message_queue=REDIS_URL,     # <— important when running >1 instance
-ping_interval=25,
-ping_timeout=60 )
-
+app = create_app()
+socketio = app.socketio
 connected_sids = {}  # { user_id: set([sid, ...]) }
 
+
+# socketio events
 @socketio.on('connect')
 def on_connect():
     if getattr(current_user, 'is_authenticated', False):
         connected_sids.setdefault(current_user.user_id, set()).add(request.sid)
         print(f"Socket connected user {current_user.user_id} sid {request.sid}")
+
 
 @socketio.on('disconnect')
 def on_disconnect():
@@ -199,12 +148,7 @@ def emit_to_user(user_id, event, payload):
         except Exception:
             continue
 
-# No longer used!
-def allowed_file(filename):
-    """Check if file extension is allowed"""
-    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 
 # CSRF protection
@@ -214,8 +158,9 @@ csrf = CSRFProtect(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'  # Redirect to login if user not authenticated
 
-
-#CHANGE FOR DOMAIN - before request
+# BEFORE REQ FUNCS
+# CHANGE FOR DOMAIN - before request
+# note: seriously tho why is this here
 @app.before_request
 def validate_host():
     """STRICTLY enforce only exact localhost hostname"""
@@ -289,6 +234,7 @@ def check_session_timeout():
                 flash('Session expired - please log in again', 'info')
                 return redirect(url_for('login'))
             
+
 # -- Return container ID to templates --
 @app.context_processor
 def inject_container_id():
@@ -309,121 +255,12 @@ def google_maps_api_key():
     return app.config.get('GOOGLE_MAPS_API_KEY')
 
 
-
-# Replace both b64encode_all function definitions with this single improved version:
-def b64encode_all(data, _seen=None):
-    """Recursively encode all bytes objects in a data structure to base64 strings with recursion protection"""
-    if _seen is None:
-        _seen = set()
-    
-    # Prevent infinite recursion by tracking objects we've already seen
-    obj_id = id(data)
-    if obj_id in _seen:
-        return str(data)  # Return string representation if we've seen this object before
-    
-    if isinstance(data, bytes):
-        return base64.b64encode(data).decode('utf-8')
-    elif isinstance(data, dict):
-        _seen.add(obj_id)
-        result = {}
-        try:
-            for key, value in data.items():
-                result[key] = b64encode_all(value, _seen)
-        finally:
-            _seen.discard(obj_id)
-        return result
-    elif isinstance(data, list):
-        _seen.add(obj_id)
-        result = []
-        try:
-            for item in data:
-                result.append(b64encode_all(item, _seen))
-        finally:
-            _seen.discard(obj_id)
-        return result
-    elif hasattr(data, 'value') and not isinstance(data, type):
-        # Handle enum-like objects
-        try:
-            return str(data.value)
-        except:
-            return str(data)
-    elif hasattr(data, '__dict__') and not isinstance(data, type):
-        # Handle objects with attributes, but with recursion protection
-        _seen.add(obj_id)
-        try:
-            obj_dict = {}
-            # Limit the attributes we process to avoid complex internal objects
-            safe_attrs = []
-            for attr_name in dir(data):
-                if (not attr_name.startswith('_') and 
-                    not callable(getattr(data, attr_name, None)) and
-                    attr_name not in ['__class__', '__module__', '__dict__', '__weakref__']):
-                    safe_attrs.append(attr_name)
-                    if len(safe_attrs) > 20:  # Limit to prevent excessive processing
-                        break
-            
-            for attr_name in safe_attrs:
-                try:
-                    attr_value = getattr(data, attr_name)
-                    obj_dict[attr_name] = b64encode_all(attr_value, _seen)
-                except Exception:
-                    # Skip attributes that can't be accessed or converted
-                    continue
-            return obj_dict
-        except Exception:
-            return str(data)
-        finally:
-            _seen.discard(obj_id)
-    else:
-        return data
-
 # -- Fido2 WebAuthn Server Setup --
-
-def get_fido2_server():
-    from flask import request
-    rp_id = request.host.split(':')[0]
-    rp_name = "SimpleBook"
-    rp = PublicKeyCredentialRpEntity(rp_id, rp_name)
-    return Fido2Server(rp)
-
-
+# in functions.py
 
 
 # --- login,signup,home ---
-
-# Helper function for relative time
-def get_relative_time(post_date):
-    from datetime import datetime, timezone
-    import math
-    
-    now = datetime.now(timezone.utc)
-    if post_date.tzinfo is None:
-        post_date = post_date.replace(tzinfo=timezone.utc)
-    
-    diff = now - post_date
-    
-    if diff.days > 0:
-        if diff.days == 1:
-            return "1 day ago"
-        elif diff.days < 7:
-            return f"{diff.days} days ago"
-        elif diff.days < 30:
-            weeks = diff.days // 7
-            return f"{weeks} week{'s' if weeks > 1 else ''} ago"
-        else:
-            months = diff.days // 30
-            return f"{months} month{'s' if months > 1 else ''} ago"
-    
-    hours = diff.seconds // 3600
-    if hours > 0:
-        return f"{hours} hour{'s' if hours > 1 else ''} ago"
-    
-    minutes = diff.seconds // 60
-    if minutes > 0:
-        return f"{minutes} minute{'s' if minutes > 1 else ''} ago"
-    
-    return "Just now"
-
+# Helper function for relative time in functions.py
 
 # load posts
 @app.route('/api/load_more_posts')
@@ -619,7 +456,7 @@ def home():
                 'content': post.post_content,
                 'image_url': image_url,
                 'date': post.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-                'relative_date': get_relative_time(post.created_at),
+                'relative_date': get_relative_time(post.created_at), # imported from functions.py
                 'user': {
                     'user_id': post.user.user_id,
                     'username': post.user.username,
@@ -635,7 +472,7 @@ def home():
         print(f"DEBUG: User post count: {current_user_post_count}")
         print(f"DEBUG: User friend count: {current_user_friend_count}")
         
-        return render_template('UserHome.html', 
+        return render_template('users/UserHome.html', 
                              posts=posts_data,
                              pagination=posts,
                              has_more=posts.has_next,
@@ -740,12 +577,12 @@ def login():
                         # If they reach here via normal form submission, proceed to 2FA as fallback
                         session['pending_2fa_user_id'] = user.user_id
                         session['login_method'] = 'password_fallback_from_passkey'
-                        return redirect(url_for('verify_2fa'))
+                        return redirect(url_for('user.verify_2fa'))
                     else:
                         # User has only 2FA - redirect to 2FA page
                         session['pending_2fa_user_id'] = user.user_id
                         session['login_method'] = 'password'
-                        return redirect(url_for('verify_2fa'))
+                        return redirect(url_for('user.verify_2fa'))
                 else:
                     # User has no 2FA - direct login
                     user.failed_login_attempts = 0
@@ -852,54 +689,7 @@ def signup():
 
     return render_template('UserSignup.html', form=form)
 
-@app.route('/verify_2fa', methods=['GET', 'POST'])
-def verify_2fa():
-    
-    if 'pending_2fa_user_id' not in session:
-        return redirect(url_for('login'))
-
-    user = User.query.get(session['pending_2fa_user_id'])
-    if not user or not user.totp_secret:
-        return redirect(url_for('login'))
-
-    form = Enable2FAForm()
-    if form.validate_on_submit():
-        code = form.totp_code.data
-        totp = pyotp.TOTP(user.totp_secret)
-        if totp.verify(code):
-            # Clear failed login attempts and lockout
-            user.failed_login_attempts = 0
-            user.lockout_until = None
-            
-            # SECURE SESSION SETUP
-            session.permanent = False
-            session['user_ip'] = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
-            session['session_created'] = datetime.utcnow().isoformat()
-            session['container_id'] = socket.gethostname()
-            
-            # Update user status to online and last active time
-            user.current_status = 'online'
-            user.last_active_at = datetime.utcnow()
-            
-            login_user(user)
-            session.pop('pending_2fa_user_id', None)
-            session.pop('login_method', None)  # Clean up login method too
-            
-            # Commit all user updates
-            db.session.commit()
-            
-            # Send event reminders on login
-            send_user_event_reminders(user.user_id)
-            
-            # Log successful 2FA login
-            log_user_login_success(user.user_id, details="User logged in successfully with 2FA.")
-            
-            next_page = request.args.get('next')
-            return redirect(next_page or url_for('home'))
-        else:
-            flash('Invalid 2FA code. Please try again.', 'error')
-    
-    return render_template('UserVerify2FA.html', form=form)
+#verify 2fa in
 
 @app.route('/check_user_auth_methods', methods=['POST'])
 @csrf.exempt
@@ -927,23 +717,7 @@ def check_user_auth_methods():
         print(f"Error checking user auth methods: {e}")
         return jsonify({"has_2fa": False, "has_passkeys": False})
 
-# -- User security management --
-@app.route('/account_security', methods=['GET', 'POST'])
-@user_required
-def account_security():
-    has_2fa = bool(current_user.totp_secret)
-    
-    # Get user's passkeys
-    user_passkeys = WebAuthnCredential.query.filter_by(user_id=current_user.user_id).all()
-    
-    form = Disable2FAForm()
-    form1 = RemovePassKeyForm()
-    
-    return render_template('UserAccountSecurity.html', 
-                         has_2fa=has_2fa, 
-                         form=form, 
-                         form1=form1,
-                         user_passkeys=user_passkeys)
+
 
 @app.route('/enable_2fa', methods=['GET', 'POST'])
 @user_required
@@ -973,7 +747,7 @@ def enable_2fa():
             current_user.totp_secret = totp_secret
             db.session.commit()
             session.pop('pending_totp_secret', None)  # Remove from session
-            return redirect(url_for('account_security'))
+            return redirect(url_for('user.account_security'))
     return render_template('UserEnable2FA.html', qr_b64=qr_b64, secret=totp_secret, form=form)
 
 @app.route('/disable_2fa', methods=['POST'])
@@ -983,7 +757,7 @@ def disable_2fa():
     if form.validate_on_submit():
         current_user.totp_secret = None
         db.session.commit()
-        return redirect(url_for('account_security'))
+        return redirect(url_for('user.account_security'))
     return render_template('UserDisable2FA.html', form=form)
 
 
@@ -1107,7 +881,7 @@ def remove_passkey(cred_id):
 
     else:
         pass
-    return redirect(url_for('account_security'))
+    return redirect(url_for('user.account_security'))
 
 # --- Passkey when logging in ---
 @app.route('/passkey/begin_login', methods=['POST'])
@@ -1379,7 +1153,6 @@ def passkey_finish_login():
         return jsonify({"error": f"Failed to complete passkey authentication: {str(e)}"}), 500
 
 # --- change password ---
-
 @app.route('/change_password', methods=['GET', 'POST'])
 @login_required
 def change_password():
@@ -1437,7 +1210,7 @@ def change_password():
                     pass
                 
                 flash('Password changed successfully!', 'success')
-                return redirect(url_for('account_security'))
+                return redirect(url_for('user.account_security'))
                 
             except Exception as e:
                 db.session.rollback()
@@ -1625,74 +1398,7 @@ def begin_passkey_auth_for_password_change():
 
 
 # --- User Reporting ---
-@app.route('/report_user', methods=['GET', 'POST'])
-@login_required
-@user_required
-def report_user():
-    form = ReportForm()
-    report_submitted = False
-    reported_username = None
-
-    # this is name fill for report user from message should not cause issue.
-    if request.method == 'GET':
-        q_username = request.args.get('username')
-        if q_username:
-            form.reported_username.data = q_username
-
-    if form.validate_on_submit():
-        try:
-            # Lookup user by username
-            reported_user = User.query.filter_by(username=form.reported_username.data).first()
-            if not reported_user:
-                flash('User not found.', 'error')
-                return render_template('UserReport.html', form=form, report_submitted=False, reported_username=None)
-            
-            # FIXED: Ensure reporter_id is always set
-            if not current_user.user_id:
-                app.logger.error("Current user has no user_id - this should not happen")
-                flash('Authentication error. Please log in again.', 'error')
-                return redirect(url_for('login'))
-            
-            new_report = Report(
-                reporter_id=current_user.user_id, 
-                reported_user_id=reported_user.user_id,
-                report_type=form.report_type.data,
-                description=form.description.data,
-                submitted_at=datetime.utcnow(),
-                status='open'
-            )
-            db.session.add(new_report)
-            db.session.flush()  # Get the report_id
-            
-            app.logger.info(f"📝 Creating report - Reporter: {current_user.user_id}, Reported: {reported_user.user_id}, Report ID: {new_report.report_id}")
-            
-            submission_notification = Notification(
-                user_id=current_user.user_id,  # Notify the reporter
-                type='report_status',
-                source_id=new_report.report_id,
-                message=f"Your report #{new_report.report_id} against {reported_user.username} has been submitted and is being reviewed.",
-                created_at=datetime.utcnow(),
-                is_read=False
-            )
-            db.session.add(submission_notification)
-            
-            db.session.commit()
-            
-            app.logger.info(f"Report #{new_report.report_id} created successfully with notification")
-            
-            report_submitted = True
-            reported_username = reported_user.username
-            form = ReportForm()  # Reset form
-            
-        except Exception as e:
-            db.session.rollback()
-            app.logger.error(f"❌ Error creating report: {str(e)}")
-            flash('An error occurred while submitting your report. Please try again.', 'error')
-            
-    return render_template('UserReport.html',
-                          form=form,
-                          report_submitted=report_submitted,
-                          reported_username=reported_username)
+# in user.py
 
 # -- User friends management --
 @app.route('/UserFriends')
@@ -3041,161 +2747,6 @@ def upload_message_attachment():
         kind=verdict['kind']
     )
 
-# --- Admin Routes ---
-@app.route('/users_dashboard')
-@admin_required
-def manage_users():
-    # Get query parameters
-    search_query = request.args.get('search', '').strip()
-    sort_by = request.args.get('sort_by', 'id')  # Default sort by ID
-    order = request.args.get('order', 'asc')  # Default order is ascending
-
-    # Base query
-    query = User.query
-
-    # Apply filters using the separate function
-    query = apply_user_filters(query, search_query)
-    
-    # Apply sorting using the separate function
-    query = apply_user_sorting(query, sort_by, order)
-
-    users = query.all()
-
-    total_users = User.query.count()
-    online_users = User.query.filter_by(current_status='online').count()
-    offline_users = User.query.filter_by(current_status='offline').count()
-
-    return render_template(
-        'AdminManageUsers.html',
-        total_users=total_users,
-        online_users=online_users,
-        offline_users=offline_users,
-        users=users,
-        sort_by=sort_by,
-        order=order,
-        search_query=search_query,
-        form=UpdateUserStatusForm()
-    )
-
-@app.route('/manage_user/<int:user_id>', methods=['GET', 'POST'])
-@admin_required
-def manage_user(user_id):
-    user = User.query.get(user_id)
-    if not user:
-        flash("User not found.", "danger")
-        return redirect(url_for('manage_users'))
-
-    form = UpdateUserStatusForm()
-    if form.validate_on_submit():  # Validate the form, including the CAPTCHA
-        new_status = form.status.data
-        if new_status in ['offline', 'online', 'suspended', 'terminated']:
-            user.current_status = new_status
-            db.session.commit()
-            flash(f"User {user.username}'s status updated to {new_status}.", "success")
-        else:
-            flash("Invalid status.", "danger")
-        return redirect(url_for('manage_users'))
-
-    return render_template('AdminChangeUserStatus.html', user=user, form=form)
-
-@app.route('/admin/suspend_user/<int:user_id>', methods=['POST'])
-@admin_required
-def suspend_user(user_id):
-    """Suspend a user account"""
-    user = User.query.get_or_404(user_id)
-    
-    if user.has_role('admin'):
-        flash('Cannot suspend an admin user.', 'error')
-        return redirect(url_for('manage_users'))
-    
-    user.current_status = 'suspended'
-    db.session.commit()
-    
-    # Log the action
-    app.logger.info(f"User {user.username} suspended by {current_user.username}")
-    
-    flash(f'User {user.username} has been suspended.', 'success')
-    return redirect(url_for('manage_users'))
-
-@app.route('/admin/terminate_user/<int:user_id>', methods=['POST'])
-@admin_required
-def terminate_user(user_id):
-    """Terminate a user account permanently"""
-    user = User.query.get_or_404(user_id)
-    
-    if user.has_role('admin'):
-        flash('Cannot terminate an admin user.', 'error')
-        return redirect(url_for('manage_users'))
-    
-    user.current_status = 'terminated'
-    db.session.commit()
-    
-    # Log the action
-    app.logger.critical(f"User {user.username} terminated by {current_user.username}")
-    
-    flash(f'User {user.username} has been permanently terminated.', 'success')
-    return redirect(url_for('manage_users'))
-
-@app.route('/admin/reactivate_user/<int:user_id>', methods=['POST'])
-@admin_required
-def reactivate_user(user_id):
-    """Reactivate a suspended user account"""
-    user = User.query.get_or_404(user_id)
-    
-    if user.current_status == 'terminated':
-        flash('Cannot reactivate a terminated user.', 'error')
-        return redirect(url_for('manage_users'))
-    
-    user.current_status = 'offline'
-    db.session.commit()
-    
-    # Log the action
-    app.logger.info(f"User {user.username} reactivated by {current_user.username}")
-    
-    flash(f'User {user.username} has been reactivated.', 'success')
-    return redirect(url_for('manage_users'))
-
-@app.route('/reports_dashboard', methods=['GET'])
-@admin_required
-def manage_reports():
-    # Get query parameters for filtering and sorting
-    search_query = request.args.get('search', '').strip()
-    sort_by = request.args.get('sort_by', 'submitted_at')
-    order = request.args.get('order', 'desc')
-
-    # Base query
-    query = Report.query
-
-    # Apply filters using the separate function
-    query = apply_report_filters(query, search_query)
-
-    # Apply sorting (you could move this to filters.py too)
-    if sort_by == 'submitted_at':
-        query = query.order_by(Report.submitted_at.asc() if order == 'asc' else Report.submitted_at.desc())
-    elif sort_by == 'resolved_at':
-        query = query.order_by(Report.resolved_at.asc() if order == 'asc' else Report.resolved_at.desc())
-    else:  # Default sort by report ID
-        query = query.order_by(Report.report_id.asc() if order == 'asc' else Report.report_id.desc())
-
-    reports = query.all()
-
-    # Calculate counts for each status
-    open_reports = Report.query.filter_by(status='open').count()
-    in_review_reports = Report.query.filter_by(status='in_review').count()
-    action_taken_reports = Report.query.filter_by(status='action_taken').count()
-    rejected_reports = Report.query.filter_by(status='rejected').count()
-
-    return render_template(
-        'AdminManageReports.html',
-        reports=reports,
-        sort_by=sort_by,
-        order=order,
-        search_query=search_query,
-        open_reports=open_reports,
-        in_review_reports=in_review_reports,
-        action_taken_reports=action_taken_reports,
-        rejected_reports=rejected_reports
-    )
 
 
 
@@ -3301,351 +2852,6 @@ def mark_message_notifications_read():
         return jsonify({'ok': False}), 500
 
 
-# Find the manage_report route (around line 1600) and replace the POST handling section:
-
-@app.route('/manage_report/<int:report_id>', methods=['GET', 'POST'])
-@admin_required
-def manage_report(report_id):
-    report = Report.query.get(report_id)
-    form = UpdateReportStatusForm()
-    if not report:
-        flash("Report not found.", "danger")
-        return redirect(url_for('manage_reports'))
-
-    # Fetch usernames for reporter and reported user
-    reporter_username = None
-    if report.reporter_id:
-        reporter = User.query.get(report.reporter_id)
-        reporter_username = reporter.username if reporter else "Deleted User"
-
-    reported_user = User.query.get(report.reported_user_id)
-    reported_username = reported_user.username if reported_user else "Deleted User"
-
-    if request.method == 'POST':
-        new_status = request.form.get('status')
-        admin_notes = request.form.get('admin_notes')
-        
-        if new_status in ['open', 'in_review', 'action_taken', 'rejected']:
-            old_status = report.status
-            report.status = new_status
-            report.admin_notes = admin_notes
-            report.resolved_at = datetime.utcnow() if new_status in ['action_taken', 'rejected'] else None
-            
-            if report.reporter_id:  # Make sure reporter exists
-                # Create user-friendly status messages
-                status_messages = {
-                    'open': 'reopened',
-                    'in_review': 'under review',
-                    'action_taken': 'resolved with action taken',
-                    'rejected': 'closed without action'
-                }
-                
-                status_display = status_messages.get(new_status, new_status)
-                
-                notification = Notification(
-                    user_id=report.reporter_id,
-                    type='report_status',
-                    source_id=report.report_id,
-                    message=f"Your report against {reported_username} has been {status_display}.",
-                    created_at=datetime.utcnow(),
-                    is_read=False
-                )
-                
-                db.session.add(notification)
-                print(f"DEBUG: Created report status notification for user {report.reporter_id}")
-            
-            db.session.commit()
-            flash(f"Report {report.report_id} updated from '{old_status}' to '{new_status}' and reporter notified.", "success")
-        else:
-            flash("Invalid status.", "danger")
-        return redirect(url_for('manage_reports'))
-
-    return render_template(
-        'AdminChangeReportStatus.html',
-        report=report,
-        reporter_username=reporter_username,
-        reported_username=reported_username,
-        form=form
-    )
-
-@app.route('/manage_ModSecLogs', methods=['GET'])
-@admin_required
-def admin_modsec_logs():
-    # Automatically refresh logs during a GET request
-    log_file_path = os.path.join(os.path.dirname(__file__), "shared_logs", "modsec_audit.log")
-    parsed_logs = parse_modsec_audit_log(log_file_path)
-
-    for log in parsed_logs:
-        # Check if the log already exists to avoid duplicates
-        existing_log = ModSecLog.query.filter_by(
-            date=log['date'],
-            time=log['time'],
-            source=log['source'],
-            request=log['request'],
-            response=log['response'],
-            attack_detected=log['attack_detected']
-        ).first()
-        if not existing_log:
-            new_log = ModSecLog(
-                date=log['date'],
-                time=log['time'],
-                source=log['source'],
-                request=log['request'],
-                response=log['response'],
-                attack_detected=log['attack_detected']
-            )
-            db.session.add(new_log)
-    db.session.commit()
-
-    # Get query parameters for filtering and sorting
-    search_query = request.args.get('search', '').strip()
-    sort_by = request.args.get('sort_by', 'id')  # Default sort by ID
-    order = request.args.get('order', 'asc')  # Default order is ascending
-
-    # Base query
-    query = ModSecLog.query
-
-    # Apply search filters
-    if search_query:
-        filters = search_query.split(',')
-        for filter_item in filters:
-            filter_item = filter_item.strip()
-            if 'id=' in filter_item:
-                try:
-                    log_id = int(filter_item.split('id=')[1])
-                    query = query.filter(ModSecLog.id == log_id)
-                except ValueError:
-                    flash("Invalid ID format. ID must be a number.", "danger")
-            elif 'date=' in filter_item:
-                date = filter_item.split('date=')[1].strip()
-                query = query.filter(ModSecLog.date.ilike(f"%{date}%"))
-            elif 'time=' in filter_item:
-                time = filter_item.split('time=')[1].strip()
-                query = query.filter(ModSecLog.time.ilike(f"%{time}%"))
-            else:
-                flash("Invalid query format. Please use id=, date=, or time=.", "danger")
-
-    # Apply sorting
-    if sort_by == 'date':
-        query = query.order_by(ModSecLog.date.asc() if order == 'asc' else ModSecLog.date.desc())
-    elif sort_by == 'time':
-        query = query.order_by(ModSecLog.time.asc() if order == 'asc' else ModSecLog.time.desc())
-    else:  # Default sort by ID
-        query = query.order_by(ModSecLog.id.asc() if order == 'asc' else ModSecLog.id.desc())
-
-    # Fetch logs
-    logs = query.all()
-
-    # Fetch statistics
-    total_logs = ModSecLog.query.count()
-    critical_attacks = ModSecLog.query.filter(ModSecLog.attack_detected.like('%Critical%')).count()
-    recent_logs = ModSecLog.query.filter(ModSecLog.date >= '2025-06-01').count()
-
-    return render_template(
-        'AdminManageModSecLogs.html',
-        logs=logs,
-        total_logs=total_logs,
-        critical_attacks=critical_attacks,
-        recent_logs=recent_logs,
-        sort_by=sort_by,
-        order=order,
-        search_query=search_query
-    )
-
-@app.route('/manage_ErrorLogs', methods=['GET'])
-@admin_required
-def admin_error_logs():
-    # Automatically refresh logs during a GET request
-    log_file_path = os.path.join(os.path.dirname(__file__), "shared_logs", "error.log")
-    parsed_logs = parse_error_log(log_file_path)
-
-    for log in parsed_logs:
-        # Check if the log already exists to avoid duplicates
-        existing_log = ErrorLog.query.filter_by(
-            date=log['date'],
-            time=log['time'],
-            level=log['level'],
-            message=log['message'],
-            client_ip=log['client_ip']
-        ).first()
-        if not existing_log:
-            new_log = ErrorLog(
-                date=log['date'],
-                time=log['time'],
-                level=log['level'],
-                message=log['message'],
-                client_ip=log['client_ip']
-            )
-            db.session.add(new_log)
-    db.session.commit()
-
-    # Get query parameters for filtering and sorting
-    search_query = request.args.get('search', '').strip()
-    sort_by = request.args.get('sort_by', 'id')  # Default sort by ID
-    order = request.args.get('order', 'asc')  # Default order is ascending
-
-    # Base query
-    query = ErrorLog.query
-
-    # Apply search filters
-    if search_query:
-        filters = search_query.split(',')
-        for filter_item in filters:
-            filter_item = filter_item.strip()
-            if 'id=' in filter_item:
-                try:
-                    log_id = int(filter_item.split('id=')[1])
-                    query = query.filter(ErrorLog.id == log_id)
-                except ValueError:
-                    flash("Invalid ID format. ID must be a number.", "danger")
-            elif 'date=' in filter_item:
-                date = filter_item.split('date=')[1].strip()
-                query = query.filter(ErrorLog.date.ilike(f"%{date}%"))
-            elif 'time=' in filter_item:
-                time = filter_item.split('time=')[1].strip()
-                query = query.filter(ErrorLog.time.ilike(f"%{time}%"))
-            else:
-                flash("Invalid query format. Please use id=, date=, or time=.", "danger")
-
-    # Apply sorting
-    if sort_by == 'date':
-        query = query.order_by(ErrorLog.date.asc() if order == 'asc' else ErrorLog.date.desc())
-    elif sort_by == 'time':
-        query = query.order_by(ErrorLog.time.asc() if order == 'asc' else ErrorLog.time.desc())
-    else:  # Default sort by ID
-        query = query.order_by(ErrorLog.id.asc() if order == 'asc' else ErrorLog.id.desc())
-
-    # Fetch logs
-    logs = query.all()
-
-    # Fetch statistics
-    total_logs = ErrorLog.query.count()
-    error_logs = ErrorLog.query.filter(ErrorLog.level == 'error').count()
-    warning_logs = ErrorLog.query.filter(ErrorLog.level == 'warning').count()
-
-    return render_template(
-        'AdminManageErrorLogs.html',
-        logs=logs,
-        total_logs=total_logs,
-        error_logs=error_logs,
-        warning_logs=warning_logs,
-        sort_by=sort_by,
-        order=order,
-        search_query=search_query
-    )
-
-@app.route('/manage_UserActions', methods=['GET'])
-@admin_required
-def admin_user_actions():
-    search_query = request.args.get('search', '').strip()
-    sort_by = request.args.get('sort_by', 'id')
-    order = request.args.get('order', 'asc')
-
-    query = UserLog.query
-
-    # Apply filters using the separate function
-    query = apply_user_log_filters(query, search_query)
-
-    # Apply sorting
-    if sort_by == 'log_timestamp':
-        query = query.order_by(UserLog.log_timestamp.asc() if order == 'asc' else UserLog.log_timestamp.desc())
-    else:  # Default sort by ID
-        query = query.order_by(UserLog.log_id.asc() if order == 'asc' else UserLog.log_id.desc())
-
-    logs = query.all()
-    total_logs = UserLog.query.count()
-    login_attempts = UserLog.query.filter(UserLog.log_type == 'login_attempt').count()
-    login_successes = UserLog.query.filter(UserLog.log_type == 'login_success').count()
-    login_failures = UserLog.query.filter(UserLog.log_type == 'login_failure').count()
-
-    return render_template(
-        'AdminManageUserActions.html',
-        logs=logs,
-        total_logs=total_logs,
-        login_attempts=login_attempts,
-        login_successes=login_successes,
-        login_failures=login_failures,
-        sort_by=sort_by,
-        order=order,
-        search_query=search_query
-    )
-
-@app.route('/test_upload', methods=['GET', 'POST'])
-@csrf.exempt 
-@admin_required
-def test_upload():
-    """Testing endpoint for file upload security validation"""
-    if request.method == 'POST':
-        # Check if file is present
-        if 'file' not in request.files:
-            flash('No file selected', 'error')
-            return redirect(request.url)
-        
-        file = request.files['file']
-        if file.filename == '':
-            flash('No file selected', 'error')
-            return redirect(request.url)
-        
-        try:
-            # Get file data
-            file.seek(0)  # Reset file pointer
-            file_data = file.read()
-            file.seek(0)  # Reset again for potential future use
-            
-            # Run security validation
-            result = validate_file_security(
-                file_data=file_data, 
-                filename=file.filename,
-                max_size=10*1024*1024  # 10MB limit
-            )
-            
-            # Display results
-            if result['is_safe']:
-                flash('✅ File passed security validation!', 'success')
-                flash(f"Risk Level: {result['risk_level'].upper()}", 'info')
-                
-                # Show file info
-                info = result['file_info']
-                flash(f"File: {info['filename']} ({info['size']} bytes)", 'info')
-                flash(f"MD5: {info['md5_hash'][:16]}...", 'info')
-                
-                # Save the safe file (optional)
-                if request.form.get('save_file'):
-                    upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'test_uploads')
-                    os.makedirs(upload_dir, exist_ok=True)
-                    
-                    filename = secure_filename(file.filename)
-                    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-                    safe_filename = f"safe_{timestamp}_{filename}"
-                    
-                    file_path = os.path.join(upload_dir, safe_filename)
-                    with open(file_path, 'wb') as f:
-                        f.write(file_data)
-                    
-                    flash(f'File saved as: {safe_filename}', 'success')
-            else:
-                flash('❌ File FAILED security validation!', 'error')
-                flash(f"Risk Level: {result['risk_level'].upper()}", 'warning')
-                
-                # Show threats
-                for threat in result['threats']:
-                    flash(f"🚨 THREAT: {threat}", 'error')
-                
-                # Show warnings
-                for warning in result['warnings']:
-                    flash(f"⚠️ WARNING: {warning}", 'warning')
-            
-            # Show polyglot detection details if available
-            if 'polyglot_detection' in result:
-                polyglot = result['polyglot_detection']
-                if polyglot.get('detected_formats'):
-                    formats = ', '.join(polyglot['detected_formats'])
-                    flash(f"Detected formats: {formats}", 'info')
-        
-        except Exception as e:
-            flash(f'Validation error: {str(e)}', 'error')
-    
-    return render_template('test_upload.html')
 
 
 # --- Error Handlers ---
@@ -4478,8 +3684,145 @@ def send_user_event_reminders(user_id):
         print(f"Error sending user event reminders: {e}")
         db.session.rollback()
 
+class DatabaseHA:
+    def __init__(self, orchestrator_url="http://orchestrator:3000"):
+        self.orchestrator_url = orchestrator_url
+        
+    def get_master_host(self, cluster_alias="main"):
+        """Get current master from orchestrator"""
+        try:
+            response = requests.get(f"{self.orchestrator_url}/api/cluster-info/{cluster_alias}")
+            if response.status_code == 200:
+                data = response.json()
+                for instance in data:
+                    if instance.get('IsMaster', False):
+                        return instance.get('Key', {}).get('Hostname', 'mysql')
+            return 'mysql'  # fallback
+        except:
+            return 'mysql'  # fallback
+    
+    def get_replica_hosts(self, cluster_alias="main"):
+        """Get available replicas from orchestrator"""
+        try:
+            response = requests.get(f"{self.orchestrator_url}/api/cluster-info/{cluster_alias}")
+            if response.status_code == 200:
+                data = response.json()
+                replicas = []
+                for instance in data:
+                    if not instance.get('IsMaster', False) and instance.get('IsLastCheckValid', False):
+                        replicas.append(instance.get('Key', {}).get('Hostname'))
+                return replicas
+            return []
+        except:
+            return []
 
+# Initialize HA manager
+db_ha = DatabaseHA()
 
+def with_db_failover(func):
+    """Decorator to handle database failover"""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            if "lost connection" in str(e).lower() or "can't connect" in str(e).lower():
+                # Trigger orchestrator to check topology
+                try:
+                    requests.post(f"{db_ha.orchestrator_url}/api/discover/mysql/{db_ha.get_master_host()}/3306")
+                except:
+                    pass
+                # Update database URI if needed
+                new_master = db_ha.get_master_host()
+                if new_master != 'mysql':
+                    app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace('mysql', new_master)
+                    db.session.remove()
+                    db.create_all()
+                # Retry the operation
+                return func(*args, **kwargs)
+            raise e
+    return wrapper
+
+# Apply to critical routes
+@app.route('/api/health')
+@with_db_failover
+def health_check():
+    """Health check endpoint with HA support"""
+    try:
+        # Test database connection
+        db.session.execute('SELECT 1')
+        master_host = db_ha.get_master_host()
+        replicas = db_ha.get_replica_hosts()
+        
+        return jsonify({
+            'status': 'healthy',
+            'database': {
+                'master': master_host,
+                'replicas': replicas,
+                'connection': 'ok'
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e)
+        }), 500
+@app.route('/api/db-health')
+def db_health():
+    """Database health check endpoint"""
+    try:
+        # Test database connection
+        result = db.session.execute(text('SELECT 1')).scalar()
+        if result == 1:
+            return jsonify({
+                'status': 'healthy',
+                'database': 'mysql',
+                'connection': 'ok',
+                'timestamp': datetime.now().isoformat()
+            })
+        else:
+            raise Exception('Unexpected result from health check query')
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
+@app.route('/api/system-health')
+def system_health():
+    """Complete system health check"""
+    health_status = {
+        'database': 'unknown',
+        'redis': 'unknown',
+        'overall': 'unknown'
+    }
+    
+    try:
+        # Check database
+        db.session.execute(text('SELECT 1')).scalar()
+        health_status['database'] = 'healthy'
+    except:
+        health_status['database'] = 'unhealthy'
+    
+    try:
+        # Check Redis if you're using it
+        import redis
+        r = redis.Redis(host='redis', port=6379, db=0)
+        r.ping()
+        health_status['redis'] = 'healthy'
+    except:
+        health_status['redis'] = 'unhealthy'
+    
+    # Determine overall health
+    if health_status['database'] == 'healthy' and health_status['redis'] == 'healthy':
+        health_status['overall'] = 'healthy'
+        status_code = 200
+    else:
+        health_status['overall'] = 'degraded'
+        status_code = 503
+    
+    return jsonify(health_status), status_code
 # Initialize scheduler for event reminders
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=send_event_reminders, trigger="interval", hours=24)

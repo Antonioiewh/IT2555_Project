@@ -393,7 +393,7 @@
             </div>
             {% endif %}
 
-            <form method="post" action="{{ url_for('manage_user', user_id=user.user_id) }}">
+            <form method="post" action="{{ url_for('admin.manage_user', user_id=user.user_id) }}">
                 {{ form.hidden_tag() }}
                 
                 <div class="form-group">
@@ -449,7 +449,7 @@
                 </div>
                 
                 <div class="action-buttons">
-                    <a href="{{ url_for('manage_users') }}" class="btn-secondary">
+                    <a href="{{ url_for('admin.manage_users') }}" class="btn-secondary">
                         <i class="bi bi-arrow-left"></i>
                         Back to Users
                     </a>

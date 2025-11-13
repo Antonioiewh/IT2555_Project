@@ -405,7 +405,13 @@ INSERT INTO users (username, phone_number, password_hash) VALUES
 ('user3', '12345656', 'scrypt:32768:8:1$xdPsxX7EC8sCphaO$f1b46069ede337b2b1f594c10680a3f85ab5906faa04af144994218cfa039e75a9aacf64e19b928be1661a5a1e53c5987f935131c1b8bbaece6b266c1a553160'),
 ('user4', '11141671', 'scrypt:32768:8:1$xdPsxX7EC8sCphaO$f1b46069ede337b2b1f594c10680a3f85ab5906faa04af144994218cfa039e75a9aacf64e19b928be1661a5a1e53c5987f935131c1b8bbaece6b266c1a553160');
 
-
+CREATE USER IF NOT EXISTS 'orchestrator'@'%' IDENTIFIED BY 'orchestrator_password';
+GRANT SUPER, PROCESS, REPLICATION SLAVE, REPLICATION CLIENT, RELOAD ON *.* TO 'orchestrator'@'%';
+GRANT SELECT ON mysql.slave_master_info TO 'orchestrator'@'%';
+GRANT SELECT ON performance_schema.replication_group_members TO 'orchestrator'@'%';
+GRANT SELECT ON performance_schema.replication_group_member_stats TO 'orchestrator'@'%';
+GRANT SELECT ON performance_schema.global_variables TO 'orchestrator'@'%';
+FLUSH PRIVILEGES;
 -- Assign roles to the newly created users
 INSERT INTO user_role_assignments (user_id, role_id)
 SELECT u.user_id, r.role_id

@@ -255,20 +255,12 @@ def google_maps_api_key():
     return app.config.get('GOOGLE_MAPS_API_KEY')
 
 
-
-
-
 # -- Fido2 WebAuthn Server Setup --
 # in functions.py
 
 
-
-
-
 # --- login,signup,home ---
-
-# Helper function for relative time
-
+# Helper function for relative time in functions.py
 
 # load posts
 @app.route('/api/load_more_posts')
@@ -480,7 +472,7 @@ def home():
         print(f"DEBUG: User post count: {current_user_post_count}")
         print(f"DEBUG: User friend count: {current_user_friend_count}")
         
-        return render_template('UserHome.html', 
+        return render_template('users/UserHome.html', 
                              posts=posts_data,
                              pagination=posts,
                              has_more=posts.has_next,

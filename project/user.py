@@ -103,7 +103,33 @@ from functions import get_relative_time
 user_bp = Blueprint('user', __name__, url_prefix='/user')
 
 
+# Add this after your existing imports
+from splunk_logger import splunk_logger
 
+# Add this test route to your user.py
+@user_bp.route('/test-logging')
+def test_logging():
+    """Test route to verify Splunk logging is working"""
+    try:
+        # Test basic security event
+        splunk_logger.log_security_event('test_event', {
+            'message': 'This is a test event',
+            'timestamp': datetime.now().isoformat(),
+            'test_data': 'Hello from Flask'
+        }, 'INFO')
+        
+        # Test login attempt logging
+        splunk_logger.log_login_attempt('testuser', True)
+        
+        # Test access violation logging
+        splunk_logger.log_access_violation('/test-resource', 'GET', 'Testing access violation')
+        
+        flash('Test events sent to Splunk! Check Splunk search.', 'success')
+        return render_template('test_logging.html')
+        
+    except Exception as e:
+        flash(f'Logging test failed: {str(e)}', 'error')
+        return f"<h1>Logging Error</h1><p>{str(e)}</p><a href='/'>Back</a>"
 
 
 # -- User security management --

@@ -1,23 +1,24 @@
-# app_factory.py
-import os
-import socket
-from flask import Flask, request, session, current_app, abort, flash, redirect, url_for
+from flask import Flask, request, session, current_app, abort, flash, redirect, url_for, render_template
 from flask_wtf import CSRFProtect
+from flask_wtf.csrf import CSRFError
 from flask_login import LoginManager, current_user, logout_user
 from flask_socketio import SocketIO
 from datetime import datetime, timedelta
+import os
 
 # Import your models and other modules
-from models import db
+from models import db, User
 from config import config
 from admin import admin_bp
 from user import user_bp
+from splunk_logger import splunk_logger
+
 def create_app(config_name=None):
     """Application factory pattern"""
     
     # Determine config
     if config_name is None:
-        config_name = os.getenv('FLASK_CONFIG', 'default')
+        config_name = os.getenv('FLASK_CONFIG', 'development')
     
     # Create Flask app
     app = Flask(__name__)
@@ -55,38 +56,57 @@ def initialize_extensions(app):
     # Flask-Login
     login_manager = LoginManager()
     login_manager.init_app(app)
-    login_manager.login_view = 'login'
+    login_manager.login_view = 'user.login'
+    login_manager.login_message = 'Please log in to access this page.'
+    login_manager.login_message_category = 'info'
     
     @login_manager.user_loader
     def load_user(user_id):
-        """Loads a user from the database given their ID."""
-        from models import User
-        return db.session.get(User, int(user_id))
+        return User.query.get(int(user_id))
     
     # Socket.IO configuration
     socketio = SocketIO()
     socketio.init_app(app, 
-                     cors_allowed_origins=app.config['SOCKETIO_CORS_ORIGINS'],
-                     message_queue=app.config['REDIS_URL'],
+                     cors_allowed_origins=app.config.get('SOCKETIO_CORS_ORIGINS', "*"),
+                     message_queue=app.config.get('REDIS_URL', 'redis://redis:6379/0'),
                      ping_interval=25,
                      ping_timeout=60)
+    
+    # Initialize Splunk logger
+    try:
+        splunk_logger.init_app(app)
+    except Exception as e:
+        app.logger.warning(f"Splunk logger initialization failed: {e}")
     
     # Store extensions in app for access elsewhere
     app.socketio = socketio
     app.csrf = csrf
     app.login_manager = login_manager
+    app.splunk_logger = splunk_logger
     
     return app
 
 def register_blueprints(app):
     """Register Flask blueprints"""
     
-    # Register admin blueprint
-    app.register_blueprint(admin_bp)
-    app.register_blueprint(user_bp)
+    try:
+        # Register admin blueprint
+        app.register_blueprint(admin_bp, url_prefix='/admin')
+        app.logger.info("Admin blueprint registered")
+    except Exception as e:
+        app.logger.error(f"Failed to register admin blueprint: {e}")
     
-    # Add other blueprints here as you create them
-    # app.register_blueprint(users_bp)
+    try:
+        # Register user blueprint
+        app.register_blueprint(user_bp, url_prefix='/user')
+        app.logger.info("User blueprint registered")
+    except Exception as e:
+        app.logger.error(f"Failed to register user blueprint: {e}")
+    
+    # Add a simple root route if no other routes handle it
+    @app.route('/')
+    def index():
+        return redirect(url_for('login'))
     
     return app
 
@@ -94,40 +114,34 @@ def register_template_functions(app):
     """Register template filters and context processors"""
     
     @app.template_filter('has_role')
-    def has_role_filter(user, role_name):
-        """Custom filter to check if user has a role"""
-        if not user or not hasattr(user, 'is_authenticated') or not user.is_authenticated:
+    def has_role_filter(user, role):
+        """Template filter to check if user has role"""
+        if not user or not user.is_authenticated:
             return False
-        if not hasattr(user, 'roles'):
+        try:
+            return user.has_role(role)
+        except:
             return False
-        return any(role.role_name == role_name for role in user.roles)
-
-    @app.context_processor
-    def inject_user_roles():
-        """Make role checking available in all templates"""
-        def has_role(role_name):
-            if not current_user.is_authenticated:
-                return False
-            return any(role.role_name == role_name for role in current_user.roles)
-        
-        return dict(has_role=has_role)
     
     @app.context_processor
-    def inject_container_id():
-        return {"container_id": app.config['CONTAINER_ID']}
+    def inject_user():
+        """Inject current user into templates"""
+        return dict(current_user=current_user)
+    
+    @app.context_processor
+    def inject_config():
+        """Inject config values into templates"""
+        return dict(config=current_app.config)
     
     @app.template_global()
-    def google_maps_api_key():
-        return app.config.get('GOOGLE_MAPS_API_KEY')
+    def get_csrf_token():
+        """Generate CSRF token for templates"""
+        return session.get('csrf_token', '')
     
     @app.context_processor
-    def inject_datetime():
-        from datetime import datetime
-        return {
-            'datetime': datetime,
-            'moment': datetime,
-            'utcnow': datetime.utcnow
-        }
+    def inject_now():
+        """Inject current datetime into templates"""
+        return dict(now=datetime.utcnow())
     
     return app
 
@@ -135,74 +149,41 @@ def register_before_request_handlers(app):
     """Register before_request handlers"""
     
     @app.before_request
-    def set_session_domain():
-        """Dynamically set session cookie domain based on request host"""
-        host = request.headers.get('Host', '').lower()
-        
-        if ':' in host:
-            host = host.split(':')[0]
-        
-        if host in app.config['ALLOWED_SESSION_DOMAINS']:
-            app.config['SESSION_COOKIE_DOMAIN'] = host
-        else:
-            app.config['SESSION_COOKIE_DOMAIN'] = 'localhost'
-
-    @app.before_request
-    def validate_host():
-        """STRICTLY enforce only exact localhost hostname"""
-        request_host = request.headers.get('Host', '').lower()
-        
-        allowed_hosts = app.config['ALLOWED_SESSION_DOMAINS'] + [
-            'localhost:5000', 
-            'localhost:80'
-        ]
-        
-        if request_host not in allowed_hosts:
-            app.logger.warning(f"BLOCKED: Invalid host '{request_host}' from IP: {request.remote_addr}")
-            session.clear()
-            abort(400, description=f"Access denied. Only allowed hosts permitted. Requested: {request_host}")
-
-    @app.before_request  
-    def validate_session():
-        """Enhanced session validation with hostname binding"""
+    def load_logged_in_user():
+        """Load user info before each request"""
         if current_user.is_authenticated:
-            session_host = session.get('bound_hostname')
-            current_host = request.headers.get('Host', '').lower()
-            
-            if not session_host:
-                session['bound_hostname'] = current_host
-                session['user_ip'] = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
-                session['session_created'] = datetime.utcnow().isoformat()
-            else:
-                if session_host != current_host:
-                    app.logger.warning(f"SESSION HIJACK ATTEMPT: User {current_user.user_id} session bound to '{session_host}' but accessed from '{current_host}'")
-                    session.clear()
-                    logout_user()
-                    flash('Security violation detected. Please log in again.', 'error')
-                    return redirect(url_for('login'))
-            
-            current_ip = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
-            session_ip = session.get('user_ip')
-            
-            if session_ip and session_ip != current_ip:
-                app.logger.warning(f"IP CHANGE: User {current_user.user_id} IP changed from {session_ip} to {current_ip}")
-                session.clear()
-                logout_user()
-                flash('Session invalid - IP address changed', 'error')
-                return redirect(url_for('login'))
-
+            session['last_activity'] = datetime.utcnow().timestamp()
+    
     @app.before_request
     def check_session_timeout():
-        """Check session timeout"""
+        """Check for session timeout"""
         if current_user.is_authenticated:
-            session_created = session.get('session_created')
-            if session_created:
-                created_time = datetime.fromisoformat(session_created)
-                if datetime.utcnow() - created_time > timedelta(hours=8):
-                    session.clear()
+            last_activity = session.get('last_activity')
+            if last_activity:
+                timeout = app.config.get('SESSION_TIMEOUT', 3600)  # 1 hour default
+                if datetime.utcnow().timestamp() - last_activity > timeout:
                     logout_user()
-                    flash('Session expired - please log in again', 'info')
-                    return redirect(url_for('login'))
+                    flash('Your session has expired. Please log in again.', 'warning')
+                    return redirect(url_for('user.login'))
+    
+    @app.before_request
+    def security_headers():
+        """Add security headers"""
+        pass  # Will be implemented later
+    
+    @app.before_request
+    def log_request():
+        """Log security-relevant requests"""
+        try:
+            # Log suspicious patterns, admin access, etc.
+            if request.endpoint and 'admin' in request.endpoint:
+                splunk_logger.log_security_event('admin_access', {
+                    'endpoint': request.endpoint,
+                    'method': request.method,
+                    'args': dict(request.args)
+                })
+        except Exception as e:
+            app.logger.error(f"Failed to log request: {e}")
     
     return app
 
@@ -210,15 +191,68 @@ def register_error_handlers(app):
     """Register error handlers"""
     
     @app.errorhandler(404)
-    def not_found_error(error):
-        return render_template('404_error.html'), 404
-
+    def not_found(error):
+        """Handle 404 errors"""
+        try:
+            splunk_logger.log_security_event('page_not_found', {
+                'requested_url': request.url,
+                'referrer': request.referrer
+            })
+        except Exception as e:
+            app.logger.error(f"Failed to log 404 error: {e}")
+        
+        try:
+            return render_template('errors/404.html'), 404
+        except:
+            return '<h1>404 - Page Not Found</h1>', 404
+    
     @app.errorhandler(403)
-    def forbidden_error(error): 
-        return render_template('403_error.html'), 403
-
+    def forbidden(error):
+        """Handle 403 errors"""
+        try:
+            splunk_logger.log_access_violation(
+                resource=request.endpoint or request.url,
+                action=request.method,
+                reason='Forbidden access'
+            )
+        except Exception as e:
+            app.logger.error(f"Failed to log 403 error: {e}")
+        
+        try:
+            return render_template('errors/403.html'), 403
+        except:
+            return '<h1>403 - Access Forbidden</h1>', 403
+    
     @app.errorhandler(500)
-    def internal_server_error(error):
-        return render_template('500_error.html'), 500
+    def internal_error(error):
+        """Handle 500 errors"""
+        try:
+            splunk_logger.log_security_event('server_error', {
+                'error': str(error),
+                'endpoint': request.endpoint
+            }, 'HIGH')
+        except Exception as e:
+            app.logger.error(f"Failed to log 500 error: {e}")
+        
+        try:
+            return render_template('errors/500.html'), 500
+        except:
+            return '<h1>500 - Internal Server Error</h1>', 500
+    
+    @app.errorhandler(CSRFError)
+    def handle_csrf_error(e):
+        """Handle CSRF token errors"""
+        try:
+            splunk_logger.log_security_event('csrf_error', {
+                'description': e.description,
+                'endpoint': request.endpoint
+            }, 'HIGH')
+        except Exception as ex:
+            app.logger.error(f"Failed to log CSRF error: {ex}")
+        
+        try:
+            return render_template('errors/csrf.html'), 400
+        except:
+            return '<h1>400 - CSRF Token Error</h1>', 400
     
     return app

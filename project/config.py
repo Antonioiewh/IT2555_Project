@@ -41,7 +41,18 @@ class Config:
     
     # Redis configuration
     REDIS_URL = os.getenv('REDIS_URL', 'redis://redis:6379/0')
-    
+
+    # Splunk Configuration
+    SPLUNK_HOST = 'splunk'  # Docker service name
+    SPLUNK_PORT = '8088'
+    SPLUNK_HEC_TOKEN = '12345678-1234-1234-1234-123456789012'
+    SPLUNK_INDEX = 'main'
+    SPLUNK_USERNAME = 'admin'
+    SPLUNK_PASSWORD = 'Admin123!'
+    SPLUNK_VERIFY_SSL = False
+
+    # MLTK configuration
+    MLTK_ENABLED = os.environ.get('MLTK_ENABLED', 'True').lower() == 'true'
     # Allowed domains
     ALLOWED_SESSION_DOMAINS = [
         'localhost',
@@ -62,6 +73,13 @@ class DevelopmentConfig(Config):
     """Development configuration"""
     DEBUG = True
     TESTING = False
+    
+    # least scuffed but remember generate new token on the web UI and replace here
+    SPLUNK_HEC_TOKEN = '09448f61-621c-4912-92d2-8cf363fc146b'  # Replace with actual token
+    SPLUNK_HOST = 'splunk'
+    SPLUNK_PORT = '8088'
+    SPLUNK_INDEX = 'main'
+    SPLUNK_VERIFY_SSL = False
 
 class ProductionConfig(Config):
     """Production configuration"""

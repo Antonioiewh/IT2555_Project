@@ -567,6 +567,7 @@
                 </button>
             </div>
             
+           
             <div class="sidebar-nav">
                 {% if not current_user.is_authenticated %}
                     <!-- Unauthenticated Users -->
@@ -577,6 +578,7 @@
                         </a>
                     </div>
                 {% endif %}
+                
                 {% if current_user.is_authenticated %}
                     <div class="nav-item">
                         <a href="{{ url_for('home') }}" class="nav-link-google">
@@ -587,6 +589,7 @@
                     
                     <div class="nav-divider"></div>
                 {% endif %}
+                
                 {% if current_user.is_authenticated and current_user.has_role('admin') %}
                     <!-- Admin Menu -->
                     <div class="nav-section-title">Administration</div>
@@ -639,6 +642,24 @@
                         </a>
                     </div>
                     
+                    <!-- ADMIN TICKETING SECTION -->
+                    <div class="nav-divider"></div>
+                    <div class="nav-section-title">Ticketing System</div>
+                    
+                    <div class="nav-item">
+                        <a href="{{ url_for('ticketing.index') }}" class="nav-link-google">
+                            <i class="bi bi-ticket-detailed nav-icon"></i>
+                            All Tickets
+                        </a>
+                    </div>
+                    
+                    <div class="nav-item">
+                        <a href="{{ url_for('ticketing.manage_agents') }}" class="nav-link-google">
+                            <i class="bi bi-people-fill nav-icon"></i>
+                            Manage Agents
+                        </a>
+                    </div>
+                    
                     <div class="nav-divider"></div>
                     
                     <div class="nav-section-title">Security</div>
@@ -658,8 +679,100 @@
                         </a>
                     </div>
                     
+                {% elif current_user.is_authenticated and current_user.has_role('agent') %}
+                    <!-- SUPPORT AGENT MENU -->
+                    {% set agent = current_user.support_agent_profile %}
+                    {% if agent and agent.is_active %}
+                        <div class="nav-section-title">
+                            Support Agent (L{{ agent.clearance_level }})
+                        </div>
+                        
+                        <div class="nav-item">
+                            <a href="{{ url_for('ticketing.index') }}" class="nav-link-google">
+                                <i class="bi bi-headset nav-icon"></i>
+                                Agent Dashboard
+                                <span class="google-badge">L{{ agent.clearance_level }}</span>
+                            </a>
+                        </div>
+                        
+                        <div class="nav-item">
+                            <a href="{{ url_for('ticketing.create_ticket') }}" class="nav-link-google">
+                                <i class="bi bi-plus-circle nav-icon"></i>
+                                Create Ticket
+                            </a>
+                        </div>
+                        
+                        <!-- Ticketing Tools Collapsible -->
+                        <div class="collapsible-nav">
+                            <button class="collapse-toggle" data-bs-toggle="collapse" data-bs-target="#ticketingCollapse" aria-expanded="false">
+                                <div style="display: flex; align-items: center;">
+                                    <i class="bi bi-tools nav-icon"></i>
+                                    Agent Tools
+                                </div>
+                                <i class="bi bi-chevron-down collapse-icon"></i>
+                            </button>
+                            <div class="collapse" id="ticketingCollapse">
+                                <div class="nested-nav">
+                                    {% if agent.clearance_level >= 3 %}
+                                    <a href="#" class="nav-link-google">
+                                        <i class="bi bi-arrow-up-circle nav-icon"></i>
+                                        Escalate Tickets
+                                    </a>
+                                    {% endif %}
+                                    {% if agent.clearance_level >= 2 %}
+                                    <a href="#" class="nav-link-google">
+                                        <i class="bi bi-person-plus nav-icon"></i>
+                                        Assign Tickets
+                                    </a>
+                                    {% endif %}
+                                    <a href="#" class="nav-link-google">
+                                        <i class="bi bi-book nav-icon"></i>
+                                        Knowledge Base
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {% if current_user.has_role('admin') %}
+                        <div class="nav-item">
+                            <a href="{{ url_for('ticketing.manage_agents') }}" class="nav-link-google">
+                                <i class="bi bi-people-fill nav-icon"></i>
+                                Manage Agents
+                            </a>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="nav-divider"></div>
+                    {% endif %}
+                    
+                    <!-- Standard User Features for Agents -->
+                    <div class="nav-section-title">Account</div>
+                    
+                    <div class="nav-item">
+                        <a href="{{ url_for('view_profile', user_id=current_user.user_id) }}" class="nav-link-google">
+                            <i class="bi bi-person-circle nav-icon"></i>
+                            Profile
+                        </a>
+                    </div>
+                    
+                    <div class="nav-item">
+                        <a href="{{ url_for('user.account_security') }}" class="nav-link-google">
+                            <i class="bi bi-shield-lock nav-icon"></i>
+                            Security
+                        </a>
+                    </div>
+                    
+                    <div class="nav-divider"></div>
+                    
+                    <div class="nav-item">
+                        <a href="/logout" class="nav-link-google">
+                            <i class="bi bi-box-arrow-right nav-icon"></i>
+                            Sign out
+                        </a>
+                    </div>
+                    
                 {% elif current_user.is_authenticated and current_user.has_role('user') %}
-                    <!-- User Menu -->
+                    <!-- REGULAR USER MENU -->
                     <div class="nav-section-title">Account</div>
                     
                     <div class="nav-item">
@@ -745,6 +858,20 @@
                     
                     <div class="nav-divider"></div>
                     <div class="nav-section-title">Support</div>
+                    
+                    <div class="nav-item">
+                        <a href="{{ url_for('ticketing.index') }}" class="nav-link-google">
+                            <i class="bi bi-question-circle nav-icon"></i>
+                            My Tickets
+                        </a>
+                    </div>
+                    
+                    <div class="nav-item">
+                        <a href="{{ url_for('ticketing.create_ticket') }}" class="nav-link-google">
+                            <i class="bi bi-plus-circle nav-icon"></i>
+                            Create Ticket
+                        </a>
+                    </div>
                     
                     <div class="nav-item">
                         <a href="{{ url_for('user.report_user') }}" class="nav-link-google">

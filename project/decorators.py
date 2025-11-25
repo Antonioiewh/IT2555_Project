@@ -61,3 +61,36 @@ def admin_or_editor_required(f):
 
 
 
+# Add to decorators.py
+
+def agent_required(f):
+    """Decorator to require agent role"""
+    @wraps(f)
+    @login_required
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated:
+            flash('Please log in to access this page.', 'error')
+            return redirect(url_for('login'))
+        
+        if not current_user.has_role('agent'):
+            flash('Access denied. Support agent role required.', 'error')
+            abort(403)
+        
+        return f(*args, **kwargs)
+    return decorated_function
+
+def agent_or_admin_required(f):
+    """Decorator to require agent or admin role"""
+    @wraps(f)
+    @login_required
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated:
+            flash('Please log in to access this page.', 'error')
+            return redirect(url_for('login'))
+        
+        if not (current_user.has_role('agent') or current_user.has_role('admin')):
+            flash('Access denied. Support agent or admin role required.', 'error')
+            abort(403)
+        
+        return f(*args, **kwargs)
+    return decorated_function

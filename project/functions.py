@@ -120,6 +120,7 @@ def b64encode_all(data, _seen=None):
             _seen.discard(obj_id)
     else:
         return data
+
 #fido2 server
 def get_fido2_server():
     from flask import request

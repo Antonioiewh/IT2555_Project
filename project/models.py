@@ -509,3 +509,122 @@ class WebAuthnCredential(db.Model):
     
     def __repr__(self):
         return f"<WebAuthnCredential {self.credential_id[:10]}...>"
+    
+
+class SupportAgent(db.Model):
+    """Support agent with clearance levels"""
+    __tablename__ = 'support_agents'
+    
+    agent_id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False, unique=True)
+    clearance_level = db.Column(db.Integer, nullable=False)  # 1-5 clearance levels
+    department = db.Column(db.String(100), nullable=False)
+    specialization = db.Column(db.String(255))
+    created_by = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    
+    # Relationships
+    user = db.relationship('User', foreign_keys=[user_id], backref='support_agent_profile')
+    created_by_user = db.relationship('User', foreign_keys=[created_by])
+    assignments = db.relationship('TicketAssignment', backref='agent', lazy='dynamic')
+
+class TicketCategory(db.Model):
+    """Ticket categories with clearance requirements"""
+    __tablename__ = 'ticket_categories'
+    
+    category_id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    description = db.Column(db.Text)
+    default_priority = db.Column(db.Enum('low', 'medium', 'high', 'critical', 'security'), default='medium')
+    required_clearance = db.Column(db.Integer, nullable=False, default=1)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    
+    # Relationships
+    tickets = db.relationship('Ticket', backref='category', lazy='dynamic')
+    articles = db.relationship('KnowledgeBaseArticle', backref='category', lazy='dynamic')
+
+class Ticket(db.Model):
+    """Support tickets with priority-based access control"""
+    __tablename__ = 'tickets'
+    
+    ticket_id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    category_id = db.Column(db.Integer, db.ForeignKey('ticket_categories.category_id'), nullable=False)
+    priority = db.Column(db.Enum('low', 'medium', 'high', 'critical', 'security'), default='medium')
+    status = db.Column(db.Enum('open', 'in_progress', 'pending', 'resolved', 'closed', 'cancelled'), default='open')
+    resolution = db.Column(db.Text)
+    resolved_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user = db.relationship('User', backref='tickets')
+    messages = db.relationship('TicketMessage', backref='ticket', lazy='dynamic', cascade='all, delete-orphan')
+    assignments = db.relationship('TicketAssignment', backref='ticket', lazy='dynamic')
+    escalations = db.relationship('TicketEscalation', backref='ticket', lazy='dynamic')
+
+class TicketMessage(db.Model):
+    """Messages/replies within tickets"""
+    __tablename__ = 'ticket_messages'
+    
+    message_id = db.Column(db.Integer, primary_key=True)
+    ticket_id = db.Column(db.Integer, db.ForeignKey('tickets.ticket_id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    is_internal = db.Column(db.Boolean, nullable=False, default=False)  # Internal agent notes
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    
+    # Relationships
+    user = db.relationship('User', backref='ticket_messages')
+
+class TicketAssignment(db.Model):
+    """Ticket assignments to support agents"""
+    __tablename__ = 'ticket_assignments'
+    
+    assignment_id = db.Column(db.Integer, primary_key=True)
+    ticket_id = db.Column(db.Integer, db.ForeignKey('tickets.ticket_id'), nullable=False)
+    agent_id = db.Column(db.Integer, db.ForeignKey('support_agents.agent_id'), nullable=False)
+    assigned_by = db.Column(db.Integer, db.ForeignKey('users.user_id'))
+    assigned_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    
+    # Relationships
+    assigned_by_user = db.relationship('User', foreign_keys=[assigned_by])
+
+class TicketEscalation(db.Model):
+    """Ticket escalation history"""
+    __tablename__ = 'ticket_escalations'
+    
+    escalation_id = db.Column(db.Integer, primary_key=True)
+    ticket_id = db.Column(db.Integer, db.ForeignKey('tickets.ticket_id'), nullable=False)
+    escalated_by = db.Column(db.Integer, db.ForeignKey('support_agents.agent_id'), nullable=False)
+    escalated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    previous_priority = db.Column(db.Enum('low', 'medium', 'high', 'critical', 'security'), nullable=False)
+    new_priority = db.Column(db.Enum('low', 'medium', 'high', 'critical', 'security'), nullable=False)
+    reason = db.Column(db.Text, nullable=False)
+    
+    # Relationships
+    escalated_by_agent = db.relationship('SupportAgent', foreign_keys=[escalated_by])
+
+class KnowledgeBaseArticle(db.Model):
+    """Knowledge base articles with clearance-based access"""
+    __tablename__ = 'knowledge_base_articles'
+    
+    article_id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    category_id = db.Column(db.Integer, db.ForeignKey('ticket_categories.category_id'), nullable=False)
+    author_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    required_clearance = db.Column(db.Integer, nullable=False, default=1)
+    is_public = db.Column(db.Boolean, nullable=False, default=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    author = db.relationship('User', backref='authored_articles')

@@ -1,0 +1,190 @@
+{% extends "UserBase.html" %}
+
+{% block title %}My Tickets - Agent View{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="fas fa-user-tie"></i> My Assigned Tickets</h2>
+                    <p class="text-muted mb-0">
+                        <span class="badge bg-primary">{{ tickets|length }}</span>
+                        Tickets currently assigned to you
+                    </p>
+                </div>
+                <div>
+                    <a href="{{ url_for('ticketing.agent_dashboard') }}" class="btn btn-outline-secondary me-2">
+                        <i class="fas fa-arrow-left"></i> Back to Dashboard
+                    </a>
+                    <a href="{{ url_for('ticketing.agent_open_tickets') }}" class="btn btn-info">
+                        <i class="fas fa-clipboard-list"></i> Open Tickets
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-12">
+            {% if tickets %}
+                {% for ticket in tickets %}
+                <div class="card mb-3 border-start border-primary border-3">
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-md-8">
+                                <h5 class="card-title mb-2">
+                                    <strong>Ticket #{{ ticket.ticket_id }}</strong> - {{ ticket.title }}
+                                </h5>
+                                <p class="card-text text-muted mb-2">
+                                    {{ ticket.description[:150] }}{% if ticket.description|length > 150 %}...{% endif %}
+                                </p>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <span class="badge bg-{{ 'danger' if ticket.classification == 'top_secret' else 
+                                                              'warning' if ticket.classification == 'secret' else
+                                                              'info' if ticket.classification == 'confidential' else
+                                                              'success' if ticket.classification == 'internal' else
+                                                              'secondary' }}">
+                                        <i class="fas fa-lock"></i> {{ ticket.classification.replace('_', ' ').title() }}
+                                    </span>
+                                    <span class="badge bg-{{ 'danger' if ticket.priority == 'security' else 
+                                                             'warning' if ticket.priority == 'critical' else
+                                                             'info' if ticket.priority == 'high' else
+                                                             'success' if ticket.priority == 'medium' else
+                                                             'secondary' }}">
+                                        <i class="fas fa-flag"></i> {{ ticket.priority.title() }}
+                                    </span>
+                                    <span class="badge bg-{{ 'success' if ticket.status == 'resolved' else
+                                                             'primary' if ticket.status == 'in_progress' else
+                                                             'warning' if ticket.status == 'pending' else
+                                                             'secondary' }}">
+                                        <i class="fas fa-tasks"></i> {{ ticket.status.replace('_', ' ').title() }}
+                                    </span>
+                                </div>
+                                <div class="mt-2">
+                                    <small class="text-muted">
+                                        <i class="fas fa-user"></i> Customer: {{ ticket.user.username }} | 
+                                        <i class="fas fa-clock"></i> Created: {{ ticket.created_at.strftime('%Y-%m-%d %H:%M') }} |
+                                        <i class="fas fa-edit"></i> Updated: {{ ticket.updated_at.strftime('%Y-%m-%d %H:%M') }}
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <div class="btn-group-vertical d-grid gap-2" role="group">
+                                    <a href="{{ url_for('ticketing.view_ticket', ticket_id=ticket.ticket_id) }}" 
+                                       class="btn btn-primary">
+                                        <i class="fas fa-eye"></i> View & Reply
+                                    </a>
+                                    {% if ticket.status not in ['closed', 'resolved'] %}
+                                    <button class="btn btn-outline-warning btn-sm" 
+                                            onclick="escalateTicket({{ ticket.ticket_id }})">
+                                        <i class="fas fa-arrow-up"></i> Escalate
+                                    </button>
+                                    <button class="btn btn-outline-success btn-sm" 
+                                            onclick="closeTicket({{ ticket.ticket_id }})">
+                                        <i class="fas fa-check"></i> Close
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% if ticket.messages %}
+                    <div class="card-footer bg-light">
+                        <small class="text-muted">
+                            <i class="fas fa-comments"></i> 
+                            {{ ticket.messages.count() }} message{{ 's' if ticket.messages.count() != 1 else '' }}
+                            {% set last_message = ticket.messages.order_by('created_at desc').first() %}
+                            {% if last_message %}
+                            | Last reply by {{ last_message.user.username }} on {{ last_message.created_at.strftime('%Y-%m-%d %H:%M') }}
+                            {% endif %}
+                        </small>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                
+                <!-- Pagination or Load More -->
+                {% if tickets|length >= 20 %}
+                <div class="text-center mt-4">
+                    <p class="text-muted">Showing most recent 20 tickets</p>
+                </div>
+                {% endif %}
+                
+            {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-inbox fa-4x text-muted mb-3"></i>
+                    <h4 class="text-muted">No Assigned Tickets</h4>
+                    <p class="text-muted">
+                        You don't have any tickets assigned to you yet.
+                    </p>
+                    <a href="{{ url_for('ticketing.agent_open_tickets') }}" class="btn btn-primary">
+                        <i class="fas fa-search"></i> Browse Open Tickets
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Escalation Modal -->
+<div class="modal fade" id="escalateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Escalate Ticket</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="escalateForm" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="reason" class="form-label">Escalation Reason *</label>
+                        <textarea class="form-control" id="reason" name="reason" rows="3" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning">Escalate Ticket</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Close Ticket Modal -->
+<div class="modal fade" id="closeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Close Ticket</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="closeForm" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="resolution" class="form-label">Resolution *</label>
+                        <textarea class="form-control" id="resolution" name="resolution" rows="4" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">Close Ticket</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function escalateTicket(ticketId) {
+    document.getElementById('escalateForm').action = `/tickets/escalate/${ticketId}`;
+    new bootstrap.Modal(document.getElementById('escalateModal')).show();
+}
+
+function closeTicket(ticketId) {
+    document.getElementById('closeForm').action = `/tickets/close/${ticketId}`;
+    new bootstrap.Modal(document.getElementById('closeModal')).show();
+}
+</script>
+{% endblock %}

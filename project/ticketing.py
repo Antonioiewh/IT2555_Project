@@ -3,36 +3,19 @@ from flask_login import login_required, current_user
 from datetime import datetime, timedelta
 from models import (
     db, User, Ticket, TicketMessage, SupportAgent, TicketAssignment, 
-    TicketEscalation, TicketCategory, KnowledgeBaseArticle
+    TicketEscalation, TicketCategory, KnowledgeBaseArticle, ClearanceLevel
 )
 from forms import TicketForm, TicketReplyForm, TicketAssignForm, KnowledgeBaseForm
-from decorators import role_required, admin_required
+from decorators import role_required, admin_required, agent_required
 from sqlalchemy import and_, or_, func
 import logging
 
 # Create Blueprint
 ticketing_bp = Blueprint('ticketing', __name__, url_prefix='/tickets')
 
-# Clearance Level Constants
-CLEARANCE_LEVELS = {
-    'L1': 1,  # Basic support
-    'L2': 2,  # Intermediate support
-    'L3': 3,  # Advanced support
-    'L4': 4,  # Critical/Security issues
-    'L5': 5   # Admin-only escalations
-}
-
-PRIORITY_CLEARANCE_MAP = {
-    'low': 1,
-    'medium': 2,
-    'high': 3,
-    'critical': 4,
-    'security': 5
-}
-
 def check_ticket_access(ticket, user, action='view'):
     """
-    Check if user has access to ticket based on clearance level and ownership
+    Check if user has access to ticket based on classification and ownership
     """
     # Users can always access their own tickets
     if ticket.user_id == user.user_id:
@@ -43,18 +26,13 @@ def check_ticket_access(ticket, user, action='view'):
     if not agent:
         return False
     
-    # Get required clearance for ticket
-    required_clearance = PRIORITY_CLEARANCE_MAP.get(ticket.priority, 1)
-    
-    # Check agent clearance level
-    if agent.clearance_level < required_clearance:
+    # Check classification-based access
+    if not agent.can_view_classification(ticket.classification):
         return False
     
     # For modify actions, check additional permissions
     if action in ['modify', 'assign', 'escalate']:
-        if ticket.priority == 'security' and agent.clearance_level < 5:
-            return False
-        if ticket.priority == 'critical' and agent.clearance_level < 4:
+        if ticket.classification in ['top_secret', 'secret'] and agent.clearance_level < 4:
             return False
     
     return True
@@ -64,52 +42,16 @@ def check_ticket_access(ticket, user, action='view'):
 @ticketing_bp.route('/')
 @login_required
 def index():
-    """Main ticketing dashboard"""
+    """Main ticketing index - redirect based on user type"""
     try:
         # Check if user is support agent
         agent = SupportAgent.query.filter_by(user_id=current_user.user_id, is_active=True).first()
         
         if agent:
-            # Support agent view - show assigned tickets
-            assigned_tickets = db.session.query(Ticket).join(
-                TicketAssignment, Ticket.ticket_id == TicketAssignment.ticket_id
-            ).filter(
-                TicketAssignment.agent_id == agent.agent_id,
-                TicketAssignment.is_active == True,
-                Ticket.status.in_(['open', 'in_progress', 'pending'])
-            ).order_by(Ticket.updated_at.desc()).all()
-            
-            # Get tickets user can access based on clearance - SIMPLIFIED VERSION
-            if agent.clearance_level >= 5:
-                # Level 5 agents can see all tickets
-                accessible_tickets = Ticket.query.order_by(Ticket.updated_at.desc()).limit(20).all()
-            elif agent.clearance_level >= 4:
-                # Level 4+ can see critical and below
-                accessible_tickets = Ticket.query.filter(
-                    Ticket.priority.in_(['low', 'medium', 'high', 'critical'])
-                ).order_by(Ticket.updated_at.desc()).limit(20).all()
-            elif agent.clearance_level >= 3:
-                # Level 3+ can see high and below
-                accessible_tickets = Ticket.query.filter(
-                    Ticket.priority.in_(['low', 'medium', 'high'])
-                ).order_by(Ticket.updated_at.desc()).limit(20).all()
-            elif agent.clearance_level >= 2:
-                # Level 2+ can see medium and below
-                accessible_tickets = Ticket.query.filter(
-                    Ticket.priority.in_(['low', 'medium'])
-                ).order_by(Ticket.updated_at.desc()).limit(20).all()
-            else:
-                # Level 1 can only see low priority
-                accessible_tickets = Ticket.query.filter(
-                    Ticket.priority == 'low'
-                ).order_by(Ticket.updated_at.desc()).limit(20).all()
-            
-            return render_template('ticketing/agent_dashboard.html', 
-                                 assigned_tickets=assigned_tickets,
-                                 accessible_tickets=accessible_tickets,
-                                 agent=agent)
+            # Support agent - redirect to agent dashboard
+            return redirect(url_for('ticketing.agent_dashboard'))
         else:
-            # Regular user view - show their tickets
+            # Regular user - show user dashboard
             user_tickets = Ticket.query.filter_by(user_id=current_user.user_id)\
                 .order_by(Ticket.updated_at.desc()).all()
             
@@ -119,6 +61,126 @@ def index():
         current_app.logger.error(f"Error in ticketing index: {str(e)}")
         flash('An error occurred while loading tickets.', 'error')
         return render_template('ticketing/user_dashboard.html', tickets=[])
+
+@ticketing_bp.route('/agent/dashboard')
+@agent_required
+def agent_dashboard():
+    """Support agent main dashboard"""
+    try:
+        agent = SupportAgent.query.filter_by(user_id=current_user.user_id, is_active=True).first()
+        if not agent:
+            flash('Access denied. Support agent profile required.', 'error')
+            return redirect(url_for('ticketing.index'))
+        
+        # Get tickets assigned to this agent
+        assigned_tickets = db.session.query(Ticket).join(
+            TicketAssignment, Ticket.ticket_id == TicketAssignment.ticket_id
+        ).filter(
+            TicketAssignment.agent_id == agent.agent_id,
+            TicketAssignment.is_active == True,
+            Ticket.status.in_(['open', 'in_progress', 'pending'])
+        ).order_by(Ticket.updated_at.desc()).all()
+        
+        # Get accessible tickets that are not assigned or assigned to others
+        accessible_classifications = agent.get_accessible_classifications()
+        
+        # Get open tickets that this agent can access
+        accessible_tickets_query = Ticket.query.filter(
+            Ticket.status.in_(['open', 'in_progress', 'pending']),
+            Ticket.classification.in_(accessible_classifications)
+        )
+        
+        # Filter out tickets assigned to other agents (unless agent has high clearance)
+        if agent.clearance_level < 4:
+            # Lower clearance agents only see unassigned tickets or their own assigned tickets
+            unassigned_tickets = accessible_tickets_query.outerjoin(TicketAssignment).filter(
+                or_(
+                    TicketAssignment.assignment_id.is_(None),
+                    TicketAssignment.is_active == False
+                )
+            ).order_by(Ticket.created_at.desc()).limit(10).all()
+            accessible_tickets = unassigned_tickets
+        else:
+            # Higher clearance agents can see all accessible tickets
+            accessible_tickets = accessible_tickets_query.order_by(Ticket.created_at.desc()).limit(20).all()
+        
+        return render_template('ticketing/agent_dashboard.html', 
+                             assigned_tickets=assigned_tickets,
+                             accessible_tickets=accessible_tickets,
+                             agent=agent)
+        
+    except Exception as e:
+        current_app.logger.error(f"Error loading agent dashboard: {str(e)}")
+        flash('An error occurred while loading the dashboard.', 'error')
+        return redirect(url_for('ticketing.index'))
+
+@ticketing_bp.route('/agent/open-tickets')
+@agent_required
+def agent_open_tickets():
+    """Agent view for open tickets they can access"""
+    try:
+        agent = SupportAgent.query.filter_by(user_id=current_user.user_id, is_active=True).first()
+        if not agent:
+            flash('Access denied. Support agent profile required.', 'error')
+            return redirect(url_for('ticketing.agent_dashboard'))
+        
+        # Get accessible classifications for this agent
+        accessible_classifications = agent.get_accessible_classifications()
+        
+        # Query open tickets based on classification access
+        open_tickets = Ticket.query.filter(
+            Ticket.status.in_(['open', 'in_progress', 'pending']),
+            Ticket.classification.in_(accessible_classifications)
+        ).order_by(Ticket.created_at.desc()).all()
+        
+        # Filter out tickets assigned to other agents (unless agent has high clearance)
+        if agent.clearance_level < 4:
+            # Lower clearance agents only see unassigned tickets or their own assigned tickets
+            filtered_tickets = []
+            for ticket in open_tickets:
+                assignment = TicketAssignment.query.filter_by(
+                    ticket_id=ticket.ticket_id, is_active=True
+                ).first()
+                
+                if not assignment or assignment.agent_id == agent.agent_id:
+                    filtered_tickets.append(ticket)
+            open_tickets = filtered_tickets
+        
+        return render_template('ticketing/agent_open_tickets.html', 
+                             tickets=open_tickets,
+                             agent=agent)
+        
+    except Exception as e:
+        current_app.logger.error(f"Error loading open tickets: {str(e)}")
+        flash('An error occurred while loading tickets.', 'error')
+        return redirect(url_for('ticketing.agent_dashboard'))
+
+@ticketing_bp.route('/agent/my-tickets')
+@agent_required
+def agent_my_tickets():
+    """Agent view for their assigned tickets"""
+    try:
+        agent = SupportAgent.query.filter_by(user_id=current_user.user_id, is_active=True).first()
+        if not agent:
+            flash('Access denied. Support agent profile required.', 'error')
+            return redirect(url_for('ticketing.agent_dashboard'))
+        
+        # Get tickets assigned to this agent
+        assigned_tickets = db.session.query(Ticket).join(
+            TicketAssignment, Ticket.ticket_id == TicketAssignment.ticket_id
+        ).filter(
+            TicketAssignment.agent_id == agent.agent_id,
+            TicketAssignment.is_active == True
+        ).order_by(Ticket.updated_at.desc()).all()
+        
+        return render_template('ticketing/agent_my_tickets.html', 
+                             tickets=assigned_tickets,
+                             agent=agent)
+        
+    except Exception in e:
+        current_app.logger.error(f"Error loading assigned tickets: {str(e)}")
+        flash('An error occurred while loading your tickets.', 'error')
+        return redirect(url_for('ticketing.agent_dashboard'))
         
 @ticketing_bp.route('/create', methods=['GET', 'POST'])
 @login_required
@@ -148,6 +210,9 @@ def create_ticket():
                 updated_at=datetime.utcnow()
             )
             
+            # Set classification based on priority
+            ticket.classification = ticket.determine_classification()
+            
             db.session.add(ticket)
             db.session.flush()
             
@@ -162,6 +227,7 @@ def create_ticket():
                 splunk_logger.log_security_event('ticket_created', {
                     'ticket_id': ticket.ticket_id,
                     'priority': priority,
+                    'classification': ticket.classification,
                     'category': category.name if category else 'Unknown'
                 })
             except ImportError:
@@ -274,7 +340,7 @@ def reply_ticket(ticket_id):
 # --- Support Agent Routes ---
 
 @ticketing_bp.route('/assign/<int:ticket_id>', methods=['POST'])
-@role_required(['admin', 'support_agent'])
+@agent_required
 def assign_ticket(ticket_id):
     """Assign ticket to support agent"""
     try:
@@ -295,9 +361,9 @@ def assign_ticket(ticket_id):
             flash('Invalid agent selected.', 'error')
             return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
         
-        required_clearance = PRIORITY_CLEARANCE_MAP.get(ticket.priority, 1)
-        if agent.clearance_level < required_clearance:
-            flash(f'Agent does not have sufficient clearance for {ticket.priority} priority tickets.', 'error')
+        # Check if agent can view this classification
+        if not agent.can_view_classification(ticket.classification):
+            flash(f'Agent does not have sufficient clearance for {ticket.classification} classified tickets.', 'error')
             return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
         
         # Deactivate existing assignments
@@ -330,7 +396,7 @@ def assign_ticket(ticket_id):
     return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
 
 @ticketing_bp.route('/escalate/<int:ticket_id>', methods=['POST'])
-@role_required(['admin', 'support_agent'])
+@agent_required
 def escalate_ticket(ticket_id):
     """Escalate ticket to higher clearance level"""
     try:
@@ -351,13 +417,11 @@ def escalate_ticket(ticket_id):
             flash('Only support agents can escalate tickets.', 'error')
             return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
         
-        # Determine new priority level
-        current_priority_level = PRIORITY_CLEARANCE_MAP.get(ticket.priority, 1)
-        new_priority_level = min(current_priority_level + 1, 5)
-        
-        # Map back to priority name
-        priority_map_reverse = {v: k for k, v in PRIORITY_CLEARANCE_MAP.items()}
-        new_priority = priority_map_reverse.get(new_priority_level, 'high')
+        # Determine new priority level based on current priority
+        priority_levels = ['low', 'medium', 'high', 'critical', 'security']
+        current_index = priority_levels.index(ticket.priority) if ticket.priority in priority_levels else 1
+        new_index = min(current_index + 1, len(priority_levels) - 1)
+        new_priority = priority_levels[new_index]
         
         # Create escalation record
         escalation = TicketEscalation(
@@ -371,23 +435,24 @@ def escalate_ticket(ticket_id):
         
         db.session.add(escalation)
         
-        # Update ticket priority
+        # Update ticket priority and classification
         ticket.priority = new_priority
+        ticket.classification = ticket.determine_classification()
         ticket.updated_at = datetime.utcnow()
         
-        # Auto-reassign to agent with higher clearance if current agent can't handle new priority
-        if current_agent.clearance_level < new_priority_level:
+        # Auto-reassign to agent with higher clearance if current agent can't handle new classification
+        if not current_agent.can_view_classification(ticket.classification):
             # Deactivate current assignment
             TicketAssignment.query.filter_by(ticket_id=ticket_id, is_active=True).update({'is_active': False})
             
             # Find agent with required clearance
             suitable_agent = SupportAgent.query.filter(
-                SupportAgent.clearance_level >= new_priority_level,
+                SupportAgent.clearance_level >= current_agent.clearance_level + 1,
                 SupportAgent.is_active == True,
                 SupportAgent.agent_id != current_agent.agent_id
             ).first()
             
-            if suitable_agent:
+            if suitable_agent and suitable_agent.can_view_classification(ticket.classification):
                 new_assignment = TicketAssignment(
                     ticket_id=ticket_id,
                     agent_id=suitable_agent.agent_id,
@@ -474,10 +539,12 @@ def manage_agents():
         users_without_agent = db.session.query(User).outerjoin(SupportAgent).filter(
             SupportAgent.user_id.is_(None)
         ).all()
+        clearance_levels = ClearanceLevel.query.order_by(ClearanceLevel.level_id).all()
         
         return render_template('ticketing/manage_agents.html', 
                              agents=agents, 
-                             available_users=users_without_agent)
+                             available_users=users_without_agent,
+                             clearance_levels=clearance_levels)
         
     except Exception as e:
         current_app.logger.error(f"Error loading agents: {str(e)}")
@@ -492,9 +559,10 @@ def create_agent():
         user_id = request.form.get('user_id', type=int)
         clearance_level = request.form.get('clearance_level', type=int)
         department = request.form.get('department', '').strip()
+        specialization = request.form.get('specialization', '').strip()
         
         if not all([user_id, clearance_level, department]):
-            flash('All fields are required.', 'error')
+            flash('User, clearance level, and department are required.', 'error')
             return redirect(url_for('ticketing.manage_agents'))
         
         if clearance_level < 1 or clearance_level > 5:
@@ -512,6 +580,7 @@ def create_agent():
             user_id=user_id,
             clearance_level=clearance_level,
             department=department,
+            specialization=specialization if specialization else None,
             created_by=current_user.user_id,
             created_at=datetime.utcnow(),
             is_active=True
@@ -521,7 +590,9 @@ def create_agent():
         db.session.commit()
         
         user = User.query.get(user_id)
-        flash(f'Support agent created for {user.username} with L{clearance_level} clearance.', 'success')
+        clearance = ClearanceLevel.query.get(clearance_level)
+        clearance_name = clearance.level_name if clearance else f'L{clearance_level}'
+        flash(f'Support agent created for {user.username} with {clearance_name} clearance.', 'success')
         
     except Exception as e:
         db.session.rollback()
@@ -563,15 +634,15 @@ def determine_ticket_priority(description, category):
     return 'medium'
 
 def auto_assign_ticket(ticket):
-    """Auto-assign ticket to available agent based on priority and workload"""
+    """Auto-assign ticket to available agent based on classification and workload"""
     try:
-        required_clearance = PRIORITY_CLEARANCE_MAP.get(ticket.priority, 1)
+        # Find agents who can view this classification
+        suitable_agents = []
+        all_agents = SupportAgent.query.filter(SupportAgent.is_active == True).all()
         
-        # Find agents with required clearance level
-        suitable_agents = SupportAgent.query.filter(
-            SupportAgent.clearance_level >= required_clearance,
-            SupportAgent.is_active == True
-        ).all()
+        for agent in all_agents:
+            if agent.can_view_classification(ticket.classification):
+                suitable_agents.append(agent)
         
         if not suitable_agents:
             return  # No suitable agents available

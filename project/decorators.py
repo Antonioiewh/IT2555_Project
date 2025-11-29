@@ -72,7 +72,7 @@ def agent_required(f):
             flash('Please log in to access this page.', 'error')
             return redirect(url_for('login'))
         
-        if not current_user.has_role('agent'):
+        if not current_user.has_role('support_agent'):
             flash('Access denied. Support agent role required.', 'error')
             abort(403)
         

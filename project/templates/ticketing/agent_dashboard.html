@@ -10,13 +10,32 @@
                 <div>
                     <h2><i class="fas fa-headset"></i> Support Agent Dashboard</h2>
                     <p class="text-muted mb-0">
-                        <span class="badge bg-info">Level {{ agent.clearance_level }}</span>
+                        <span class="badge bg-info">{{ agent.clearance_level_info.level_name }}</span>
                         {{ agent.department }}
                         {% if agent.specialization %} - {{ agent.specialization }}{% endif %}
                     </p>
+                    <small class="text-muted">
+                        <i class="fas fa-shield-alt"></i> 
+                        Accessible Classifications: 
+                        {% for classification in agent.get_accessible_classifications() %}
+                            <span class="badge bg-{{ 'danger' if classification == 'top_secret' else 
+                                                     'warning' if classification == 'secret' else
+                                                     'info' if classification == 'confidential' else
+                                                     'success' if classification == 'internal' else
+                                                     'secondary' }} me-1">
+                                {{ classification.replace('_', ' ').title() }}
+                            </span>
+                        {% endfor %}
+                    </small>
                 </div>
                 <div>
-                    <a href="{{ url_for('ticketing.create_ticket') }}" class="btn btn-primary me-2">
+                    <a href="{{ url_for('ticketing.agent_open_tickets') }}" class="btn btn-info me-2">
+                        <i class="fas fa-clipboard-list"></i> Browse Open Tickets
+                    </a>
+                    <a href="{{ url_for('ticketing.agent_my_tickets') }}" class="btn btn-primary me-2">
+                        <i class="fas fa-user-tie"></i> My Tickets
+                    </a>
+                    <a href="{{ url_for('ticketing.create_ticket') }}" class="btn btn-success me-2">
                         <i class="fas fa-plus"></i> Create Ticket
                     </a>
                     {% if current_user.has_role('admin') %}
@@ -29,53 +48,114 @@
         </div>
     </div>
     
+    <!-- Quick Actions Row -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card border-primary h-100">
+                <div class="card-header bg-primary text-white text-center">
+                    <h5 class="mb-0"><i class="fas fa-user-tie"></i> My Work</h5>
+                </div>
+                <div class="card-body text-center">
+                    <h2 class="text-primary">{{ assigned_tickets|length }}</h2>
+                    <p class="mb-3">Tickets assigned to you</p>
+                    <a href="{{ url_for('ticketing.agent_my_tickets') }}" class="btn btn-primary">
+                        <i class="fas fa-arrow-right"></i> View My Tickets
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card border-info h-100">
+                <div class="card-header bg-info text-white text-center">
+                    <h5 class="mb-0"><i class="fas fa-clipboard-list"></i> Available Work</h5>
+                </div>
+                <div class="card-body text-center">
+                    <h2 class="text-info">{{ accessible_tickets|length }}</h2>
+                    <p class="mb-3">Open tickets you can access</p>
+                    <a href="{{ url_for('ticketing.agent_open_tickets') }}" class="btn btn-info">
+                        <i class="fas fa-arrow-right"></i> Browse Open Tickets
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card border-success h-100">
+                <div class="card-header bg-success text-white text-center">
+                    <h5 class="mb-0"><i class="fas fa-shield-alt"></i> Clearance Level</h5>
+                </div>
+                <div class="card-body text-center">
+                    <h2 class="text-success">L{{ agent.clearance_level }}</h2>
+                    <p class="mb-3">{{ agent.clearance_level_info.level_name }}</p>
+                    <span class="badge bg-success">{{ agent.clearance_level_info.level_description }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <div class="row">
-        <!-- My Assigned Tickets -->
+        <!-- My Assigned Tickets Preview -->
         <div class="col-md-6">
             <div class="card">
-                <div class="card-header bg-primary text-white">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                     <h5 class="mb-0"><i class="fas fa-user-tie"></i> My Assigned Tickets</h5>
+                    {% if assigned_tickets|length > 3 %}
+                    <a href="{{ url_for('ticketing.agent_my_tickets') }}" class="btn btn-sm btn-light">
+                        View All ({{ assigned_tickets|length }})
+                    </a>
+                    {% endif %}
                 </div>
                 <div class="card-body">
                     {% if assigned_tickets %}
-                        {% for ticket in assigned_tickets %}
-                        <div class="card mb-2 border-start border-primary border-3">
+                        {% for ticket in assigned_tickets[:3] %}
+                        <div class="card mb-2 border-start border-{{ 'danger' if ticket.classification == 'top_secret' else 
+                                                                      'warning' if ticket.classification == 'secret' else
+                                                                      'info' if ticket.classification == 'confidential' else
+                                                                      'success' if ticket.classification == 'internal' else
+                                                                      'secondary' }} border-3">
                             <div class="card-body p-3">
                                 <div class="d-flex justify-content-between align-items-start">
-                                    <div>
+                                    <div class="flex-grow-1">
                                         <h6 class="card-title mb-1">
-                                            <strong>Ticket #{{ ticket.ticket_id }}</strong> - {{ ticket.title[:40] }}...
+                                            <strong>#{{ ticket.ticket_id }}</strong> - {{ ticket.title[:50] }}{% if ticket.title|length > 50 %}...{% endif %}
                                         </h6>
                                         <p class="card-text text-muted mb-2 small">
-                                            {{ ticket.description[:80] }}...
+                                            {{ ticket.description[:100] }}{% if ticket.description|length > 100 %}...{% endif %}
                                         </p>
                                         <div class="d-flex gap-1 flex-wrap">
+                                            <span class="badge bg-{{ 'danger' if ticket.classification == 'top_secret' else 
+                                                                      'warning' if ticket.classification == 'secret' else
+                                                                      'info' if ticket.classification == 'confidential' else
+                                                                      'success' if ticket.classification == 'internal' else
+                                                                      'secondary' }}">
+                                                <i class="fas fa-lock"></i> {{ ticket.classification.replace('_', ' ').title() }}
+                                            </span>
                                             <span class="badge bg-{{ 'danger' if ticket.priority == 'security' else 
                                                                      'warning' if ticket.priority == 'critical' else
                                                                      'info' if ticket.priority == 'high' else
                                                                      'success' if ticket.priority == 'medium' else
                                                                      'secondary' }}">
-                                                {{ ticket.priority.title() }}
+                                                <i class="fas fa-flag"></i> {{ ticket.priority.title() }}
                                             </span>
                                             <span class="badge bg-{{ 'success' if ticket.status == 'resolved' else
                                                                      'primary' if ticket.status == 'in_progress' else
                                                                      'warning' if ticket.status == 'pending' else
                                                                      'secondary' }}">
-                                                {{ ticket.status.replace('_', ' ').title() }}
+                                                <i class="fas fa-tasks"></i> {{ ticket.status.replace('_', ' ').title() }}
                                             </span>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="mt-2">
+                                <div class="mt-2 d-flex justify-content-between align-items-center">
                                     <small class="text-muted">
-                                        Created: {{ ticket.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                        <i class="fas fa-clock"></i> Created: {{ ticket.created_at.strftime('%m/%d %H:%M') }}
+                                        | <i class="fas fa-edit"></i> Updated: {{ ticket.updated_at.strftime('%m/%d %H:%M') }}
                                     </small>
-                                    <div class="mt-2">
-                                        <a href="{{ url_for('ticketing.view_ticket', ticket_id=ticket.ticket_id) }}" 
-                                           class="btn btn-sm btn-primary">
-                                            <i class="fas fa-eye"></i> View
-                                        </a>
-                                    </div>
+                                    <a href="{{ url_for('ticketing.view_ticket', ticket_id=ticket.ticket_id) }}" 
+                                       class="btn btn-sm btn-primary">
+                                        <i class="fas fa-eye"></i> View
+                                    </a>
                                 </div>
                             </div>
                         </div>
@@ -84,65 +164,77 @@
                         <div class="text-center py-4">
                             <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
                             <h6 class="text-muted">No Assigned Tickets</h6>
-                            <p class="text-muted">You don't have any tickets assigned to you yet.</p>
+                            <p class="text-muted small">You don't have any tickets assigned to you yet.</p>
+                            <a href="{{ url_for('ticketing.agent_open_tickets') }}" class="btn btn-outline-primary btn-sm">
+                                Browse Available Tickets
+                            </a>
                         </div>
                     {% endif %}
                 </div>
             </div>
         </div>
         
-        <!-- Available Tickets -->
+        <!-- Available Tickets Preview -->
         <div class="col-md-6">
             <div class="card">
-                <div class="card-header bg-info text-white">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">
                         <i class="fas fa-list"></i> Available Tickets 
-                        <small>(Clearance L{{ agent.clearance_level }})</small>
                     </h5>
+                    {% if accessible_tickets|length > 3 %}
+                    <a href="{{ url_for('ticketing.agent_open_tickets') }}" class="btn btn-sm btn-light">
+                        View All ({{ accessible_tickets|length }})
+                    </a>
+                    {% endif %}
                 </div>
                 <div class="card-body">
                     {% if accessible_tickets %}
-                        {% for ticket in accessible_tickets %}
-                        <div class="card mb-2 border-start border-info border-3">
+                        {% for ticket in accessible_tickets[:3] %}
+                        <div class="card mb-2 border-start border-{{ 'danger' if ticket.classification == 'top_secret' else 
+                                                                      'warning' if ticket.classification == 'secret' else
+                                                                      'info' if ticket.classification == 'confidential' else
+                                                                      'success' if ticket.classification == 'internal' else
+                                                                      'secondary' }} border-3">
                             <div class="card-body p-3">
                                 <div class="d-flex justify-content-between align-items-start">
-                                    <div>
+                                    <div class="flex-grow-1">
                                         <h6 class="card-title mb-1">
-                                            <strong>Ticket #{{ ticket.ticket_id }}</strong> - {{ ticket.title[:40] }}...
+                                            <strong>#{{ ticket.ticket_id }}</strong> - {{ ticket.title[:50] }}{% if ticket.title|length > 50 %}...{% endif %}
                                         </h6>
                                         <p class="card-text text-muted mb-2 small">
-                                            By: {{ ticket.user.username }} | {{ ticket.description[:60] }}...
+                                            By: <strong>{{ ticket.user.username }}</strong> | {{ ticket.description[:80] }}{% if ticket.description|length > 80 %}...{% endif %}
                                         </p>
                                         <div class="d-flex gap-1 flex-wrap">
+                                            <span class="badge bg-{{ 'danger' if ticket.classification == 'top_secret' else 
+                                                                      'warning' if ticket.classification == 'secret' else
+                                                                      'info' if ticket.classification == 'confidential' else
+                                                                      'success' if ticket.classification == 'internal' else
+                                                                      'secondary' }}">
+                                                <i class="fas fa-lock"></i> {{ ticket.classification.replace('_', ' ').title() }}
+                                            </span>
                                             <span class="badge bg-{{ 'danger' if ticket.priority == 'security' else 
                                                                      'warning' if ticket.priority == 'critical' else
                                                                      'info' if ticket.priority == 'high' else
                                                                      'success' if ticket.priority == 'medium' else
                                                                      'secondary' }}">
-                                                {{ ticket.priority.title() }}
-                                            </span>
-                                            <span class="badge bg-{{ 'success' if ticket.status == 'resolved' else
-                                                                     'primary' if ticket.status == 'in_progress' else
-                                                                     'warning' if ticket.status == 'pending' else
-                                                                     'secondary' }}">
-                                                {{ ticket.status.replace('_', ' ').title() }}
+                                                <i class="fas fa-flag"></i> {{ ticket.priority.title() }}
                                             </span>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="mt-2">
+                                <div class="mt-2 d-flex justify-content-between align-items-center">
                                     <small class="text-muted">
-                                        Created: {{ ticket.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                        <i class="fas fa-clock"></i> Created: {{ ticket.created_at.strftime('%m/%d %H:%M') }}
                                     </small>
-                                    <div class="mt-2">
+                                    <div>
                                         <a href="{{ url_for('ticketing.view_ticket', ticket_id=ticket.ticket_id) }}" 
-                                           class="btn btn-sm btn-outline-primary">
+                                           class="btn btn-sm btn-outline-primary me-1">
                                             <i class="fas fa-eye"></i> View
                                         </a>
                                         {% if agent.clearance_level >= 2 %}
                                         <button class="btn btn-sm btn-outline-success" 
                                                 onclick="assignToMe({{ ticket.ticket_id }})">
-                                            <i class="fas fa-user-plus"></i> Assign to Me
+                                            <i class="fas fa-user-plus"></i> Take
                                         </button>
                                         {% endif %}
                                     </div>
@@ -154,8 +246,9 @@
                         <div class="text-center py-4">
                             <i class="fas fa-shield-alt fa-3x text-muted mb-3"></i>
                             <h6 class="text-muted">No Available Tickets</h6>
-                            <p class="text-muted">
-                                No tickets are available for your clearance level (L{{ agent.clearance_level }}).
+                            <p class="text-muted small">
+                                No tickets are available for your clearance level.<br>
+                                <span class="badge bg-secondary">{{ agent.clearance_level_info.level_name }}</span>
                             </p>
                         </div>
                     {% endif %}
@@ -164,37 +257,40 @@
         </div>
     </div>
     
-    <!-- Quick Stats Row -->
+    <!-- Clearance Level Information -->
     <div class="row mt-4">
-        <div class="col-md-3">
-            <div class="card bg-primary text-white">
-                <div class="card-body text-center">
-                    <h3>{{ assigned_tickets|length }}</h3>
-                    <p class="mb-0">Assigned to Me</p>
+        <div class="col-12">
+            <div class="card border-info">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-info-circle"></i> Your Clearance Level Access</h6>
                 </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card bg-info text-white">
-                <div class="card-body text-center">
-                    <h3>{{ accessible_tickets|length }}</h3>
-                    <p class="mb-0">Available Tickets</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card bg-success text-white">
-                <div class="card-body text-center">
-                    <h3>L{{ agent.clearance_level }}</h3>
-                    <p class="mb-0">Clearance Level</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card bg-secondary text-white">
-                <div class="card-body text-center">
-                    <h3>{{ agent.department[:10] }}{% if agent.department|length > 10 %}...{% endif %}</h3>
-                    <p class="mb-0">Department</p>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Ticket Classifications You Can Access:</h6>
+                            <div class="d-flex flex-wrap gap-2">
+                                {% for classification in agent.get_accessible_classifications() %}
+                                <div class="d-flex align-items-center">
+                                    <span class="badge bg-{{ 'danger' if classification == 'top_secret' else 
+                                                             'warning' if classification == 'secret' else
+                                                             'info' if classification == 'confidential' else
+                                                             'success' if classification == 'internal' else
+                                                             'secondary' }} me-2">
+                                        <i class="fas fa-lock"></i> {{ classification.replace('_', ' ').title() }}
+                                    </span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Department Information:</h6>
+                            <p class="mb-1"><strong>Department:</strong> {{ agent.department }}</p>
+                            {% if agent.specialization %}
+                            <p class="mb-1"><strong>Specialization:</strong> {{ agent.specialization }}</p>
+                            {% endif %}
+                            <p class="mb-0"><strong>Agent Since:</strong> {{ agent.created_at.strftime('%Y-%m-%d') }}</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -207,21 +303,67 @@ function assignToMe(ticketId) {
         fetch(`/tickets/assign/${ticketId}`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
+                'Content-Type': 'application/x-www-form-urlencoded'
             },
             body: `agent_id={{ agent.agent_id }}`
         })
         .then(response => {
             if (response.ok) {
-                location.reload();
+                // Show success message
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'alert alert-success alert-dismissible fade show';
+                alertDiv.innerHTML = `
+                    <i class="fas fa-check-circle"></i> Ticket #${ticketId} assigned to you successfully!
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                document.querySelector('.container-fluid').prepend(alertDiv);
+                
+                // Reload after short delay to show the message
+                setTimeout(() => {
+                    location.reload();
+                }, 1500);
             } else {
-                alert('Error assigning ticket');
+                response.text().then(text => {
+                    alert('Error assigning ticket: ' + text);
+                });
             }
         })
         .catch(error => {
-            alert('Error assigning ticket');
+            console.error('Error:', error);
+            alert('Error assigning ticket. Please try again.');
         });
     }
 }
+
+// Auto-refresh dashboard every 5 minutes
+setTimeout(() => {
+    location.reload();
+}, 300000);
 </script>
+
+<style>
+.card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    border: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+.card:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    transition: box-shadow 0.15s ease-in-out;
+}
+
+.badge {
+    font-size: 0.75em;
+}
+
+.border-3 {
+    border-width: 3px !important;
+}
+
+.text-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+</style>
 {% endblock %}

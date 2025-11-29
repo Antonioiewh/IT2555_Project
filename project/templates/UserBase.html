@@ -646,19 +646,7 @@
                     <div class="nav-divider"></div>
                     <div class="nav-section-title">Ticketing System</div>
                     
-                    <div class="nav-item">
-                        <a href="{{ url_for('ticketing.index') }}" class="nav-link-google">
-                            <i class="bi bi-ticket-detailed nav-icon"></i>
-                            All Tickets
-                        </a>
-                    </div>
                     
-                    <div class="nav-item">
-                        <a href="{{ url_for('ticketing.manage_agents') }}" class="nav-link-google">
-                            <i class="bi bi-people-fill nav-icon"></i>
-                            Manage Agents
-                        </a>
-                    </div>
                     
                     <div class="nav-divider"></div>
                     
@@ -687,20 +675,8 @@
                             Support Agent (L{{ agent.clearance_level }})
                         </div>
                         
-                        <div class="nav-item">
-                            <a href="{{ url_for('ticketing.index') }}" class="nav-link-google">
-                                <i class="bi bi-headset nav-icon"></i>
-                                Agent Dashboard
-                                <span class="google-badge">L{{ agent.clearance_level }}</span>
-                            </a>
-                        </div>
-                        
-                        <div class="nav-item">
-                            <a href="{{ url_for('ticketing.create_ticket') }}" class="nav-link-google">
-                                <i class="bi bi-plus-circle nav-icon"></i>
-                                Create Ticket
-                            </a>
-                        </div>
+        
+                       
                         
                         <!-- Ticketing Tools Collapsible -->
                         <div class="collapsible-nav">
@@ -859,19 +835,9 @@
                     <div class="nav-divider"></div>
                     <div class="nav-section-title">Support</div>
                     
-                    <div class="nav-item">
-                        <a href="{{ url_for('ticketing.index') }}" class="nav-link-google">
-                            <i class="bi bi-question-circle nav-icon"></i>
-                            My Tickets
-                        </a>
-                    </div>
                     
-                    <div class="nav-item">
-                        <a href="{{ url_for('ticketing.create_ticket') }}" class="nav-link-google">
-                            <i class="bi bi-plus-circle nav-icon"></i>
-                            Create Ticket
-                        </a>
-                    </div>
+                    
+                    
                     
                     <div class="nav-item">
                         <a href="{{ url_for('user.report_user') }}" class="nav-link-google">

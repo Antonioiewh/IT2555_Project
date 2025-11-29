@@ -28,6 +28,7 @@ DROP TABLE IF EXISTS ticket_assignments;
 DROP TABLE IF EXISTS ticket_messages;
 DROP TABLE IF EXISTS tickets;
 DROP TABLE IF EXISTS ticket_categories;
+DROP TABLE IF EXISTS clearance_levels; -- NEW: Clearance levels table
 DROP TABLE IF EXISTS support_agents;
 DROP TABLE IF EXISTS webauthn_credentials;
 DROP TABLE IF EXISTS ModSecLog;
@@ -43,11 +44,8 @@ DROP TABLE IF EXISTS users; -- Drop users table last
 CREATE TABLE users (
     user_id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(80) UNIQUE NOT NULL,
-
     phone_number VARCHAR(8) UNIQUE NULL,
     password_hash VARCHAR(255) NOT NULL,
-    -- Removed first_name VARCHAR(50) DEFAULT NULL,
-    -- Removed last_name VARCHAR(50) DEFAULT NULL,
     profile_pic_url VARCHAR(255) DEFAULT NULL,
     banner_url VARCHAR(255) DEFAULT NULL,
     bio TEXT DEFAULT NULL,
@@ -93,7 +91,21 @@ CREATE TABLE user_role_assignments (
 );
 
 -- **************************************
--- 3. Events/Reminders (Added for completeness, assuming they link to users)
+-- 3. Clearance Levels Table (NEW)
+-- **************************************
+CREATE TABLE clearance_levels (
+    level_id INT PRIMARY KEY,
+    level_name VARCHAR(50) NOT NULL UNIQUE,
+    level_description TEXT,
+    can_view_public BOOLEAN DEFAULT TRUE,
+    can_view_internal BOOLEAN DEFAULT FALSE,
+    can_view_confidential BOOLEAN DEFAULT FALSE,
+    can_view_secret BOOLEAN DEFAULT FALSE,
+    can_view_top_secret BOOLEAN DEFAULT FALSE
+);
+
+-- **************************************
+-- 4. Events/Reminders (Added for completeness, assuming they link to users)
 -- **************************************
 CREATE TABLE events (
     event_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -123,7 +135,7 @@ CREATE TABLE event_participants (
 );
 
 -- **************************************
--- 4. Posts (Added for completeness, assuming they link to users)
+-- 5. Posts (Added for completeness, assuming they link to users)
 -- **************************************
 CREATE TABLE posts (
     post_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -157,8 +169,9 @@ CREATE TABLE post_likes (
 CREATE INDEX idx_post_likes_user_id ON post_likes(user_id);
 CREATE INDEX idx_post_likes_post_id ON post_likes(post_id);
 CREATE INDEX idx_post_likes_created_at ON post_likes(created_at);
+
 -- **************************************
--- 5. Notifications
+-- 6. Notifications
 -- **************************************
 CREATE TABLE notifications (
     notification_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -172,15 +185,12 @@ CREATE TABLE notifications (
 );
 
 -- **************************************
--- 6. Customer Service
+-- 7. Customer Service
 -- **************************************
-
-
 CREATE TABLE reports (
     report_id INT AUTO_INCREMENT PRIMARY KEY,
     reporter_id INT NOT NULL,                    
     reported_user_id INT NOT NULL,
-
     report_type ENUM(
         'spam',
         'harassment',
@@ -189,23 +199,21 @@ CREATE TABLE reports (
         'fraud',
         'other'
     ) NOT NULL,
-
     description TEXT NOT NULL,
     status ENUM('open', 'in_review', 'action_taken', 'rejected') NOT NULL DEFAULT 'open',
     submitted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     resolved_at DATETIME NULL,
     admin_notes TEXT NULL,
-
     FOREIGN KEY (reporter_id) REFERENCES users(user_id) ON DELETE CASCADE,
     FOREIGN KEY (reported_user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
+
 -- **************************************
--- 7. Messaging
+-- 8. Messaging
 -- **************************************
 CREATE TABLE chats (
     chat_id INT AUTO_INCREMENT PRIMARY KEY,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    -- chat_secret_key VARCHAR(64) NOT NULL
 );
 
 CREATE TABLE chat_participants (
@@ -217,7 +225,6 @@ CREATE TABLE chat_participants (
     UNIQUE (chat_id, user_id),
     FOREIGN KEY (chat_id) REFERENCES chats(chat_id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
-
 );
 
 CREATE TABLE friend_chat_map (
@@ -282,8 +289,9 @@ CREATE TABLE chat_key_envelopes (
   CONSTRAINT fk_cke_chat FOREIGN KEY (chat_id) REFERENCES chats(chat_id),
   CONSTRAINT fk_cke_user FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
+
 -- **************************************
--- 8. Friend System
+-- 9. Friend System
 -- **************************************
 CREATE TABLE friendships (
     friendship_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -300,7 +308,7 @@ CREATE TABLE friendships (
 );
 
 -- **************************************
--- 9. Admin Panel 3/4
+-- 10. Admin Panel
 -- **************************************
 CREATE TABLE admin_actions (
     action_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -325,22 +333,22 @@ CREATE TABLE user_logs (
 );
 
 CREATE TABLE ModSecLog (
-    id INT AUTO_INCREMENT PRIMARY KEY,          -- Unique identifier for each log entry
-    date VARCHAR(20) NOT NULL,                  -- Date of the log (e.g., 12/Jun/2025)
-    time VARCHAR(20) NOT NULL,                  -- Time of the log (e.g., 10:05:24)
-    source VARCHAR(50) NOT NULL,                -- Source IP address (e.g., 172.18.0.1)
-    request TEXT NOT NULL,                      -- Request details (e.g., GET /users_dashboard?search=username)
-    response TEXT NOT NULL,                     -- Response details (e.g., HTTP/2.0 403)
-    attack_detected TEXT NOT NULL               -- Attack type detected (e.g., XSS using libinjection)
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    date VARCHAR(20) NOT NULL,
+    time VARCHAR(20) NOT NULL,
+    source VARCHAR(50) NOT NULL,
+    request TEXT NOT NULL,
+    response TEXT NOT NULL,
+    attack_detected TEXT NOT NULL
 );
 
 CREATE TABLE ErrorLog (
-    id INT AUTO_INCREMENT PRIMARY KEY,          -- Unique identifier for each log entry
-    date VARCHAR(20) NOT NULL,                  -- Date of the log (e.g., 2025/06/01)
-    time VARCHAR(20) NOT NULL,                  -- Time of the log (e.g., 12:40:46)
-    level ENUM('notice', 'error', 'warning', 'critical') NOT NULL, -- Log level (e.g., notice, error)
-    message TEXT NOT NULL,                      -- Log message (e.g., limiting requests, excess: 3.295 by zone "api_limit")
-    client_ip VARCHAR(50) NOT NULL              -- Client IP address (e.g., 172.18.0.1)
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    date VARCHAR(20) NOT NULL,
+    time VARCHAR(20) NOT NULL,
+    level ENUM('notice', 'error', 'warning', 'critical') NOT NULL,
+    message TEXT NOT NULL,
+    client_ip VARCHAR(50) NOT NULL
 );
 
 CREATE TABLE webauthn_credentials (
@@ -355,10 +363,10 @@ CREATE TABLE webauthn_credentials (
 );
 
 -- **************************************
--- 10. Ticketing System
+-- 11. Ticketing System with Classification
 -- **************************************
 
--- Support agents with clearance levels
+-- Support agents with clearance levels (UPDATED to use FK to clearance_levels)
 CREATE TABLE support_agents (
     agent_id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL UNIQUE,
@@ -370,7 +378,8 @@ CREATE TABLE support_agents (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE CASCADE
+    FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (clearance_level) REFERENCES clearance_levels(level_id) ON DELETE RESTRICT
 );
 
 -- Ticket categories
@@ -384,7 +393,7 @@ CREATE TABLE ticket_categories (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Support tickets
+-- Support tickets (UPDATED with classification field)
 CREATE TABLE tickets (
     ticket_id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
@@ -392,6 +401,7 @@ CREATE TABLE tickets (
     description TEXT NOT NULL,
     category_id INT NOT NULL,
     priority ENUM('low', 'medium', 'high', 'critical', 'security') NOT NULL DEFAULT 'medium',
+    classification ENUM('public', 'internal', 'confidential', 'secret', 'top_secret') NOT NULL DEFAULT 'public',
     status ENUM('open', 'in_progress', 'pending', 'resolved', 'closed', 'cancelled') NOT NULL DEFAULT 'open',
     resolution TEXT NULL,
     resolved_at DATETIME NULL,
@@ -459,6 +469,7 @@ CREATE TABLE knowledge_base_articles (
 CREATE INDEX idx_tickets_user_id ON tickets(user_id);
 CREATE INDEX idx_tickets_status ON tickets(status);
 CREATE INDEX idx_tickets_priority ON tickets(priority);
+CREATE INDEX idx_tickets_classification ON tickets(classification);
 CREATE INDEX idx_tickets_created_at ON tickets(created_at);
 CREATE INDEX idx_ticket_assignments_ticket_id ON ticket_assignments(ticket_id);
 CREATE INDEX idx_ticket_assignments_agent_id ON ticket_assignments(agent_id);
@@ -470,6 +481,16 @@ CREATE INDEX idx_support_agents_clearance_level ON support_agents(clearance_leve
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- **************************************
+-- Insert Clearance Levels Data
+-- **************************************
+INSERT INTO clearance_levels (level_id, level_name, level_description, can_view_public, can_view_internal, can_view_confidential, can_view_secret, can_view_top_secret) VALUES
+(1, 'L1-PUBLIC', 'Basic support - public information only', TRUE, FALSE, FALSE, FALSE, FALSE),
+(2, 'L2-INTERNAL', 'Standard support - internal information access', TRUE, TRUE, FALSE, FALSE, FALSE),
+(3, 'L3-CONFIDENTIAL', 'Senior support - confidential information access', TRUE, TRUE, TRUE, FALSE, FALSE),
+(4, 'L4-SECRET', 'Critical support - secret information access', TRUE, TRUE, TRUE, TRUE, FALSE),
+(5, 'L5-TOP_SECRET', 'Security team - top secret information access', TRUE, TRUE, TRUE, TRUE, TRUE);
+
+-- **************************************
 -- Sample Data Insertion for Roles and Permissions
 -- **************************************
 
@@ -477,7 +498,7 @@ SET FOREIGN_KEY_CHECKS = 1;
 INSERT INTO roles (role_name, description) VALUES
 ('admin', 'Has full administrative privileges over the system.'),
 ('user', 'Standard user with basic functionality like creating posts, events, sending messages.'),
-('agent', 'Support agent with access to ticketing system and clearance-based ticket management.'),
+('support_agent', 'Support agent with access to ticketing system and clearance-based ticket management.'),
 ('guest', 'Can view public content but cannot interact or create.');
 
 -- Insert sample permissions
@@ -495,7 +516,9 @@ INSERT INTO permissions (permission_name, description) VALUES
 ('view_all_tickets', 'Ability to view tickets based on clearance level.'),
 ('escalate_tickets', 'Ability to escalate ticket priority levels.'),
 ('assign_tickets', 'Ability to assign tickets to other agents.'),
-('view_internal_notes', 'Ability to view internal agent notes on tickets.');
+('view_internal_notes', 'Ability to view internal agent notes on tickets.'),
+('view_open_tickets', 'Ability to view open tickets based on clearance level.'),
+('view_my_tickets', 'Ability to view assigned tickets.');
 
 -- Assign permissions to roles
 -- Admin Role Permissions
@@ -506,17 +529,18 @@ WHERE r.role_name = 'admin' AND p.permission_name IN (
     'manage_users', 'delete_any_post', 'edit_any_post', 'create_post',
     'create_event', 'send_message', 'view_admin_panel', 'resolve_reports',
     'access_ticketing_dashboard', 'manage_tickets', 'view_all_tickets',
-    'escalate_tickets', 'assign_tickets', 'view_internal_notes'
+    'escalate_tickets', 'assign_tickets', 'view_internal_notes',
+    'view_open_tickets', 'view_my_tickets'
 );
 
--- Agent Role Permissions
+-- Support Agent Role Permissions
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.role_id, p.permission_id
 FROM roles r, permissions p
-WHERE r.role_name = 'agent' AND p.permission_name IN (
+WHERE r.role_name = 'support_agent' AND p.permission_name IN (
     'access_ticketing_dashboard', 'manage_tickets', 'view_all_tickets',
     'escalate_tickets', 'assign_tickets', 'view_internal_notes', 'create_post',
-    'create_event', 'send_message'
+    'create_event', 'send_message', 'view_open_tickets', 'view_my_tickets'
 );
 
 -- User Role Permissions
@@ -527,15 +551,9 @@ WHERE r.role_name = 'user' AND p.permission_name IN (
     'create_post', 'create_event', 'send_message'
 );
 
--- Guest Role Permissions (empty, as they typically only view public data, no direct interaction)
-
 -- **************************************
 -- Insert Sample Users and Assign Roles
 -- **************************************
--- IMPORTANT: Replace YOUR_ADMIN_HASH_HERE, etc., with the actual hashes you generated!
--- For this example, I'll use placeholders for email, first_name, last_name.
--- In a real application, ensure each user has a unique email.
--- user|userpass , editor|editorpass, admin|adminpass
 INSERT INTO users (username, phone_number, password_hash) VALUES
 ('admin', '12345679', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
 ('user', '12345678', 'scrypt:32768:8:1$V460O7kVZYEBrWGC$d7a6bd9c8feced05b6d118ec8ef7d2c65c66d41171eb05c9589a49e60a95fda7d830ed98d7eb2e50830034bea978f6db05be620883bacb0bf4c5fc3a0e1d7b38'),
@@ -546,9 +564,6 @@ INSERT INTO users (username, phone_number, password_hash) VALUES
 -- **************************************
 -- Additional Support Agent User Accounts  
 -- **************************************
-
--- Insert 5 new users for support agents
--- Passwords: support1pass, support2pass, support3pass, support4pass, support5pass
 INSERT INTO users (username, phone_number, password_hash) VALUES
 ('support_l1_agent', '98765421', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
 ('support_l2_tech', '98765422', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
@@ -573,12 +588,12 @@ FROM users u, roles r
 WHERE (u.username = 'admin' AND r.role_name IN ('user', 'admin'))
    OR (u.username IN ('user', 'user2', 'user3', 'user4') AND r.role_name = 'user');
 
--- Assign user and agent roles to the new support agent accounts
+-- Assign user and support_agent roles to the new support agent accounts
 INSERT INTO user_role_assignments (user_id, role_id)
 SELECT u.user_id, r.role_id
 FROM users u, roles r
 WHERE u.username IN ('support_l1_agent', 'support_l2_tech', 'support_l3_senior', 'support_l4_critical', 'support_l5_security') 
-AND r.role_name IN ('user', 'agent');
+AND r.role_name IN ('user', 'support_agent');
 
 -- **************************************
 -- Sample data for ticket categories
@@ -598,8 +613,6 @@ INSERT INTO ticket_categories (name, description, default_priority, required_cle
 -- **************************************
 -- Create Support Agents with Different Clearance Levels
 -- **************************************
-
--- Create 5 new support agents with proper clearance levels
 INSERT INTO support_agents (user_id, clearance_level, department, specialization, created_by) VALUES
 -- L1 Agent - Basic Support
 ((SELECT user_id FROM users WHERE username = 'support_l1_agent'), 1, 'Customer Service', 'General Inquiries, Account Issues, Basic Troubleshooting', 1),
@@ -617,16 +630,24 @@ INSERT INTO support_agents (user_id, clearance_level, department, specialization
 ((SELECT user_id FROM users WHERE username = 'support_l5_security'), 5, 'Security Team', 'Security Incidents, Breach Response, Vulnerability Management, Compliance', 1);
 
 -- **************************************
--- Create Sample Tickets for Testing
+-- Create Sample Tickets with Classifications
 -- **************************************
+INSERT INTO tickets (user_id, title, description, category_id, priority, classification, status) VALUES
+((SELECT user_id FROM users WHERE username = 'user'), 'Password Reset Request', 'I forgot my password and cannot login to my account', 3, 'low', 'public', 'open'),
+((SELECT user_id FROM users WHERE username = 'user2'), 'API Integration Issue', 'Having trouble with the REST API authentication', 9, 'medium', 'internal', 'open'),
+((SELECT user_id FROM users WHERE username = 'user3'), 'System Performance Problem', 'The application is running very slowly', 2, 'high', 'confidential', 'open'),
+((SELECT user_id FROM users WHERE username = 'user4'), 'Database Connection Failure', 'Cannot connect to database - system down', 7, 'critical', 'secret', 'open'),
+((SELECT user_id FROM users WHERE username = 'user'), 'Suspicious Login Activity', 'Noticed unauthorized login attempts from unknown IP addresses', 6, 'security', 'top_secret', 'open'),
+((SELECT user_id FROM users WHERE username = 'user2'), 'Feature Request', 'Would like to see dark mode option', 5, 'low', 'public', 'open'),
+((SELECT user_id FROM users WHERE username = 'user3'), 'Billing Question', 'Question about my monthly subscription charge', 4, 'medium', 'internal', 'open'),
+((SELECT user_id FROM users WHERE username = 'user4'), 'Data Export Request', 'Need to export my personal data', 8, 'high', 'confidential', 'open');
 
--- Sample tickets to test the clearance-based access control
-INSERT INTO tickets (user_id, title, description, category_id, priority, status) VALUES
-((SELECT user_id FROM users WHERE username = 'user'), 'Password Reset Request', 'I forgot my password and cannot login to my account', 3, 'low', 'open'),
-((SELECT user_id FROM users WHERE username = 'user2'), 'API Integration Issue', 'Having trouble with the REST API authentication', 9, 'medium', 'open'),
-((SELECT user_id FROM users WHERE username = 'user3'), 'System Performance Problem', 'The application is running very slowly', 2, 'high', 'open'),
-((SELECT user_id FROM users WHERE username = 'user4'), 'Database Connection Failure', 'Cannot connect to database - system down', 7, 'critical', 'open'),
-((SELECT user_id FROM users WHERE username = 'user'), 'Suspicious Login Activity', 'Noticed unauthorized login attempts from unknown IP addresses', 6, 'security', 'open');
+-- Auto-assign some tickets to test the system
+INSERT INTO ticket_assignments (ticket_id, agent_id, assigned_by, assigned_at, is_active) VALUES
+(1, 1, 1, NOW(), TRUE),  -- Public ticket to L1 agent
+(2, 2, 1, NOW(), TRUE),  -- Internal ticket to L2 agent  
+(3, 3, 1, NOW(), TRUE),  -- Confidential ticket to L3 agent
+(4, 4, 1, NOW(), TRUE),  -- Secret ticket to L4 agent
+(5, 5, 1, NOW(), TRUE);  -- Top secret ticket to L5 agent
 
--- Commit changes (optional, usually auto-committed in MySQL)
 -- COMMIT;

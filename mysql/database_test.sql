@@ -1,46 +1,70 @@
--- Disable foreign key checks for a clean start (highly recommended when dropping and recreating related tables)
+-- =================================================================================
+-- SOCIAL MEDIA & TICKETING SYSTEM DATABASE SCHEMA
+-- =================================================================================
+-- Author: Application Development Team
+-- Purpose: Complete database schema for social media platform with ticketing system
+-- Features: User management, posts, events, messaging, ticketing, role-based access
+-- =================================================================================
+
+-- =================================================================================
+-- DATABASE INITIALIZATION
+-- =================================================================================
+
+-- Disable foreign key checks for clean database recreation
 SET FOREIGN_KEY_CHECKS = 0;
 
--- Drop tables in reverse dependency order to avoid foreign key constraint issues
+-- =================================================================================
+-- DROP TABLES (In Reverse Dependency Order)
+-- =================================================================================
+
+-- Drop junction/relationship tables first
 DROP TABLE IF EXISTS user_role_assignments;
 DROP TABLE IF EXISTS role_permissions;
-DROP TABLE IF EXISTS permissions;
-DROP TABLE IF EXISTS roles;
-DROP TABLE IF EXISTS posts;         -- Assuming posts table exists and links to users
-DROP TABLE IF EXISTS post_images;   -- Assuming post_images exists
-DROP TABLE IF EXISTS post_likes;
-DROP TABLE IF EXISTS events;        -- Assuming events exists
-DROP TABLE IF EXISTS notifications; -- Assuming notifications exists
-DROP TABLE IF EXISTS reports;       -- Assuming reports exists
-DROP TABLE IF EXISTS messages;      -- Assuming messages exists
-DROP TABLE IF EXISTS chat_participants; -- Assuming chat_participants exists
-DROP TABLE IF EXISTS blocked_users; -- Assuming blocked_users exists
-DROP TABLE IF EXISTS friend_chat_map; -- Assuming friend_chat_map exists
-DROP TABLE IF EXISTS chats;         -- Assuming chats exists
-DROP TABLE IF EXISTS user_public_keys; -- Assuming user_public_keys exists
-DROP TABLE IF EXISTS chat_key_envelopes; -- Assuming chat_key_envelopes exists
-DROP TABLE IF EXISTS friendships;   -- Assuming friendships exists
-DROP TABLE IF EXISTS admin_actions; -- Assuming admin_actions exists
-DROP TABLE IF EXISTS user_logs;     -- Assuming user_logs exists
-DROP TABLE IF EXISTS knowledge_base_articles; -- Ticketing system tables
-DROP TABLE IF EXISTS ticket_escalations;
 DROP TABLE IF EXISTS ticket_assignments;
+DROP TABLE IF EXISTS ticket_escalations;
 DROP TABLE IF EXISTS ticket_messages;
+DROP TABLE IF EXISTS chat_participants;
+DROP TABLE IF EXISTS chat_key_envelopes;
+DROP TABLE IF EXISTS friend_chat_map;
+DROP TABLE IF EXISTS event_participants;
+DROP TABLE IF EXISTS post_images;
+DROP TABLE IF EXISTS post_likes;
+DROP TABLE IF EXISTS blocked_users;
+
+-- Drop main content tables
+DROP TABLE IF EXISTS knowledge_base_articles;
 DROP TABLE IF EXISTS tickets;
 DROP TABLE IF EXISTS ticket_categories;
-DROP TABLE IF EXISTS clearance_levels; -- NEW: Clearance levels table
-DROP TABLE IF EXISTS support_agents;
+DROP TABLE IF EXISTS notifications;
+DROP TABLE IF EXISTS messages;
+DROP TABLE IF EXISTS chats;
+DROP TABLE IF EXISTS friendships;
+DROP TABLE IF EXISTS posts;
+DROP TABLE IF EXISTS events;
+DROP TABLE IF EXISTS reports;
+DROP TABLE IF EXISTS admin_actions;
+DROP TABLE IF EXISTS user_logs;
 DROP TABLE IF EXISTS webauthn_credentials;
+
+-- Drop support/reference tables
+DROP TABLE IF EXISTS support_agents;
+DROP TABLE IF EXISTS clearance_levels;
+DROP TABLE IF EXISTS permissions;
+DROP TABLE IF EXISTS roles;
+DROP TABLE IF EXISTS user_public_keys;
 DROP TABLE IF EXISTS ModSecLog;
 DROP TABLE IF EXISTS ErrorLog;
-DROP TABLE IF EXISTS event_participants;
 
-DROP TABLE IF EXISTS users; -- Drop users table last
+-- Drop core table last
+DROP TABLE IF EXISTS users;
 
--- **************************************
--- 1. User Accounts
--- **************************************
--- status is offline, online, suspended, terminated
+-- =================================================================================
+-- CORE SYSTEM TABLES
+-- =================================================================================
+
+-- ---------------------------------------------------------------------------------
+-- Users Table - Core user accounts
+-- ---------------------------------------------------------------------------------
 CREATE TABLE users (
     user_id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(80) UNIQUE NOT NULL,
@@ -58,299 +82,9 @@ CREATE TABLE users (
     totp_secret VARCHAR(32)
 );
 
--- **************************************
--- 2. Roles and Permissions (NEW/MODIFIED)
--- **************************************
-CREATE TABLE roles (
-    role_id INT AUTO_INCREMENT PRIMARY KEY,
-    role_name VARCHAR(50) UNIQUE NOT NULL,
-    description TEXT NULL
-);
-
-CREATE TABLE permissions (
-    permission_id INT AUTO_INCREMENT PRIMARY KEY,
-    permission_name VARCHAR(100) UNIQUE NOT NULL,
-    description TEXT NULL
-);
-
-CREATE TABLE role_permissions (
-    role_id INT NOT NULL,
-    permission_id INT NOT NULL,
-    PRIMARY KEY (role_id, permission_id),
-    FOREIGN KEY (role_id) REFERENCES roles(role_id) ON DELETE CASCADE,
-    FOREIGN KEY (permission_id) REFERENCES permissions(permission_id) ON DELETE CASCADE
-);
-
-CREATE TABLE user_role_assignments (
-    user_id INT NOT NULL,
-    role_id INT NOT NULL,
-    assigned_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, role_id),
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (role_id) REFERENCES roles(role_id) ON DELETE CASCADE
-);
-
--- **************************************
--- 3. Clearance Levels Table (NEW)
--- **************************************
-CREATE TABLE clearance_levels (
-    level_id INT PRIMARY KEY,
-    level_name VARCHAR(50) NOT NULL UNIQUE,
-    level_description TEXT,
-    can_view_public BOOLEAN DEFAULT TRUE,
-    can_view_internal BOOLEAN DEFAULT FALSE,
-    can_view_confidential BOOLEAN DEFAULT FALSE,
-    can_view_secret BOOLEAN DEFAULT FALSE,
-    can_view_top_secret BOOLEAN DEFAULT FALSE
-);
-
--- **************************************
--- 4. Events/Reminders (Added for completeness, assuming they link to users)
--- **************************************
-CREATE TABLE events (
-    event_id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    title VARCHAR(255) NOT NULL,
-    description TEXT NULL,
-    event_datetime DATETIME NOT NULL,
-    location VARCHAR(255) NULL,
-    latitude FLOAT NULL,
-    longitude FLOAT NULL,
-    is_reminder BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
-);
-
--- Add this to your database_test.sql after the events table
-CREATE TABLE event_participants (
-    participation_id INT AUTO_INCREMENT PRIMARY KEY,
-    event_id INT NOT NULL,
-    user_id INT NOT NULL,
-    joined_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    status ENUM('joined', 'left', 'cancelled') NOT NULL DEFAULT 'joined',
-    UNIQUE KEY _event_user_uc (event_id, user_id),
-    FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
-);
-
--- **************************************
--- 5. Posts (Added for completeness, assuming they link to users)
--- **************************************
-CREATE TABLE posts (
-    post_id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    post_content TEXT NOT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
-);
-
-CREATE TABLE post_images (
-    image_id INT AUTO_INCREMENT PRIMARY KEY,
-    post_id INT NOT NULL,
-    image_url VARCHAR(255) NOT NULL,
-    order_index INT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (post_id) REFERENCES posts(post_id) ON DELETE CASCADE
-);
-
-CREATE TABLE post_likes (
-    like_id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    post_id INT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (post_id) REFERENCES posts(post_id) ON DELETE CASCADE,
-    UNIQUE KEY unique_user_post_like (user_id, post_id)
-);
-
--- Add indexes for better performance
-CREATE INDEX idx_post_likes_user_id ON post_likes(user_id);
-CREATE INDEX idx_post_likes_post_id ON post_likes(post_id);
-CREATE INDEX idx_post_likes_created_at ON post_likes(created_at);
-
--- **************************************
--- 6. Notifications
--- **************************************
-CREATE TABLE notifications (
-    notification_id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    type VARCHAR(100) NOT NULL,
-    source_id INT NULL, -- ID of the related item (e.g., post_id, friendship_id)
-    message VARCHAR(255) NOT NULL,
-    is_read BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
-);
-
--- **************************************
--- 7. Customer Service
--- **************************************
-CREATE TABLE reports (
-    report_id INT AUTO_INCREMENT PRIMARY KEY,
-    reporter_id INT NOT NULL,                    
-    reported_user_id INT NOT NULL,
-    report_type ENUM(
-        'spam',
-        'harassment',
-        'impersonation',
-        'inappropriate_content',
-        'fraud',
-        'other'
-    ) NOT NULL,
-    description TEXT NOT NULL,
-    status ENUM('open', 'in_review', 'action_taken', 'rejected') NOT NULL DEFAULT 'open',
-    submitted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    resolved_at DATETIME NULL,
-    admin_notes TEXT NULL,
-    FOREIGN KEY (reporter_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (reported_user_id) REFERENCES users(user_id) ON DELETE CASCADE
-);
-
--- **************************************
--- 8. Messaging
--- **************************************
-CREATE TABLE chats (
-    chat_id INT AUTO_INCREMENT PRIMARY KEY,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE chat_participants (
-    chat_participant_id INT AUTO_INCREMENT PRIMARY KEY,
-    chat_id INT NOT NULL,
-    user_id INT NOT NULL,
-    cleared_at DATETIME NULL,
-    is_in_chat BOOLEAN NOT NULL DEFAULT TRUE,
-    UNIQUE (chat_id, user_id),
-    FOREIGN KEY (chat_id) REFERENCES chats(chat_id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
-);
-
-CREATE TABLE friend_chat_map (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    friend_id INT NOT NULL,
-    chat_id INT NOT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (user_id, friend_id),
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (friend_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (chat_id) REFERENCES chats(chat_id) ON DELETE CASCADE
-);
-
-CREATE TABLE messages (
-    message_id INT AUTO_INCREMENT PRIMARY KEY,
-    chat_id INT NOT NULL,
-    sender_id INT NOT NULL,
-    message_text TEXT NOT NULL,
-    sent_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    is_deleted_by_sender BOOLEAN NOT NULL DEFAULT FALSE,
-    is_deleted_by_receiver BOOLEAN NOT NULL DEFAULT FALSE,
-    FOREIGN KEY (chat_id) REFERENCES chats(chat_id) ON DELETE CASCADE,
-    FOREIGN KEY (sender_id) REFERENCES users(user_id) ON DELETE CASCADE
-);
-
-CREATE TABLE blocked_users (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    blocker_id INT NOT NULL,
-    blocked_id INT NOT NULL,
-    chat_id INT NULL,
-    reason VARCHAR(255) DEFAULT NULL,
-    active TINYINT(1) NOT NULL DEFAULT 1,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    removed_at DATETIME NULL,
-    UNIQUE KEY uq_blocker_blocked (blocker_id, blocked_id),
-    INDEX idx_blocker (blocker_id),
-    INDEX idx_blocked (blocked_id),
-    FOREIGN KEY (blocker_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (blocked_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (chat_id) REFERENCES chats(chat_id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE user_public_keys (
-  user_id INT NOT NULL PRIMARY KEY,
-  alg VARCHAR(32) NOT NULL DEFAULT 'P-256',
-  public_key_spki_b64 LONGTEXT NOT NULL,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT fk_upk_user FOREIGN KEY (user_id) REFERENCES users(user_id)
-);
-
-CREATE TABLE chat_key_envelopes (
-  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  chat_id INT NOT NULL,
-  user_id INT NOT NULL,
-  key_version INT NOT NULL DEFAULT 1,
-  envelope_b64 LONGTEXT NOT NULL,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_chat_user_version (chat_id, user_id, key_version),
-  CONSTRAINT fk_cke_chat FOREIGN KEY (chat_id) REFERENCES chats(chat_id),
-  CONSTRAINT fk_cke_user FOREIGN KEY (user_id) REFERENCES users(user_id)
-);
-
--- **************************************
--- 9. Friend System
--- **************************************
-CREATE TABLE friendships (
-    friendship_id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id1 INT NOT NULL,
-    user_id2 INT NOT NULL,
-    status ENUM('pending', 'accepted', 'blocked') NOT NULL DEFAULT 'pending',
-    action_user_id INT NULL, -- User who initiated the last status change
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE (user_id1, user_id2), -- Ensures no duplicate friendship entries (enforce user_id1 < user_id2 in application logic)
-    FOREIGN KEY (user_id1) REFERENCES users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id2) REFERENCES users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (action_user_id) REFERENCES users(user_id) ON DELETE CASCADE
-);
-
--- **************************************
--- 10. Admin Panel
--- **************************************
-CREATE TABLE admin_actions (
-    action_id INT AUTO_INCREMENT PRIMARY KEY,
-    admin_user_id INT NOT NULL,
-    action_type VARCHAR(100) NOT NULL,
-    target_user_id INT NULL,
-    target_entity_type VARCHAR(50) NULL,
-    target_entity_id INT NULL,
-    details TEXT NULL,
-    action_timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (admin_user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (target_user_id) REFERENCES users(user_id) ON DELETE SET NULL
-);
-
-CREATE TABLE user_logs (
-    log_id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    log_type VARCHAR(100) NOT NULL,
-    log_timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    details TEXT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
-);
-
-CREATE TABLE ModSecLog (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    date VARCHAR(20) NOT NULL,
-    time VARCHAR(20) NOT NULL,
-    source VARCHAR(50) NOT NULL,
-    request TEXT NOT NULL,
-    response TEXT NOT NULL,
-    attack_detected TEXT NOT NULL
-);
-
-CREATE TABLE ErrorLog (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    date VARCHAR(20) NOT NULL,
-    time VARCHAR(20) NOT NULL,
-    level ENUM('notice', 'error', 'warning', 'critical') NOT NULL,
-    message TEXT NOT NULL,
-    client_ip VARCHAR(50) NOT NULL
-);
-
+-- ---------------------------------------------------------------------------------
+-- Authentication & Security Tables
+-- ---------------------------------------------------------------------------------
 CREATE TABLE webauthn_credentials (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
@@ -362,11 +96,72 @@ CREATE TABLE webauthn_credentials (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
--- **************************************
--- 11. Ticketing System with Classification
--- **************************************
+-- =================================================================================
+-- ROLE-BASED ACCESS CONTROL (RBAC) SYSTEM
+-- =================================================================================
 
--- Support agents with clearance levels (UPDATED to use FK to clearance_levels)
+-- ---------------------------------------------------------------------------------
+-- Roles Table
+-- ---------------------------------------------------------------------------------
+CREATE TABLE roles (
+    role_id INT AUTO_INCREMENT PRIMARY KEY,
+    role_name VARCHAR(50) UNIQUE NOT NULL,
+    description TEXT NULL
+);
+
+-- ---------------------------------------------------------------------------------
+-- Permissions Table
+-- ---------------------------------------------------------------------------------
+CREATE TABLE permissions (
+    permission_id INT AUTO_INCREMENT PRIMARY KEY,
+    permission_name VARCHAR(100) UNIQUE NOT NULL,
+    description TEXT NULL
+);
+
+-- ---------------------------------------------------------------------------------
+-- Role-Permission Mapping
+-- ---------------------------------------------------------------------------------
+CREATE TABLE role_permissions (
+    role_id INT NOT NULL,
+    permission_id INT NOT NULL,
+    PRIMARY KEY (role_id, permission_id),
+    FOREIGN KEY (role_id) REFERENCES roles(role_id) ON DELETE CASCADE,
+    FOREIGN KEY (permission_id) REFERENCES permissions(permission_id) ON DELETE CASCADE
+);
+
+-- ---------------------------------------------------------------------------------
+-- User-Role Assignment
+-- ---------------------------------------------------------------------------------
+CREATE TABLE user_role_assignments (
+    user_id INT NOT NULL,
+    role_id INT NOT NULL,
+    assigned_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, role_id),
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (role_id) REFERENCES roles(role_id) ON DELETE CASCADE
+);
+
+-- =================================================================================
+-- TICKETING SYSTEM TABLES
+-- =================================================================================
+
+-- ---------------------------------------------------------------------------------
+-- Clearance Levels for Security Classification
+-- ---------------------------------------------------------------------------------
+CREATE TABLE clearance_levels (
+    level_id INT PRIMARY KEY,
+    level_name VARCHAR(50) NOT NULL UNIQUE,
+    level_description TEXT,
+    can_view_public BOOLEAN DEFAULT TRUE,
+    can_view_internal BOOLEAN DEFAULT FALSE,
+    can_view_confidential BOOLEAN DEFAULT FALSE,
+    can_view_secret BOOLEAN DEFAULT FALSE,
+    can_view_top_secret BOOLEAN DEFAULT FALSE
+);
+
+-- ---------------------------------------------------------------------------------
+-- Support Agents with Clearance Levels
+-- ---------------------------------------------------------------------------------
 CREATE TABLE support_agents (
     agent_id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL UNIQUE,
@@ -382,7 +177,9 @@ CREATE TABLE support_agents (
     FOREIGN KEY (clearance_level) REFERENCES clearance_levels(level_id) ON DELETE RESTRICT
 );
 
--- Ticket categories
+-- ---------------------------------------------------------------------------------
+-- Ticket Categories
+-- ---------------------------------------------------------------------------------
 CREATE TABLE ticket_categories (
     category_id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL UNIQUE,
@@ -393,7 +190,9 @@ CREATE TABLE ticket_categories (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Support tickets (UPDATED with classification field)
+-- ---------------------------------------------------------------------------------
+-- Support Tickets with Security Classification
+-- ---------------------------------------------------------------------------------
 CREATE TABLE tickets (
     ticket_id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
@@ -411,7 +210,9 @@ CREATE TABLE tickets (
     FOREIGN KEY (category_id) REFERENCES ticket_categories(category_id) ON DELETE RESTRICT
 );
 
--- Ticket messages/replies
+-- ---------------------------------------------------------------------------------
+-- Ticket Messages & Communication
+-- ---------------------------------------------------------------------------------
 CREATE TABLE ticket_messages (
     message_id INT AUTO_INCREMENT PRIMARY KEY,
     ticket_id INT NOT NULL,
@@ -423,7 +224,9 @@ CREATE TABLE ticket_messages (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
--- Ticket assignments to agents
+-- ---------------------------------------------------------------------------------
+-- Ticket Assignment Management
+-- ---------------------------------------------------------------------------------
 CREATE TABLE ticket_assignments (
     assignment_id INT AUTO_INCREMENT PRIMARY KEY,
     ticket_id INT NOT NULL,
@@ -436,7 +239,9 @@ CREATE TABLE ticket_assignments (
     FOREIGN KEY (assigned_by) REFERENCES users(user_id) ON DELETE SET NULL
 );
 
--- Ticket escalations
+-- ---------------------------------------------------------------------------------
+-- Ticket Escalation Tracking
+-- ---------------------------------------------------------------------------------
 CREATE TABLE ticket_escalations (
     escalation_id INT AUTO_INCREMENT PRIMARY KEY,
     ticket_id INT NOT NULL,
@@ -449,7 +254,9 @@ CREATE TABLE ticket_escalations (
     FOREIGN KEY (escalated_by) REFERENCES support_agents(agent_id) ON DELETE CASCADE
 );
 
--- Knowledge base articles
+-- ---------------------------------------------------------------------------------
+-- Knowledge Base Articles
+-- ---------------------------------------------------------------------------------
 CREATE TABLE knowledge_base_articles (
     article_id INT AUTO_INCREMENT PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
@@ -465,7 +272,298 @@ CREATE TABLE knowledge_base_articles (
     FOREIGN KEY (author_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
--- Indexes for better performance
+-- =================================================================================
+-- SOCIAL MEDIA CONTENT TABLES
+-- =================================================================================
+
+-- ---------------------------------------------------------------------------------
+-- Events & Reminders
+-- ---------------------------------------------------------------------------------
+CREATE TABLE events (
+    event_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT NULL,
+    event_datetime DATETIME NOT NULL,
+    location VARCHAR(255) NULL,
+    latitude FLOAT NULL,
+    longitude FLOAT NULL,
+    is_reminder BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- ---------------------------------------------------------------------------------
+-- Event Participation
+-- ---------------------------------------------------------------------------------
+CREATE TABLE event_participants (
+    participation_id INT AUTO_INCREMENT PRIMARY KEY,
+    event_id INT NOT NULL,
+    user_id INT NOT NULL,
+    joined_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status ENUM('joined', 'left', 'cancelled') NOT NULL DEFAULT 'joined',
+    UNIQUE KEY _event_user_uc (event_id, user_id),
+    FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- ---------------------------------------------------------------------------------
+-- User Posts
+-- ---------------------------------------------------------------------------------
+CREATE TABLE posts (
+    post_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    post_content TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- ---------------------------------------------------------------------------------
+-- Post Images
+-- ---------------------------------------------------------------------------------
+CREATE TABLE post_images (
+    image_id INT AUTO_INCREMENT PRIMARY KEY,
+    post_id INT NOT NULL,
+    image_url VARCHAR(255) NOT NULL,
+    order_index INT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (post_id) REFERENCES posts(post_id) ON DELETE CASCADE
+);
+
+-- ---------------------------------------------------------------------------------
+-- Post Likes System
+-- ---------------------------------------------------------------------------------
+CREATE TABLE post_likes (
+    like_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    post_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (post_id) REFERENCES posts(post_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_user_post_like (user_id, post_id)
+);
+
+-- =================================================================================
+-- MESSAGING SYSTEM TABLES
+-- =================================================================================
+
+-- ---------------------------------------------------------------------------------
+-- Chat Rooms
+-- ---------------------------------------------------------------------------------
+CREATE TABLE chats (
+    chat_id INT AUTO_INCREMENT PRIMARY KEY,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ---------------------------------------------------------------------------------
+-- Chat Participation
+-- ---------------------------------------------------------------------------------
+CREATE TABLE chat_participants (
+    chat_participant_id INT AUTO_INCREMENT PRIMARY KEY,
+    chat_id INT NOT NULL,
+    user_id INT NOT NULL,
+    cleared_at DATETIME NULL,
+    is_in_chat BOOLEAN NOT NULL DEFAULT TRUE,
+    UNIQUE (chat_id, user_id),
+    FOREIGN KEY (chat_id) REFERENCES chats(chat_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- ---------------------------------------------------------------------------------
+-- Friend-Chat Mapping
+-- ---------------------------------------------------------------------------------
+CREATE TABLE friend_chat_map (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    friend_id INT NOT NULL,
+    chat_id INT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id, friend_id),
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (friend_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (chat_id) REFERENCES chats(chat_id) ON DELETE CASCADE
+);
+
+-- ---------------------------------------------------------------------------------
+-- Messages
+-- ---------------------------------------------------------------------------------
+CREATE TABLE messages (
+    message_id INT AUTO_INCREMENT PRIMARY KEY,
+    chat_id INT NOT NULL,
+    sender_id INT NOT NULL,
+    message_text TEXT NOT NULL,
+    sent_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted_by_sender BOOLEAN NOT NULL DEFAULT FALSE,
+    is_deleted_by_receiver BOOLEAN NOT NULL DEFAULT FALSE,
+    FOREIGN KEY (chat_id) REFERENCES chats(chat_id) ON DELETE CASCADE,
+    FOREIGN KEY (sender_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- ---------------------------------------------------------------------------------
+-- User Blocking System
+-- ---------------------------------------------------------------------------------
+CREATE TABLE blocked_users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    blocker_id INT NOT NULL,
+    blocked_id INT NOT NULL,
+    chat_id INT NULL,
+    reason VARCHAR(255) DEFAULT NULL,
+    active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    removed_at DATETIME NULL,
+    UNIQUE KEY uq_blocker_blocked (blocker_id, blocked_id),
+    INDEX idx_blocker (blocker_id),
+    INDEX idx_blocked (blocked_id),
+    FOREIGN KEY (blocker_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (blocked_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (chat_id) REFERENCES chats(chat_id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------------------------------
+-- Encryption & Security Tables
+-- ---------------------------------------------------------------------------------
+CREATE TABLE user_public_keys (
+    user_id INT NOT NULL PRIMARY KEY,
+    alg VARCHAR(32) NOT NULL DEFAULT 'P-256',
+    public_key_spki_b64 LONGTEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_upk_user FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+
+CREATE TABLE chat_key_envelopes (
+    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    chat_id INT NOT NULL,
+    user_id INT NOT NULL,
+    key_version INT NOT NULL DEFAULT 1,
+    envelope_b64 LONGTEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_chat_user_version (chat_id, user_id, key_version),
+    CONSTRAINT fk_cke_chat FOREIGN KEY (chat_id) REFERENCES chats(chat_id),
+    CONSTRAINT fk_cke_user FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+
+-- =================================================================================
+-- SOCIAL FEATURES TABLES
+-- =================================================================================
+
+-- ---------------------------------------------------------------------------------
+-- Friend System
+-- ---------------------------------------------------------------------------------
+CREATE TABLE friendships (
+    friendship_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id1 INT NOT NULL,
+    user_id2 INT NOT NULL,
+    status ENUM('pending', 'accepted', 'blocked') NOT NULL DEFAULT 'pending',
+    action_user_id INT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE (user_id1, user_id2),
+    FOREIGN KEY (user_id1) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id2) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (action_user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- ---------------------------------------------------------------------------------
+-- Notifications System
+-- ---------------------------------------------------------------------------------
+CREATE TABLE notifications (
+    notification_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    type VARCHAR(100) NOT NULL,
+    source_id INT NULL,
+    message VARCHAR(255) NOT NULL,
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- =================================================================================
+-- ADMINISTRATION TABLES
+-- =================================================================================
+
+-- ---------------------------------------------------------------------------------
+-- User Reports & Moderation
+-- ---------------------------------------------------------------------------------
+CREATE TABLE reports (
+    report_id INT AUTO_INCREMENT PRIMARY KEY,
+    reporter_id INT NOT NULL,
+    reported_user_id INT NOT NULL,
+    report_type ENUM('spam', 'harassment', 'impersonation', 'inappropriate_content', 'fraud', 'other') NOT NULL,
+    description TEXT NOT NULL,
+    status ENUM('open', 'in_review', 'action_taken', 'rejected') NOT NULL DEFAULT 'open',
+    submitted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolved_at DATETIME NULL,
+    admin_notes TEXT NULL,
+    FOREIGN KEY (reporter_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (reported_user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- ---------------------------------------------------------------------------------
+-- Admin Activity Tracking
+-- ---------------------------------------------------------------------------------
+CREATE TABLE admin_actions (
+    action_id INT AUTO_INCREMENT PRIMARY KEY,
+    admin_user_id INT NOT NULL,
+    action_type VARCHAR(100) NOT NULL,
+    target_user_id INT NULL,
+    target_entity_type VARCHAR(50) NULL,
+    target_entity_id INT NULL,
+    details TEXT NULL,
+    action_timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (admin_user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (target_user_id) REFERENCES users(user_id) ON DELETE SET NULL
+);
+
+-- ---------------------------------------------------------------------------------
+-- User Activity Logs
+-- ---------------------------------------------------------------------------------
+CREATE TABLE user_logs (
+    log_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    log_type VARCHAR(100) NOT NULL,
+    log_timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    details TEXT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- =================================================================================
+-- SECURITY & MONITORING TABLES
+-- =================================================================================
+
+-- ---------------------------------------------------------------------------------
+-- ModSecurity Logs
+-- ---------------------------------------------------------------------------------
+CREATE TABLE ModSecLog (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    date VARCHAR(20) NOT NULL,
+    time VARCHAR(20) NOT NULL,
+    source VARCHAR(50) NOT NULL,
+    request TEXT NOT NULL,
+    response TEXT NOT NULL,
+    attack_detected TEXT NOT NULL
+);
+
+-- ---------------------------------------------------------------------------------
+-- Error Logs
+-- ---------------------------------------------------------------------------------
+CREATE TABLE ErrorLog (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    date VARCHAR(20) NOT NULL,
+    time VARCHAR(20) NOT NULL,
+    level ENUM('notice', 'error', 'warning', 'critical') NOT NULL,
+    message TEXT NOT NULL,
+    client_ip VARCHAR(50) NOT NULL
+);
+
+-- =================================================================================
+-- DATABASE INDEXES FOR PERFORMANCE
+-- =================================================================================
+
+-- Ticketing System Indexes
 CREATE INDEX idx_tickets_user_id ON tickets(user_id);
 CREATE INDEX idx_tickets_status ON tickets(status);
 CREATE INDEX idx_tickets_priority ON tickets(priority);
@@ -477,12 +575,21 @@ CREATE INDEX idx_ticket_messages_ticket_id ON ticket_messages(ticket_id);
 CREATE INDEX idx_support_agents_user_id ON support_agents(user_id);
 CREATE INDEX idx_support_agents_clearance_level ON support_agents(clearance_level);
 
--- Enable foreign key checks again
+-- Social Media Indexes
+CREATE INDEX idx_post_likes_user_id ON post_likes(user_id);
+CREATE INDEX idx_post_likes_post_id ON post_likes(post_id);
+CREATE INDEX idx_post_likes_created_at ON post_likes(created_at);
+
+-- Re-enable foreign key checks
 SET FOREIGN_KEY_CHECKS = 1;
 
--- **************************************
--- Insert Clearance Levels Data
--- **************************************
+-- =================================================================================
+-- INITIAL DATA POPULATION
+-- =================================================================================
+
+-- ---------------------------------------------------------------------------------
+-- Clearance Levels Configuration
+-- ---------------------------------------------------------------------------------
 INSERT INTO clearance_levels (level_id, level_name, level_description, can_view_public, can_view_internal, can_view_confidential, can_view_secret, can_view_top_secret) VALUES
 (1, 'L1-PUBLIC', 'Basic support - public information only', TRUE, FALSE, FALSE, FALSE, FALSE),
 (2, 'L2-INTERNAL', 'Standard support - internal information access', TRUE, TRUE, FALSE, FALSE, FALSE),
@@ -490,37 +597,39 @@ INSERT INTO clearance_levels (level_id, level_name, level_description, can_view_
 (4, 'L4-SECRET', 'Critical support - secret information access', TRUE, TRUE, TRUE, TRUE, FALSE),
 (5, 'L5-TOP_SECRET', 'Security team - top secret information access', TRUE, TRUE, TRUE, TRUE, TRUE);
 
--- **************************************
--- Sample Data Insertion for Roles and Permissions
--- **************************************
-
--- Insert sample roles
+-- ---------------------------------------------------------------------------------
+-- System Roles
+-- ---------------------------------------------------------------------------------
 INSERT INTO roles (role_name, description) VALUES
-('admin', 'Has full administrative privileges over the system.'),
-('user', 'Standard user with basic functionality like creating posts, events, sending messages.'),
-('support_agent', 'Support agent with access to ticketing system and clearance-based ticket management.'),
-('guest', 'Can view public content but cannot interact or create.');
+('admin', 'Full administrative privileges over the system'),
+('user', 'Standard user with basic functionality'),
+('support_agent', 'Support agent with ticketing system access'),
+('guest', 'Limited access for viewing public content only');
 
--- Insert sample permissions
+-- ---------------------------------------------------------------------------------
+-- System Permissions
+-- ---------------------------------------------------------------------------------
 INSERT INTO permissions (permission_name, description) VALUES
-('manage_users', 'Ability to create, update, and delete user accounts.'),
-('delete_any_post', 'Ability to delete any post in the system.'),
-('edit_any_post', 'Ability to edit any post in the system.'),
-('create_post', 'Ability to create new posts.'),
-('create_event', 'Ability to create new events/reminders.'),
-('send_message', 'Ability to send private messages.'),
-('view_admin_panel', 'Ability to access the administrative dashboard.'),
-('resolve_reports', 'Ability to change the status of user-submitted reports.'),
-('access_ticketing_dashboard', 'Ability to access support ticketing dashboard.'),
-('manage_tickets', 'Ability to assign, escalate, and close tickets.'),
-('view_all_tickets', 'Ability to view tickets based on clearance level.'),
-('escalate_tickets', 'Ability to escalate ticket priority levels.'),
-('assign_tickets', 'Ability to assign tickets to other agents.'),
-('view_internal_notes', 'Ability to view internal agent notes on tickets.'),
-('view_open_tickets', 'Ability to view open tickets based on clearance level.'),
-('view_my_tickets', 'Ability to view assigned tickets.');
+('manage_users', 'Create, update, and delete user accounts'),
+('delete_any_post', 'Delete any post in the system'),
+('edit_any_post', 'Edit any post in the system'),
+('create_post', 'Create new posts'),
+('create_event', 'Create new events/reminders'),
+('send_message', 'Send private messages'),
+('view_admin_panel', 'Access administrative dashboard'),
+('resolve_reports', 'Change status of user-submitted reports'),
+('access_ticketing_dashboard', 'Access support ticketing dashboard'),
+('manage_tickets', 'Assign, escalate, and close tickets'),
+('view_all_tickets', 'View tickets based on clearance level'),
+('escalate_tickets', 'Escalate ticket priority levels'),
+('assign_tickets', 'Assign tickets to other agents'),
+('view_internal_notes', 'View internal agent notes on tickets'),
+('view_open_tickets', 'View open tickets based on clearance level'),
+('view_my_tickets', 'View assigned tickets');
 
--- Assign permissions to roles
+-- ---------------------------------------------------------------------------------
+-- Role-Permission Assignments
+-- ---------------------------------------------------------------------------------
 -- Admin Role Permissions
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.role_id, p.permission_id
@@ -539,8 +648,9 @@ SELECT r.role_id, p.permission_id
 FROM roles r, permissions p
 WHERE r.role_name = 'support_agent' AND p.permission_name IN (
     'access_ticketing_dashboard', 'manage_tickets', 'view_all_tickets',
-    'escalate_tickets', 'assign_tickets', 'view_internal_notes', 'create_post',
-    'create_event', 'send_message', 'view_open_tickets', 'view_my_tickets'
+    'escalate_tickets', 'assign_tickets', 'view_internal_notes',
+    'create_post', 'create_event', 'send_message', 'view_open_tickets',
+    'view_my_tickets'
 );
 
 -- User Role Permissions
@@ -551,9 +661,9 @@ WHERE r.role_name = 'user' AND p.permission_name IN (
     'create_post', 'create_event', 'send_message'
 );
 
--- **************************************
--- Insert Sample Users and Assign Roles
--- **************************************
+-- ---------------------------------------------------------------------------------
+-- Sample User Accounts
+-- ---------------------------------------------------------------------------------
 INSERT INTO users (username, phone_number, password_hash) VALUES
 ('admin', '12345679', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
 ('user', '12345678', 'scrypt:32768:8:1$V460O7kVZYEBrWGC$d7a6bd9c8feced05b6d118ec8ef7d2c65c66d41171eb05c9589a49e60a95fda7d830ed98d7eb2e50830034bea978f6db05be620883bacb0bf4c5fc3a0e1d7b38'),
@@ -561,17 +671,17 @@ INSERT INTO users (username, phone_number, password_hash) VALUES
 ('user3', '12345656', 'scrypt:32768:8:1$xdPsxX7EC8sCphaO$f1b46069ede337b2b1f594c10680a3f85ab5906faa04af144994218cfa039e75a9aacf64e19b928be1661a5a1e53c5987f935131c1b8bbaece6b266c1a553160'),
 ('user4', '11141671', 'scrypt:32768:8:1$xdPsxX7EC8sCphaO$f1b46069ede337b2b1f594c10680a3f85ab5906faa04af144994218cfa039e75a9aacf64e19b928be1661a5a1e53c5987f935131c1b8bbaece6b266c1a553160');
 
--- **************************************
--- Additional Support Agent User Accounts  
--- **************************************
+-- Support Agent Accounts
 INSERT INTO users (username, phone_number, password_hash) VALUES
 ('support_l1_agent', '98765421', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
-('support_l2_tech', '98765422', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
-('support_l3_senior', '98765423', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
-('support_l4_critical', '98765424', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
-('support_l5_security', '98765425', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b');
+('support_l2_agent', '98765422', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
+('support_l3_agent', '98765423', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
+('support_l4_agent', '98765424', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
+('support_l5_agent', '98765425', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b');
 
--- Create orchestrator MySQL user for database management
+-- ---------------------------------------------------------------------------------
+-- Database Management User
+-- ---------------------------------------------------------------------------------
 CREATE USER IF NOT EXISTS 'orchestrator'@'%' IDENTIFIED BY 'orchestrator_password';
 GRANT SUPER, PROCESS, REPLICATION SLAVE, REPLICATION CLIENT, RELOAD ON *.* TO 'orchestrator'@'%';
 GRANT SELECT ON mysql.slave_master_info TO 'orchestrator'@'%';
@@ -580,24 +690,26 @@ GRANT SELECT ON performance_schema.replication_group_member_stats TO 'orchestrat
 GRANT SELECT ON performance_schema.global_variables TO 'orchestrator'@'%';
 FLUSH PRIVILEGES;
 
--- Assign roles to the newly created users
--- Admin user gets both admin and user roles
+-- ---------------------------------------------------------------------------------
+-- User-Role Assignments
+-- ---------------------------------------------------------------------------------
+-- Admin and regular users
 INSERT INTO user_role_assignments (user_id, role_id)
 SELECT u.user_id, r.role_id
 FROM users u, roles r
-WHERE (u.username = 'admin' AND r.role_name IN ('user', 'admin'))
+WHERE (u.username = 'admin' AND r.role_name = 'admin')
    OR (u.username IN ('user', 'user2', 'user3', 'user4') AND r.role_name = 'user');
 
--- Assign user and support_agent roles to the new support agent accounts
+-- Support agents get both user and support_agent roles
 INSERT INTO user_role_assignments (user_id, role_id)
 SELECT u.user_id, r.role_id
 FROM users u, roles r
-WHERE u.username IN ('support_l1_agent', 'support_l2_tech', 'support_l3_senior', 'support_l4_critical', 'support_l5_security') 
+WHERE u.username IN ('support_l1_agent', 'support_l2_agent', 'support_l3_agent', 'support_l4_agent', 'support_l5_agent') 
 AND r.role_name IN ('user', 'support_agent');
 
--- **************************************
--- Sample data for ticket categories
--- **************************************
+-- ---------------------------------------------------------------------------------
+-- Ticket Categories
+-- ---------------------------------------------------------------------------------
 INSERT INTO ticket_categories (name, description, default_priority, required_clearance) VALUES
 ('General Support', 'General questions and basic support', 'low', 1),
 ('Technical Issues', 'Technical problems and bugs', 'medium', 2),
@@ -610,28 +722,19 @@ INSERT INTO ticket_categories (name, description, default_priority, required_cle
 ('API Support', 'Developer and API related questions', 'medium', 2),
 ('Emergency Support', 'Urgent emergency situations', 'critical', 4);
 
--- **************************************
--- Create Support Agents with Different Clearance Levels
--- **************************************
+-- ---------------------------------------------------------------------------------
+-- Support Agents with Clearance Levels
+-- ---------------------------------------------------------------------------------
 INSERT INTO support_agents (user_id, clearance_level, department, specialization, created_by) VALUES
--- L1 Agent - Basic Support
 ((SELECT user_id FROM users WHERE username = 'support_l1_agent'), 1, 'Customer Service', 'General Inquiries, Account Issues, Basic Troubleshooting', 1),
+((SELECT user_id FROM users WHERE username = 'support_l2_agent'), 2, 'Technical Support', 'Software Issues, API Support, Integration Problems', 1),
+((SELECT user_id FROM users WHERE username = 'support_l3_agent'), 3, 'Senior Technical Support', 'Complex Technical Issues, System Administration, Advanced Troubleshooting', 1),
+((SELECT user_id FROM users WHERE username = 'support_l4_agent'), 4, 'Critical Response Team', 'System Outages, Critical Bugs, Emergency Response, Infrastructure Issues', 1),
+((SELECT user_id FROM users WHERE username = 'support_l5_agent'), 5, 'Security Team', 'Security Incidents, Breach Response, Vulnerability Management, Compliance', 1);
 
--- L2 Agent - Technical Support  
-((SELECT user_id FROM users WHERE username = 'support_l2_tech'), 2, 'Technical Support', 'Software Issues, API Support, Integration Problems', 1),
-
--- L3 Agent - Senior Support
-((SELECT user_id FROM users WHERE username = 'support_l3_senior'), 3, 'Senior Technical Support', 'Complex Technical Issues, System Administration, Advanced Troubleshooting', 1),
-
--- L4 Agent - Critical Issues
-((SELECT user_id FROM users WHERE username = 'support_l4_critical'), 4, 'Critical Response Team', 'System Outages, Critical Bugs, Emergency Response, Infrastructure Issues', 1),
-
--- L5 Agent - Security Specialist
-((SELECT user_id FROM users WHERE username = 'support_l5_security'), 5, 'Security Team', 'Security Incidents, Breach Response, Vulnerability Management, Compliance', 1);
-
--- **************************************
--- Create Sample Tickets with Classifications
--- **************************************
+-- ---------------------------------------------------------------------------------
+-- Sample Tickets with Classifications
+-- ---------------------------------------------------------------------------------
 INSERT INTO tickets (user_id, title, description, category_id, priority, classification, status) VALUES
 ((SELECT user_id FROM users WHERE username = 'user'), 'Password Reset Request', 'I forgot my password and cannot login to my account', 3, 'low', 'public', 'open'),
 ((SELECT user_id FROM users WHERE username = 'user2'), 'API Integration Issue', 'Having trouble with the REST API authentication', 9, 'medium', 'internal', 'open'),
@@ -642,7 +745,9 @@ INSERT INTO tickets (user_id, title, description, category_id, priority, classif
 ((SELECT user_id FROM users WHERE username = 'user3'), 'Billing Question', 'Question about my monthly subscription charge', 4, 'medium', 'internal', 'open'),
 ((SELECT user_id FROM users WHERE username = 'user4'), 'Data Export Request', 'Need to export my personal data', 8, 'high', 'confidential', 'open');
 
--- Auto-assign some tickets to test the system
+-- ---------------------------------------------------------------------------------
+-- Sample Ticket Assignments
+-- ---------------------------------------------------------------------------------
 INSERT INTO ticket_assignments (ticket_id, agent_id, assigned_by, assigned_at, is_active) VALUES
 (1, 1, 1, NOW(), TRUE),  -- Public ticket to L1 agent
 (2, 2, 1, NOW(), TRUE),  -- Internal ticket to L2 agent  
@@ -650,4 +755,6 @@ INSERT INTO ticket_assignments (ticket_id, agent_id, assigned_by, assigned_at, i
 (4, 4, 1, NOW(), TRUE),  -- Secret ticket to L4 agent
 (5, 5, 1, NOW(), TRUE);  -- Top secret ticket to L5 agent
 
--- COMMIT;
+-- =================================================================================
+-- END OF DATABASE SCHEMA
+-- =================================================================================

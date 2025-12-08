@@ -79,7 +79,7 @@ from models import (
     Friendship, AdminAction, UserLog, ModSecLog, ErrorLog, 
     WebAuthnCredential, user_role_assignments,Event,FriendChatMap,BlockedUser,UserPublicKey, ChatKeyEnvelope
 )
-from decorators import user_required, admin_required, editor_required, role_required, admin_or_editor_required
+from decorators import user_required, admin_required, single_role_required
 
 # Filters
 from filters import (
@@ -155,7 +155,7 @@ class Config:
     # Splunk Configuration
     SPLUNK_HOST = 'splunk'  # Docker service name
     SPLUNK_PORT = '8088'
-    SPLUNK_HEC_TOKEN = '12345678-1234-1234-1234-123456789012'
+    SPLUNK_HEC_TOKEN = '0bae0406-834c-4cf2-a45a-d10c4a6a8e94'
     SPLUNK_INDEX = 'main'
     SPLUNK_USERNAME = 'admin'
     SPLUNK_PASSWORD = 'Admin123!'
@@ -1087,7 +1087,7 @@ def check_user_auth_methods():
         return jsonify({"has_2fa": False, "has_passkeys": False})
 
 
-
+# need user role
 @app.route('/enable_2fa', methods=['GET', 'POST'])
 @user_required
 def enable_2fa():
@@ -1119,6 +1119,7 @@ def enable_2fa():
             return redirect(url_for('user.account_security'))
     return render_template('UserEnable2FA.html', qr_b64=qr_b64, secret=totp_secret, form=form)
 
+# need user role
 @app.route('/disable_2fa', methods=['POST'])
 @user_required
 def disable_2fa():
@@ -1129,7 +1130,7 @@ def disable_2fa():
         return redirect(url_for('user.account_security'))
     return render_template('UserDisable2FA.html', form=form)
 
-
+# login needed
 # -- User passkey management --
 @app.route('/passkey/begin_register', methods=['POST'])
 @csrf.exempt
@@ -1175,6 +1176,7 @@ def passkey_begin_register():
         traceback.print_exc()
         return jsonify({"error": f"Failed to begin passkey registration: {str(e)}"}), 500
     
+# need user
 @app.route('/passkey/finish_register', methods=['POST'])
 @csrf.exempt
 @user_required
@@ -1239,7 +1241,8 @@ def passkey_finish_register():
         traceback.print_exc()
         db.session.rollback()
         return jsonify({"error": f"Failed to complete passkey registration: {str(e)}"}), 500
-    
+
+# need user
 @app.route('/remove_passkey/<int:cred_id>', methods=['POST'])
 @user_required
 def remove_passkey(cred_id):
@@ -1771,7 +1774,7 @@ def begin_passkey_auth_for_password_change():
 
 # -- User friends management --
 @app.route('/UserFriends')
-@user_required
+@single_role_required('user')
 def user_friends():
     friendships = Friendship.query.filter(
         ((Friendship.user_id1 == current_user.user_id) | (Friendship.user_id2 == current_user.user_id)),
@@ -1802,7 +1805,7 @@ def user_friends():
     return render_template('userfriends.html', friends=friends_info, form=form)
 
 @app.route('/DiscoverFriends', methods=['GET'])
-@user_required
+@single_role_required('user')
 def discover_friends():
     user = current_user
 
@@ -1853,7 +1856,7 @@ def discover_friends():
     return render_template('DiscoverFriends.html',all_users=all_users,current_user=user,form=form,pending_requests=pending_requests,accepted_friends=accepted_friends)
 
 @app.route('/search_users')
-@login_required
+@single_role_required('user')
 def search_users():
     query = request.args.get('q', '').strip()
     user = current_user
@@ -1906,7 +1909,7 @@ def search_users():
 
 # --- Notifications ---
 @app.route('/Notifications')
-@user_required
+@single_role_required('user')
 def notifications():
     notifications = Notification.query.filter_by(user_id=current_user.user_id).order_by(Notification.created_at.desc()).all()
     
@@ -2023,7 +2026,7 @@ def notifications():
         )
 
 @app.route('/delete_notification/<int:notification_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def delete_notification(notification_id):
     """Delete a specific notification"""
     notification = Notification.query.get_or_404(notification_id)
@@ -2041,7 +2044,7 @@ def delete_notification(notification_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/delete_all_notifications/<notification_type>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def delete_all_notifications(notification_type):
     """Delete all notifications of a specific type for the current user"""
     
@@ -2084,7 +2087,7 @@ def delete_all_notifications(notification_type):
         return jsonify({'success': False, 'error': str(e)}), 500
     
 @app.route('/mark_notification_read/<int:notification_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def mark_notification_read(notification_id):
     """Mark a specific notification as read"""
     notification = Notification.query.get_or_404(notification_id)
@@ -2102,7 +2105,7 @@ def mark_notification_read(notification_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/mark_all_notifications_read/<notification_type>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def mark_all_notifications_read(notification_type):
     """Mark all notifications of a specific type as read for the current user"""
     try:
@@ -2139,7 +2142,7 @@ def mark_all_notifications_read(notification_type):
 
 # -- Friends Management --
 @app.route('/send_friend_request/<int:target_user_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def send_friend_request(target_user_id):
     form = FriendRequestForm()
     if form.validate_on_submit():
@@ -2197,7 +2200,7 @@ def send_friend_request(target_user_id):
     return redirect(url_for('discover_friends'))
                 
 @app.route('/respond_friend_request/<int:friendship_id>/<action>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def respond_friend_request(friendship_id, action):
     friendship = Friendship.query.get_or_404(friendship_id)
     # Only the receiver can accept/decline
@@ -2258,7 +2261,7 @@ def respond_friend_request(friendship_id, action):
     return redirect(url_for('notifications'))
 
 @app.route('/cancel_friend_request/<int:target_user_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def cancel_friend_request(target_user_id):
     user1, user2 = sorted([current_user.user_id, target_user_id])
     friendship = Friendship.query.filter_by(user_id1=user1, user_id2=user2, status='pending').first()
@@ -2273,7 +2276,7 @@ def cancel_friend_request(target_user_id):
     return redirect(url_for('discover_friends'))
 
 @app.route('/unfriend/<int:friendship_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def unfriend(friendship_id):
     friendship = Friendship.query.get_or_404(friendship_id)
     # Only allow if current user is part of the friendship and status is accepted
@@ -2357,7 +2360,7 @@ def clear_block(blocker_id, blocked_id, chat_id=None):
 
 
 @app.route('/unblock_user_friend/<int:friend_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def unblock_user_friend(friend_id):
     user1, user2 = sorted([current_user.user_id, friend_id])
     friendship = Friendship.query.filter_by(user_id1=user1, user_id2=user2).first()
@@ -2397,7 +2400,7 @@ def unblock_user_friend(friend_id):
 
 
 @app.route('/block_user/<int:chat_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def block_user(chat_id):
     chat = Chat.query.get(chat_id)
     if not chat:
@@ -2410,7 +2413,7 @@ def block_user(chat_id):
 
 
 @app.route('/is_blocked/<int:chat_id>')
-@user_required
+@single_role_required('user')
 def is_blocked_route(chat_id):
     cp = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=current_user.user_id).first()
     other_cp = ChatParticipant.query.filter(ChatParticipant.chat_id == chat_id, ChatParticipant.user_id != current_user.user_id).first()
@@ -2441,7 +2444,7 @@ def is_any_active_block_between(user_a, user_b):
 
 
 @app.route('/unblock_user/<int:chat_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def unblock_user(chat_id):
     chat = Chat.query.get(chat_id)
     if not chat:
@@ -2521,9 +2524,10 @@ def add_friend_chat_map(user_id, friend_id, chat_id):
             db.session.rollback()
     except Exception:
         db.session.rollback()
+
 # --- Messaging ---
 @app.route('/api/me/pubkey', methods=['POST'])
-@user_required
+@single_role_required('user')
 def api_set_user_pubkey():
     data = request.get_json(silent=True) or {}
     spki_b64 = (data.get('spki_b64') or '').strip()
@@ -2542,7 +2546,7 @@ def api_set_user_pubkey():
     return jsonify({'ok': True})
 
 @app.route('/api/users/<int:user_id>/pubkey', methods=['GET'])
-@user_required
+@single_role_required('user')
 def api_get_user_pubkey(user_id):
     row = UserPublicKey.query.get(user_id)
     if not row:
@@ -2550,7 +2554,7 @@ def api_get_user_pubkey(user_id):
     return jsonify({'ok': True, 'alg': row.alg, 'spki_b64': row.public_key_spki_b64})
 
 @app.route('/api/chats/<int:chat_id>/key_envelope', methods=['POST'])
-@user_required
+@single_role_required('user')
 def api_put_chat_envelope(chat_id):
     data = request.get_json(silent=True) or {}
     envelope_b64 = (data.get('envelope_b64') or '').strip()
@@ -2573,7 +2577,7 @@ def api_put_chat_envelope(chat_id):
     return jsonify({'ok': True})
 
 @app.route('/api/chats/<int:chat_id>/key_envelope', methods=['GET'])
-@user_required
+@single_role_required('user')
 def api_get_chat_envelope(chat_id):
     key_version = request.args.get('version', type=int)
     q = ChatKeyEnvelope.query.filter_by(chat_id=chat_id, user_id=current_user.user_id)

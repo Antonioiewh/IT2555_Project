@@ -1,5 +1,5 @@
 from functools import wraps
-from flask import abort
+from flask import abort, flash, redirect, url_for
 from flask_login import login_required, current_user
 
 def user_required(f):
@@ -48,6 +48,20 @@ def role_required(*roles):
         return decorated_function
     return decorator
 
+def single_role_required(required_role):
+    """Decorator to ensure user has ONLY the specified role and no others"""
+    def decorator(f):
+        @wraps(f)
+        @login_required
+        def decorated_function(*args, **kwargs):
+            user_roles = [role.role_name for role in current_user.roles]
+            if user_roles == [required_role]:
+                return f(*args, **kwargs)
+            else:
+                abort(403)
+        return decorated_function
+    return decorator
+
 def admin_or_editor_required(f):
     """Decorator to ensure user has either 'admin' or 'editor' role"""
     @wraps(f)
@@ -58,10 +72,6 @@ def admin_or_editor_required(f):
         else:
             abort(403)
     return decorated_function
-
-
-
-# Add to decorators.py
 
 def agent_required(f):
     """Decorator to require agent role"""

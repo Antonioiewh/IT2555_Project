@@ -37,6 +37,26 @@ def check_ticket_access(ticket, user, action='view'):
     
     return True
 
+def get_classifications_at_or_below_level(clearance_level):
+    """
+    Get all ticket classifications that an agent with given clearance level can access
+    """
+    # Classification levels mapping (higher number = higher clearance required)
+    classification_levels = {
+        'public': 1,
+        'internal': 2,
+        'confidential': 3,
+        'secret': 4,
+        'top_secret': 5
+    }
+    
+    # Get classifications at or below the agent's clearance level
+    accessible_classifications = []
+    for classification, required_level in classification_levels.items():
+        if clearance_level >= required_level:
+            accessible_classifications.append(classification)
+    
+    return accessible_classifications
 # --- User Routes ---
 
 @ticketing_bp.route('/')
@@ -81,28 +101,28 @@ def agent_dashboard():
             Ticket.status.in_(['open', 'in_progress', 'pending'])
         ).order_by(Ticket.updated_at.desc()).all()
         
-        # Get accessible tickets that are not assigned or assigned to others
-        accessible_classifications = agent.get_accessible_classifications()
+        # Get classifications at or below this agent's clearance level
+        accessible_classifications = get_classifications_at_or_below_level(agent.clearance_level)
         
-        # Get open tickets that this agent can access
+        # Get assigned ticket IDs to exclude from available tickets
+        assigned_ticket_ids = [t.ticket_id for t in assigned_tickets]
+        
+        # Get open tickets that this agent can access but are NOT assigned to them
         accessible_tickets_query = Ticket.query.filter(
             Ticket.status.in_(['open', 'in_progress', 'pending']),
             Ticket.classification.in_(accessible_classifications)
         )
         
-        # Filter out tickets assigned to other agents (unless agent has high clearance)
-        if agent.clearance_level < 4:
-            # Lower clearance agents only see unassigned tickets or their own assigned tickets
-            unassigned_tickets = accessible_tickets_query.outerjoin(TicketAssignment).filter(
-                or_(
-                    TicketAssignment.assignment_id.is_(None),
-                    TicketAssignment.is_active == False
-                )
-            ).order_by(Ticket.created_at.desc()).limit(10).all()
-            accessible_tickets = unassigned_tickets
-        else:
-            # Higher clearance agents can see all accessible tickets
-            accessible_tickets = accessible_tickets_query.order_by(Ticket.created_at.desc()).limit(20).all()
+        # Exclude tickets already assigned to this agent
+        if assigned_ticket_ids:
+            accessible_tickets_query = accessible_tickets_query.filter(
+                ~Ticket.ticket_id.in_(assigned_ticket_ids)
+            )
+        
+        # SIMPLIFIED: Show only tickets with NO assignments (no inactive assignments exist)
+        accessible_tickets = accessible_tickets_query.outerjoin(TicketAssignment).filter(
+            TicketAssignment.assignment_id.is_(None)
+        ).order_by(Ticket.created_at.desc()).limit(10).all()
         
         return render_template('ticketing/agent_dashboard.html', 
                              assigned_tickets=assigned_tickets,
@@ -114,6 +134,7 @@ def agent_dashboard():
         flash('An error occurred while loading the dashboard.', 'error')
         return redirect(url_for('ticketing.index'))
 
+    
 @ticketing_bp.route('/agent/open-tickets')
 @agent_required
 def agent_open_tickets():
@@ -124,27 +145,36 @@ def agent_open_tickets():
             flash('Access denied. Support agent profile required.', 'error')
             return redirect(url_for('ticketing.agent_dashboard'))
         
-        # Get accessible classifications for this agent
-        accessible_classifications = agent.get_accessible_classifications()
+        # Get classifications at or below this agent's clearance level
+        accessible_classifications = get_classifications_at_or_below_level(agent.clearance_level)
         
-        # Query open tickets based on classification access
-        open_tickets = Ticket.query.filter(
+        # Get tickets assigned to this agent (to exclude them)
+        assigned_tickets = db.session.query(Ticket).join(
+            TicketAssignment, Ticket.ticket_id == TicketAssignment.ticket_id
+        ).filter(
+            TicketAssignment.agent_id == agent.agent_id,
+            TicketAssignment.is_active == True,
+            Ticket.status.in_(['open', 'in_progress', 'pending'])
+        ).all()
+        
+        assigned_ticket_ids = [t.ticket_id for t in assigned_tickets]
+        
+        # Get open tickets that this agent can access but are NOT assigned to them
+        accessible_tickets_query = Ticket.query.filter(
             Ticket.status.in_(['open', 'in_progress', 'pending']),
             Ticket.classification.in_(accessible_classifications)
-        ).order_by(Ticket.created_at.desc()).all()
+        )
         
-        # Filter out tickets assigned to other agents (unless agent has high clearance)
-        if agent.clearance_level < 4:
-            # Lower clearance agents only see unassigned tickets or their own assigned tickets
-            filtered_tickets = []
-            for ticket in open_tickets:
-                assignment = TicketAssignment.query.filter_by(
-                    ticket_id=ticket.ticket_id, is_active=True
-                ).first()
-                
-                if not assignment or assignment.agent_id == agent.agent_id:
-                    filtered_tickets.append(ticket)
-            open_tickets = filtered_tickets
+        # Exclude tickets already assigned to this agent
+        if assigned_ticket_ids:
+            accessible_tickets_query = accessible_tickets_query.filter(
+                ~Ticket.ticket_id.in_(assigned_ticket_ids)
+            )
+        
+        # SIMPLIFIED: Show only tickets with NO assignments
+        open_tickets = accessible_tickets_query.outerjoin(TicketAssignment).filter(
+            TicketAssignment.assignment_id.is_(None)
+        ).order_by(Ticket.created_at.desc()).all()
         
         return render_template('ticketing/agent_open_tickets.html', 
                              tickets=open_tickets,
@@ -177,11 +207,13 @@ def agent_my_tickets():
                              tickets=assigned_tickets,
                              agent=agent)
         
-    except Exception in e:
+    except Exception as e:  # Fixed: changed 'in' to 'as'
         current_app.logger.error(f"Error loading assigned tickets: {str(e)}")
         flash('An error occurred while loading your tickets.', 'error')
         return redirect(url_for('ticketing.agent_dashboard'))
-        
+
+
+# unused   
 @ticketing_bp.route('/create', methods=['GET', 'POST'])
 @login_required
 def create_ticket():
@@ -268,7 +300,7 @@ def view_ticket(ticket_id):
         
         form = TicketReplyForm()
         
-        return render_template('ticketing/view_ticket.html', 
+        return render_template('ticketing/agent_view_ticket.html', 
                              ticket=ticket, 
                              messages=messages,
                              assignment=assignment,
@@ -280,6 +312,7 @@ def view_ticket(ticket_id):
         flash('An error occurred while loading the ticket.', 'error')
         return redirect(url_for('ticketing.index'))
 
+# unused
 @ticketing_bp.route('/reply/<int:ticket_id>', methods=['POST'])
 @login_required
 def reply_ticket(ticket_id):
@@ -337,8 +370,107 @@ def reply_ticket(ticket_id):
         flash('An error occurred while adding your reply.', 'error')
         return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
 
-# --- Support Agent Routes ---
+@ticketing_bp.route('/take/<int:ticket_id>', methods=['POST'])
+@agent_required
+def take_ticket(ticket_id):
+    """Agent takes ownership of a ticket"""
+    try:
+        ticket = Ticket.query.get_or_404(ticket_id)
+        
+        # Check access permissions
+        if not check_ticket_access(ticket, current_user, 'assign'):
+            abort(403)
+        
+        # Get current agent
+        agent = SupportAgent.query.filter_by(user_id=current_user.user_id, is_active=True).first()
+        if not agent:
+            return jsonify({'error': 'Agent profile required'}), 403
+        
+        # Check if agent can view this classification
+        if not agent.can_view_classification(ticket.classification):
+            return jsonify({'error': f'Insufficient clearance for {ticket.classification} classified tickets'}), 403
+        
+        # Check if ticket is already assigned to someone else
+        existing_assignment = TicketAssignment.query.filter_by(ticket_id=ticket_id, is_active=True).first()
+        if existing_assignment and existing_assignment.agent_id != agent.agent_id:
+            return jsonify({'error': 'Ticket is already assigned to another agent'}), 400
+        
+        # If already assigned to this agent, no need to reassign
+        if existing_assignment and existing_assignment.agent_id == agent.agent_id:
+            return jsonify({'message': 'Ticket is already assigned to you'}), 200
+        
+        # Deactivate any existing assignments
+        TicketAssignment.query.filter_by(ticket_id=ticket_id).update({'is_active': False})
+        
+        # Create new assignment
+        assignment = TicketAssignment(
+            ticket_id=ticket_id,
+            agent_id=agent.agent_id,
+            assigned_by=current_user.user_id,
+            assigned_at=datetime.utcnow(),
+            is_active=True
+        )
+        
+        db.session.add(assignment)
+        
+        # Update ticket status
+        ticket.status = 'in_progress'
+        ticket.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        return jsonify({'message': f'Ticket taken successfully!'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error taking ticket: {str(e)}")
+        return jsonify({'error': 'An error occurred while taking the ticket'}), 500
 
+# Add this right after the take_ticket function (around line 402):
+
+@ticketing_bp.route('/untake/<int:ticket_id>', methods=['POST'])
+@agent_required
+def untake_ticket(ticket_id):
+    """Agent releases ownership of a ticket"""
+    try:
+        ticket = Ticket.query.get_or_404(ticket_id)
+        
+        # Check access permissions
+        if not check_ticket_access(ticket, current_user, 'assign'):
+            return jsonify({'error': 'Access denied'}), 403
+        
+        # Get current agent
+        agent = SupportAgent.query.filter_by(user_id=current_user.user_id, is_active=True).first()
+        if not agent:
+            return jsonify({'error': 'Agent profile required'}), 403
+        
+        # Check if ticket is assigned to this agent
+        existing_assignment = TicketAssignment.query.filter_by(
+            ticket_id=ticket_id, 
+            agent_id=agent.agent_id, 
+            is_active=True
+        ).first()
+        
+        if not existing_assignment:
+            return jsonify({'error': 'You are not assigned to this ticket'}), 400
+        
+        # COMPLETELY DELETE the assignment instead of deactivating
+        db.session.delete(existing_assignment)
+        
+        # Update ticket status back to open
+        ticket.status = 'open'
+        ticket.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        return jsonify({'message': f'Ticket released successfully! Ticket #{ticket_id} is now available for other agents.'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error releasing ticket: {str(e)}")
+        return jsonify({'error': 'An error occurred while releasing the ticket'}), 500
+
+# unused
 @ticketing_bp.route('/assign/<int:ticket_id>', methods=['POST'])
 @agent_required
 def assign_ticket(ticket_id):
@@ -673,3 +805,7 @@ def auto_assign_ticket(ticket):
     except Exception as e:
         current_app.logger.error(f"Error auto-assigning ticket: {str(e)}")
         # Don't raise exception, just log it
+
+# Move the get_classifications_at_or_below_level function to the top, right after check_ticket_access
+
+

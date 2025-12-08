@@ -2,24 +2,28 @@
 
 {% block title %}Open Tickets - Agent View{% endblock %}
 
+{% block head %}
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid mt-4">
     <div class="row">
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <div>
-                    <h2><i class="fas fa-clipboard-list"></i> Open Tickets</h2>
+                    <h2><i class="bi bi-clipboard-list"></i> Open Tickets</h2>
                     <p class="text-muted mb-0">
-                        <span class="badge bg-info">Clearance: {{ agent.clearance_level_info.level_name }}</span>
+                        <span class="badge bg-info">Clearance: L{{ agent.clearance_level }}</span>
                         Tickets you can access and work on
                     </p>
                 </div>
                 <div>
                     <a href="{{ url_for('ticketing.agent_dashboard') }}" class="btn btn-outline-secondary me-2">
-                        <i class="fas fa-arrow-left"></i> Back to Dashboard
+                        <i class="bi bi-arrow-left"></i> Back to Dashboard
                     </a>
                     <a href="{{ url_for('ticketing.agent_my_tickets') }}" class="btn btn-primary">
-                        <i class="fas fa-user-tie"></i> My Tickets
+                        <i class="bi bi-person-check"></i> My Tickets
                     </a>
                 </div>
             </div>
@@ -53,27 +57,24 @@
                             </div>
                             <div class="card-body">
                                 <h6 class="card-title">{{ ticket.title }}</h6>
-                                <p class="card-text text-muted small">
+                                <p class="card-text text-muted small preserve-whitespace">
                                     {{ ticket.description[:100] }}{% if ticket.description|length > 100 %}...{% endif %}
                                 </p>
                                 <div class="mb-3">
                                     <small class="text-muted">
-                                        <i class="fas fa-user"></i> {{ ticket.user.username }}<br>
-                                        <i class="fas fa-clock"></i> {{ ticket.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                        <i class="bi bi-person"></i> {{ ticket.user.username }}<br>
+                                        <i class="bi bi-clock"></i> {{ ticket.created_at.strftime('%Y-%m-%d %H:%M') }}
                                     </small>
                                 </div>
                                 <div class="d-flex gap-2 flex-wrap mb-3">
                                     <span class="badge bg-{{ 'danger' if ticket.priority == 'security' else 
-                                                             'warning' if ticket.priority == 'critical' else
-                                                             'info' if ticket.priority == 'high' else
-                                                             'success' if ticket.priority == 'medium' else
+                                                             'danger' if ticket.priority == 'critical' else
+                                                             'warning' if ticket.priority == 'high' else
+                                                             'info' if ticket.priority == 'medium' else
                                                              'secondary' }}">
                                         {{ ticket.priority.title() }}
                                     </span>
-                                    <span class="badge bg-{{ 'success' if ticket.status == 'resolved' else
-                                                             'primary' if ticket.status == 'in_progress' else
-                                                             'warning' if ticket.status == 'pending' else
-                                                             'secondary' }}">
+                                    <span class="badge bg-{% if ticket.status == 'open' %}warning{% elif ticket.status == 'in_progress' %}info{% elif ticket.status == 'pending' %}secondary{% elif ticket.status == 'closed' %}success{% else %}dark{% endif %}">
                                         {{ ticket.status.replace('_', ' ').title() }}
                                     </span>
                                 </div>
@@ -82,12 +83,12 @@
                                 <div class="d-flex gap-2">
                                     <a href="{{ url_for('ticketing.view_ticket', ticket_id=ticket.ticket_id) }}" 
                                        class="btn btn-sm btn-outline-primary">
-                                        <i class="fas fa-eye"></i> View
+                                        <i class="bi bi-eye"></i> View
                                     </a>
-                                    {% if agent.clearance_level >= 2 %}
+                                    {% if agent.clearance_level >= 1 %}
                                     <button class="btn btn-sm btn-outline-success" 
-                                            onclick="assignToMe({{ ticket.ticket_id }})">
-                                        <i class="fas fa-user-plus"></i> Take
+                                            onclick="takeTicket({{ ticket.ticket_id }})">
+                                        <i class="bi bi-person-plus"></i> Take
                                     </button>
                                     {% endif %}
                                 </div>
@@ -98,13 +99,13 @@
                 </div>
             {% else %}
                 <div class="text-center py-5">
-                    <i class="fas fa-clipboard-check fa-4x text-muted mb-3"></i>
+                    <i class="bi bi-clipboard-check display-1 text-muted mb-3"></i>
                     <h4 class="text-muted">No Open Tickets</h4>
                     <p class="text-muted">
-                        There are no open tickets available for your clearance level ({{ agent.clearance_level_info.level_name }}).
+                        There are no open tickets available for your clearance level (L{{ agent.clearance_level }}).
                     </p>
                     <a href="{{ url_for('ticketing.agent_dashboard') }}" class="btn btn-primary">
-                        <i class="fas fa-arrow-left"></i> Return to Dashboard
+                        <i class="bi bi-arrow-left"></i> Return to Dashboard
                     </a>
                 </div>
             {% endif %}
@@ -112,25 +113,36 @@
     </div>
 </div>
 
+<style>
+.preserve-whitespace {
+    white-space: pre-line;
+}
+</style>
+
 <script>
-function assignToMe(ticketId) {
+function takeTicket(ticketId) {
     if (confirm('Take ownership of this ticket?')) {
-        fetch(`/tickets/assign/${ticketId}`, {
+        const csrfToken = document.querySelector('meta[name=csrf-token]')?.getAttribute('content');
+        
+        fetch(`/tickets/take/${ticketId}`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: `agent_id={{ agent.agent_id }}`
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            }
         })
-        .then(response => {
-            if (response.ok) {
+        .then(response => response.json())
+        .then(data => {
+            if (data.message) {
+                alert(data.message);
                 location.reload();
-            } else {
-                alert('Error assigning ticket');
+            } else if (data.error) {
+                alert('Error: ' + data.error);
             }
         })
         .catch(error => {
-            alert('Error assigning ticket');
+            console.error('Error:', error);
+            alert('Error taking ticket');
         });
     }
 }

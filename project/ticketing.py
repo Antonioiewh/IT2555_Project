@@ -3,7 +3,7 @@ from flask_login import login_required, current_user
 from datetime import datetime, timedelta
 from models import (
     db, User, Ticket, TicketMessage, SupportAgent, TicketAssignment, 
-    TicketEscalation, TicketCategory, KnowledgeBaseArticle, ClearanceLevel
+    TicketEscalation, TicketCategory, KnowledgeBaseArticle, ClearanceLevel,ArchivedTicket
 )
 from forms import TicketForm, TicketReplyForm, TicketAssignForm, KnowledgeBaseForm
 from decorators import role_required, admin_required, agent_required
@@ -57,6 +57,43 @@ def get_classifications_at_or_below_level(clearance_level):
             accessible_classifications.append(classification)
     
     return accessible_classifications
+
+def get_available_escalation_tiers(current_clearance_level, ticket_classification=None):
+    """Get available escalation tiers for current agent based on ticket classification"""
+    tiers = []
+    tier_names = {
+        1: 'L1-PUBLIC',
+        2: 'L2-INTERNAL',
+        3: 'L3-CONFIDENTIAL', 
+        4: 'L4-SECRET',
+        5: 'L5-TOP SECRET'
+    }
+    
+    # Classification to level mapping
+    classification_to_level = {
+        'public': 1,
+        'internal': 2,
+        'confidential': 3,
+        'secret': 4,
+        'top_secret': 5
+    }
+    
+    # Get current classification level of the ticket
+    if ticket_classification:
+        current_ticket_level = classification_to_level.get(ticket_classification, 1)
+    else:
+        current_ticket_level = 1
+    
+    # Agent can escalate to any tier above the ticket's current level 
+    # up to and including their own clearance level
+    for level in range(current_ticket_level + 1, current_clearance_level + 1):
+        tiers.append({
+            'level': level,
+            'name': tier_names.get(level, f'L{level}'),
+            'description': f'Escalate to Level {level} clearance'
+        })
+    
+    return tiers
 # --- User Routes ---
 
 @ticketing_bp.route('/')
@@ -134,7 +171,6 @@ def agent_dashboard():
         flash('An error occurred while loading the dashboard.', 'error')
         return redirect(url_for('ticketing.index'))
 
-    
 @ticketing_bp.route('/agent/open-tickets')
 @agent_required
 def agent_open_tickets():
@@ -207,13 +243,11 @@ def agent_my_tickets():
                              tickets=assigned_tickets,
                              agent=agent)
         
-    except Exception as e:  # Fixed: changed 'in' to 'as'
+    except Exception as e:
         current_app.logger.error(f"Error loading assigned tickets: {str(e)}")
         flash('An error occurred while loading your tickets.', 'error')
         return redirect(url_for('ticketing.agent_dashboard'))
 
-
-# unused   
 @ticketing_bp.route('/create', methods=['GET', 'POST'])
 @login_required
 def create_ticket():
@@ -298,6 +332,11 @@ def view_ticket(ticket_id):
         # Check if current user is support agent
         agent = SupportAgent.query.filter_by(user_id=current_user.user_id, is_active=True).first()
         
+       # Get available escalation tiers for this agent
+        escalation_tiers = []
+        if agent:
+            escalation_tiers = get_available_escalation_tiers(agent.clearance_level, ticket.classification)
+        
         form = TicketReplyForm()
         
         return render_template('ticketing/agent_view_ticket.html', 
@@ -305,6 +344,7 @@ def view_ticket(ticket_id):
                              messages=messages,
                              assignment=assignment,
                              agent=agent,
+                             escalation_tiers=escalation_tiers,
                              form=form)
         
     except Exception as e:
@@ -312,7 +352,6 @@ def view_ticket(ticket_id):
         flash('An error occurred while loading the ticket.', 'error')
         return redirect(url_for('ticketing.index'))
 
-# unused
 @ticketing_bp.route('/reply/<int:ticket_id>', methods=['POST'])
 @login_required
 def reply_ticket(ticket_id):
@@ -426,8 +465,6 @@ def take_ticket(ticket_id):
         current_app.logger.error(f"Error taking ticket: {str(e)}")
         return jsonify({'error': 'An error occurred while taking the ticket'}), 500
 
-# Add this right after the take_ticket function (around line 402):
-
 @ticketing_bp.route('/untake/<int:ticket_id>', methods=['POST'])
 @agent_required
 def untake_ticket(ticket_id):
@@ -470,7 +507,6 @@ def untake_ticket(ticket_id):
         current_app.logger.error(f"Error releasing ticket: {str(e)}")
         return jsonify({'error': 'An error occurred while releasing the ticket'}), 500
 
-# unused
 @ticketing_bp.route('/assign/<int:ticket_id>', methods=['POST'])
 @agent_required
 def assign_ticket(ticket_id):
@@ -530,7 +566,7 @@ def assign_ticket(ticket_id):
 @ticketing_bp.route('/escalate/<int:ticket_id>', methods=['POST'])
 @agent_required
 def escalate_ticket(ticket_id):
-    """Escalate ticket to higher clearance level"""
+    """Escalate ticket to higher clearance level or different tier"""
     try:
         ticket = Ticket.query.get_or_404(ticket_id)
         
@@ -539,6 +575,9 @@ def escalate_ticket(ticket_id):
             abort(403)
         
         reason = request.form.get('reason', '').strip()
+        escalation_type = request.form.get('escalation_type', 'priority')
+        target_tier = request.form.get('target_tier', '')
+        
         if not reason:
             flash('Escalation reason is required.', 'error')
             return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
@@ -549,50 +588,129 @@ def escalate_ticket(ticket_id):
             flash('Only support agents can escalate tickets.', 'error')
             return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
         
-        # Determine new priority level based on current priority
-        priority_levels = ['low', 'medium', 'high', 'critical', 'security']
-        current_index = priority_levels.index(ticket.priority) if ticket.priority in priority_levels else 1
-        new_index = min(current_index + 1, len(priority_levels) - 1)
-        new_priority = priority_levels[new_index]
-        
-        # Create escalation record
-        escalation = TicketEscalation(
-            ticket_id=ticket_id,
-            escalated_by=current_agent.agent_id,
-            escalated_at=datetime.utcnow(),
-            previous_priority=ticket.priority,
-            new_priority=new_priority,
-            reason=reason
-        )
-        
-        db.session.add(escalation)
-        
-        # Update ticket priority and classification
-        ticket.priority = new_priority
-        ticket.classification = ticket.determine_classification()
-        ticket.updated_at = datetime.utcnow()
-        
-        # Auto-reassign to agent with higher clearance if current agent can't handle new classification
-        if not current_agent.can_view_classification(ticket.classification):
-            # Deactivate current assignment
-            TicketAssignment.query.filter_by(ticket_id=ticket_id, is_active=True).update({'is_active': False})
+        if escalation_type == 'tier' and target_tier:
+            # Tier-based escalation
+            try:
+                target_tier_level = int(target_tier)
+            except ValueError:
+                flash('Invalid tier level specified.', 'error')
+                return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
             
-            # Find agent with required clearance
-            suitable_agent = SupportAgent.query.filter(
-                SupportAgent.clearance_level >= current_agent.clearance_level + 1,
-                SupportAgent.is_active == True,
-                SupportAgent.agent_id != current_agent.agent_id
-            ).first()
+            # Get current ticket classification level
+            classification_to_level = {
+                'public': 1,
+                'internal': 2,
+                'confidential': 3,
+                'secret': 4,
+                'top_secret': 5
+            }
+            current_ticket_level = classification_to_level.get(ticket.classification, 1)
             
-            if suitable_agent and suitable_agent.can_view_classification(ticket.classification):
-                new_assignment = TicketAssignment(
-                    ticket_id=ticket_id,
-                    agent_id=suitable_agent.agent_id,
-                    assigned_by=current_user.user_id,
-                    assigned_at=datetime.utcnow(),
-                    is_active=True
-                )
-                db.session.add(new_assignment)
+            # Validate that target tier is higher than current ticket classification
+            if target_tier_level <= current_ticket_level:
+                flash('Can only escalate to higher classification tiers than current ticket level.', 'error')
+                return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
+            
+            # Check if there are any agents with the target tier clearance
+            suitable_agents = SupportAgent.query.filter(
+                SupportAgent.clearance_level >= target_tier_level,
+                SupportAgent.is_active == True
+            ).count()
+            
+            if suitable_agents == 0:
+                flash(f'No available agents with L{target_tier_level} or higher clearance found.', 'error')
+                return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
+            
+            # Update classification based on target tier
+            classification_mapping = {
+                1: 'public',
+                2: 'internal', 
+                3: 'confidential',
+                4: 'secret',
+                5: 'top_secret'
+            }
+            new_classification = classification_mapping.get(target_tier_level, ticket.classification)
+            
+            # Create escalation record
+            escalation = TicketEscalation(
+                ticket_id=ticket_id,
+                escalated_by=current_agent.agent_id,
+                escalated_at=datetime.utcnow(),
+                previous_priority=ticket.priority,
+                new_priority=ticket.priority,  # Keep same priority for tier escalation
+                reason=f"Escalated to L{target_tier_level} tier: {reason}"
+            )
+            
+            # Remove current assignment (delete it completely)
+            current_assignments = TicketAssignment.query.filter_by(ticket_id=ticket_id, is_active=True).all()
+            for assignment in current_assignments:
+                db.session.delete(assignment)
+            
+            # Update ticket classification and set as open for agents of that tier to pick up
+            ticket.classification = new_classification
+            ticket.status = 'open'  # Set as open instead of assigning to specific agent
+            ticket.updated_at = datetime.utcnow()
+            
+            db.session.add(escalation)
+            
+            # Get tier name for display
+            tier_names = {
+                1: 'L1-PUBLIC',
+                2: 'L2-INTERNAL', 
+                3: 'L3-CONFIDENTIAL',
+                4: 'L4-SECRET',
+                5: 'L5-TOP SECRET'
+            }
+            tier_name = tier_names.get(target_tier_level, f'L{target_tier_level}')
+            
+            flash(f'Ticket escalated to {tier_name} tier and is now available for agents with appropriate clearance to take.', 'success')
+        else:
+            # Priority-based escalation (existing functionality)
+            priority_levels = ['low', 'medium', 'high', 'critical', 'security']
+            current_index = priority_levels.index(ticket.priority) if ticket.priority in priority_levels else 1
+            new_index = min(current_index + 1, len(priority_levels) - 1)
+            new_priority = priority_levels[new_index]
+            
+            # Create escalation record
+            escalation = TicketEscalation(
+                ticket_id=ticket_id,
+                escalated_by=current_agent.agent_id,
+                escalated_at=datetime.utcnow(),
+                previous_priority=ticket.priority,
+                new_priority=new_priority,
+                reason=reason
+            )
+            
+            db.session.add(escalation)
+            
+            # Update ticket priority and classification
+            ticket.priority = new_priority
+            ticket.classification = ticket.determine_classification()
+            ticket.updated_at = datetime.utcnow()
+            
+            # Auto-reassign to agent with higher clearance if current agent can't handle new classification
+            if not current_agent.can_view_classification(ticket.classification):
+                # Deactivate current assignment
+                TicketAssignment.query.filter_by(ticket_id=ticket_id, is_active=True).update({'is_active': False})
+                
+                # Find agent with required clearance
+                suitable_agent = SupportAgent.query.filter(
+                    SupportAgent.clearance_level >= current_agent.clearance_level + 1,
+                    SupportAgent.is_active == True,
+                    SupportAgent.agent_id != current_agent.agent_id
+                ).first()
+                
+                if suitable_agent and suitable_agent.can_view_classification(ticket.classification):
+                    new_assignment = TicketAssignment(
+                        ticket_id=ticket_id,
+                        agent_id=suitable_agent.agent_id,
+                        assigned_by=current_user.user_id,
+                        assigned_at=datetime.utcnow(),
+                        is_active=True
+                    )
+                    db.session.add(new_assignment)
+            
+            flash(f'Ticket escalated from {escalation.previous_priority} to {new_priority} priority.', 'success')
         
         db.session.commit()
         
@@ -601,14 +719,12 @@ def escalate_ticket(ticket_id):
             from splunk_logger import splunk_logger
             splunk_logger.log_security_event('ticket_escalated', {
                 'ticket_id': ticket_id,
-                'from_priority': escalation.previous_priority,
-                'to_priority': new_priority,
-                'escalated_by': current_user.username
+                'escalation_type': escalation_type,
+                'escalated_by': current_user.username,
+                'target_tier': target_tier if escalation_type == 'tier' else None
             }, 'HIGH')
         except ImportError:
             pass
-        
-        flash(f'Ticket escalated from {escalation.previous_priority} to {new_priority} priority.', 'success')
         
     except Exception as e:
         db.session.rollback()
@@ -620,46 +736,163 @@ def escalate_ticket(ticket_id):
 @ticketing_bp.route('/close/<int:ticket_id>', methods=['POST'])
 @login_required
 def close_ticket(ticket_id):
-    """Close ticket"""
+    """Close ticket with optional archiving"""
     try:
         ticket = Ticket.query.get_or_404(ticket_id)
         
-        # Check access permissions
+        # Check access
         if not check_ticket_access(ticket, current_user, 'modify'):
-            abort(403)
-        
-        resolution = request.form.get('resolution', '').strip()
-        if not resolution:
-            flash('Resolution description is required.', 'error')
+            flash('Access denied.', 'error')
             return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
         
-        # Update ticket
+        resolution = request.form.get('resolution', '').strip()
+        archive_ticket_raw = request.form.get('archive_ticket')
+        archive_ticket = request.form.get('archive_ticket') == 'on'
+        
+        # Enhanced debugging
+        current_app.logger.info(f"=== CLOSE TICKET DEBUG FOR TICKET {ticket_id} ===")
+        current_app.logger.info(f"Full form data: {dict(request.form)}")
+        current_app.logger.info(f"Archive ticket raw value: '{archive_ticket_raw}'")
+        current_app.logger.info(f"Archive ticket boolean: {archive_ticket}")
+        current_app.logger.info(f"Resolution: '{resolution}'")
+        current_app.logger.info(f"Current user: {current_user.username} (ID: {current_user.user_id})")
+        
+        if not resolution:
+            flash('Resolution is required to close the ticket.', 'error')
+            return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
+        
+        # Update ticket first
         ticket.status = 'closed'
         ticket.resolution = resolution
         ticket.resolved_at = datetime.utcnow()
-        ticket.updated_at = datetime.utcnow()
         
-        # Add resolution message
-        resolution_message = TicketMessage(
-            ticket_id=ticket_id,
-            user_id=current_user.user_id,
-            message=f"**Ticket Closed**\n\nResolution: {resolution}",
-            is_internal=False,
-            created_at=datetime.utcnow()
-        )
+        flash_msg = f'Ticket #{ticket_id} has been closed successfully.'
         
-        db.session.add(resolution_message)
+        # Archive if requested
+        if archive_ticket:
+            try:
+                current_app.logger.info(f"ARCHIVING: Starting archive process for ticket {ticket_id}")
+                
+                
+                # Create archived ticket record with explicit field validation
+                archived_ticket = ArchivedTicket(
+                    original_ticket_id=ticket.ticket_id,
+                    user_id=ticket.user_id,
+                    title=ticket.title,
+                    description=ticket.description,
+                    category_id=ticket.category_id,
+                    priority=ticket.priority,
+                    status='closed',
+                    classification=ticket.classification,
+                    resolution=resolution,
+                    created_at=ticket.created_at,
+                    updated_at=ticket.updated_at,
+                    resolved_at=datetime.utcnow(),
+                    archived_by=current_user.user_id
+                )
+                
+                current_app.logger.info(f"ARCHIVING: Created ArchivedTicket object")
+                
+                # Add and flush to get ID
+                db.session.add(archived_ticket)
+                db.session.flush()
+                
+                current_app.logger.info(f"ARCHIVING: Flushed to DB, archived ticket ID: {archived_ticket.archived_ticket_id}")
+                
+                # Update original ticket with archive info
+                ticket.archived_at = datetime.utcnow()
+                ticket.archived_by = current_user.user_id
+                
+                current_app.logger.info(f"ARCHIVING: Updated original ticket with archive metadata")
+                
+                flash_msg = f'Ticket #{ticket_id} has been closed and archived successfully.'
+                
+            except Exception as archive_error:
+                current_app.logger.error(f"ARCHIVING ERROR: {str(archive_error)}")
+                current_app.logger.error(f"ARCHIVING ERROR TYPE: {type(archive_error).__name__}")
+                import traceback
+                current_app.logger.error(f"ARCHIVING TRACEBACK: {traceback.format_exc()}")
+                
+                # Don't rollback here, just continue with closing the ticket
+                flash('Archive failed, but ticket was closed successfully.', 'warning')
+                flash_msg = f'Ticket #{ticket_id} has been closed (archive failed).'
+        else:
+            current_app.logger.info(f"ARCHIVING: Skipped - checkbox not checked")
+        
+        # Commit the transaction
+        current_app.logger.info(f"COMMITTING: Starting database commit")
         db.session.commit()
+        current_app.logger.info(f"COMMITTING: Database commit successful")
         
-        flash('Ticket closed successfully!', 'success')
+        # Verification step
+        if archive_ticket:
+            verification = ArchivedTicket.query.filter_by(original_ticket_id=ticket_id).first()
+            if verification:
+                current_app.logger.info(f"VERIFICATION: SUCCESS - Found archived ticket {verification.archived_ticket_id}")
+            else:
+                current_app.logger.error(f"VERIFICATION: FAILED - No archived ticket found in database")
+                flash_msg = f'Ticket #{ticket_id} closed, but archive verification failed.'
+        
+        flash(flash_msg, 'success')
+        current_app.logger.info(f"=== CLOSE TICKET COMPLETE FOR TICKET {ticket_id} ===")
         
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Error closing ticket: {str(e)}")
+        current_app.logger.error(f"CRITICAL ERROR closing ticket {ticket_id}: {str(e)}")
+        current_app.logger.error(f"ERROR TYPE: {type(e).__name__}")
+        import traceback
+        current_app.logger.error(f"FULL TRACEBACK: {traceback.format_exc()}")
         flash('An error occurred while closing the ticket.', 'error')
     
     return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
+@ticketing_bp.route('/agent/archived-tickets')
+@agent_required
+def agent_archived_tickets():
+    """Agent view for archived tickets they can access"""
+    try:
+        agent = SupportAgent.query.filter_by(user_id=current_user.user_id, is_active=True).first()
+        if not agent:
+            flash('Agent profile not found.', 'error')
+            return redirect(url_for('ticketing.index'))
+        
+        # Get classifications at or below this agent's clearance level
+        accessible_classifications = get_classifications_at_or_below_level(agent.clearance_level)
+        
+        # Get archived tickets based on clearance
+        archived_tickets = ArchivedTicket.query.filter(
+            ArchivedTicket.classification.in_(accessible_classifications)
+        ).order_by(ArchivedTicket.archived_at.desc()).all()
+        
+        return render_template('ticketing/agent_archived_tickets.html', 
+                             archived_tickets=archived_tickets,
+                             agent=agent)
+        
+    except Exception as e:
+        current_app.logger.error(f"Error loading archived tickets: {str(e)}")
+        flash('An error occurred while loading archived tickets.', 'error')
+        return redirect(url_for('ticketing.agent_dashboard'))
 
+@ticketing_bp.route('/view-archived/<int:archived_ticket_id>')
+@agent_required
+def view_archived_ticket(archived_ticket_id):
+    """View archived ticket details (read-only)"""
+    try:
+        archived_ticket = ArchivedTicket.query.get_or_404(archived_ticket_id)
+        
+        # Check clearance access
+        agent = SupportAgent.query.filter_by(user_id=current_user.user_id, is_active=True).first()
+        if not agent or not agent.can_view_classification(archived_ticket.classification):
+            flash('Access denied - insufficient clearance level.', 'error')
+            return redirect(url_for('ticketing.agent_archived_tickets'))
+        
+        return render_template('ticketing/view_archived_ticket.html', 
+                             ticket=archived_ticket,
+                             agent=agent)
+        
+    except Exception as e:
+        current_app.logger.error(f"Error viewing archived ticket: {str(e)}")
+        flash('An error occurred while loading the archived ticket.', 'error')
+        return redirect(url_for('ticketing.agent_archived_tickets'))
 # --- Admin Routes ---
 
 @ticketing_bp.route('/admin/agents')
@@ -806,6 +1039,35 @@ def auto_assign_ticket(ticket):
         current_app.logger.error(f"Error auto-assigning ticket: {str(e)}")
         # Don't raise exception, just log it
 
-# Move the get_classifications_at_or_below_level function to the top, right after check_ticket_access
 
-
+@ticketing_bp.route('/test-archive', methods=['GET'])
+@agent_required
+def test_archive():
+    """Test route to verify archive functionality"""
+    try:
+        # Try to create a simple archived ticket
+        test_ticket = ArchivedTicket(
+            original_ticket_id=999999,
+            user_id=current_user.user_id,
+            title="Test Archive",
+            description="Test description",
+            category_id=1,
+            priority='low',
+            status='closed',
+            classification='public',
+            resolution="Test resolution",
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+            resolved_at=datetime.utcnow(),
+            archived_by=current_user.user_id
+        )
+        
+        db.session.add(test_ticket)
+        db.session.commit()
+        
+        return f"Test archived ticket created with ID: {test_ticket.archived_ticket_id}"
+        
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        return f"Error creating test archived ticket: {str(e)}<br>{traceback.format_exc()}"

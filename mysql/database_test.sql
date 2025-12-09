@@ -3,7 +3,7 @@
 -- =================================================================================
 -- Author: Application Development Team
 -- Purpose: Complete database schema for social media platform with ticketing system
--- Features: User management, posts, events, messaging, ticketing, role-based access
+-- Features: User management, posts, events, messaging, ticketing, role-based access, archive system
 -- =================================================================================
 
 -- =================================================================================
@@ -30,6 +30,10 @@ DROP TABLE IF EXISTS event_participants;
 DROP TABLE IF EXISTS post_images;
 DROP TABLE IF EXISTS post_likes;
 DROP TABLE IF EXISTS blocked_users;
+
+-- Drop archive tables
+DROP TABLE IF EXISTS terminated_tickets_audit;
+DROP TABLE IF EXISTS archived_tickets;
 
 -- Drop main content tables
 DROP TABLE IF EXISTS knowledge_base_articles;
@@ -204,10 +208,50 @@ CREATE TABLE tickets (
     status ENUM('open', 'in_progress', 'pending', 'resolved', 'closed', 'cancelled') NOT NULL DEFAULT 'open',
     resolution TEXT NULL,
     resolved_at DATETIME NULL,
+    archived_at DATETIME NULL,
+    archived_by INT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (category_id) REFERENCES ticket_categories(category_id) ON DELETE RESTRICT
+    FOREIGN KEY (category_id) REFERENCES ticket_categories(category_id) ON DELETE RESTRICT,
+    FOREIGN KEY (archived_by) REFERENCES users(user_id) ON DELETE SET NULL
+);
+
+-- ---------------------------------------------------------------------------------
+-- Archived Tickets - Read-only with clearance level restrictions
+-- ---------------------------------------------------------------------------------
+CREATE TABLE archived_tickets (
+    archived_ticket_id INT AUTO_INCREMENT PRIMARY KEY,
+    original_ticket_id INT NOT NULL,
+    user_id INT NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    category_id INT NULL,
+    priority ENUM('low', 'medium', 'high', 'critical', 'security') NOT NULL,
+    status VARCHAR(50) NOT NULL,
+    classification ENUM('public', 'internal', 'confidential', 'secret', 'top_secret') NOT NULL,
+    resolution TEXT NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    resolved_at DATETIME NULL,
+    archived_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    archived_by INT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (category_id) REFERENCES ticket_categories(category_id) ON DELETE SET NULL,
+    FOREIGN KEY (archived_by) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- ---------------------------------------------------------------------------------
+-- Terminated Tickets Audit Trail
+-- ---------------------------------------------------------------------------------
+CREATE TABLE terminated_tickets_audit (
+    audit_id INT AUTO_INCREMENT PRIMARY KEY,
+    original_ticket_id INT NOT NULL,
+    ticket_data JSON NOT NULL,
+    terminated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    terminated_by INT NOT NULL,
+    reason TEXT NULL,
+    FOREIGN KEY (terminated_by) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
 -- ---------------------------------------------------------------------------------
@@ -249,6 +293,9 @@ CREATE TABLE ticket_escalations (
     escalated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     previous_priority ENUM('low', 'medium', 'high', 'critical', 'security') NOT NULL,
     new_priority ENUM('low', 'medium', 'high', 'critical', 'security') NOT NULL,
+    previous_classification ENUM('public', 'internal', 'confidential', 'secret', 'top_secret') NULL,
+    new_classification ENUM('public', 'internal', 'confidential', 'secret', 'top_secret') NULL,
+    escalation_type ENUM('priority', 'tier') NOT NULL DEFAULT 'priority',
     reason TEXT NOT NULL,
     FOREIGN KEY (ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE,
     FOREIGN KEY (escalated_by) REFERENCES support_agents(agent_id) ON DELETE CASCADE
@@ -303,7 +350,7 @@ CREATE TABLE event_participants (
     user_id INT NOT NULL,
     joined_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     status ENUM('joined', 'left', 'cancelled') NOT NULL DEFAULT 'joined',
-    UNIQUE KEY _event_user_uc (event_id, user_id),
+    UNIQUE KEY unique_event_user (event_id, user_id),
     FOREIGN KEY (event_id) REFERENCES events(event_id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
@@ -339,7 +386,7 @@ CREATE TABLE post_likes (
     like_id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
     post_id INT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
     FOREIGN KEY (post_id) REFERENCES posts(post_id) ON DELETE CASCADE,
     UNIQUE KEY unique_user_post_like (user_id, post_id)
@@ -366,7 +413,7 @@ CREATE TABLE chat_participants (
     user_id INT NOT NULL,
     cleared_at DATETIME NULL,
     is_in_chat BOOLEAN NOT NULL DEFAULT TRUE,
-    UNIQUE (chat_id, user_id),
+    UNIQUE KEY unique_chat_user (chat_id, user_id),
     FOREIGN KEY (chat_id) REFERENCES chats(chat_id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
@@ -380,7 +427,6 @@ CREATE TABLE friend_chat_map (
     friend_id INT NOT NULL,
     chat_id INT NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (user_id, friend_id),
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
     FOREIGN KEY (friend_id) REFERENCES users(user_id) ON DELETE CASCADE,
     FOREIGN KEY (chat_id) REFERENCES chats(chat_id) ON DELETE CASCADE
@@ -409,13 +455,11 @@ CREATE TABLE blocked_users (
     blocker_id INT NOT NULL,
     blocked_id INT NOT NULL,
     chat_id INT NULL,
-    reason VARCHAR(255) DEFAULT NULL,
-    active TINYINT(1) NOT NULL DEFAULT 1,
+    reason VARCHAR(255) NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     removed_at DATETIME NULL,
-    UNIQUE KEY uq_blocker_blocked (blocker_id, blocked_id),
-    INDEX idx_blocker (blocker_id),
-    INDEX idx_blocked (blocked_id),
+    UNIQUE KEY unique_blocker_blocked (blocker_id, blocked_id),
     FOREIGN KEY (blocker_id) REFERENCES users(user_id) ON DELETE CASCADE,
     FOREIGN KEY (blocked_id) REFERENCES users(user_id) ON DELETE CASCADE,
     FOREIGN KEY (chat_id) REFERENCES chats(chat_id) ON DELETE SET NULL
@@ -427,7 +471,7 @@ CREATE TABLE blocked_users (
 CREATE TABLE user_public_keys (
     user_id INT NOT NULL PRIMARY KEY,
     alg VARCHAR(32) NOT NULL DEFAULT 'P-256',
-    public_key_spki_b64 LONGTEXT NOT NULL,
+    public_key_spki_b64 TEXT NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_upk_user FOREIGN KEY (user_id) REFERENCES users(user_id)
@@ -438,10 +482,10 @@ CREATE TABLE chat_key_envelopes (
     chat_id INT NOT NULL,
     user_id INT NOT NULL,
     key_version INT NOT NULL DEFAULT 1,
-    envelope_b64 LONGTEXT NOT NULL,
+    envelope_b64 TEXT NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_chat_user_version (chat_id, user_id, key_version),
+    UNIQUE KEY unique_chat_user_version (chat_id, user_id, key_version),
     CONSTRAINT fk_cke_chat FOREIGN KEY (chat_id) REFERENCES chats(chat_id),
     CONSTRAINT fk_cke_user FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
@@ -458,10 +502,10 @@ CREATE TABLE friendships (
     user_id1 INT NOT NULL,
     user_id2 INT NOT NULL,
     status ENUM('pending', 'accepted', 'blocked') NOT NULL DEFAULT 'pending',
-    action_user_id INT NULL,
+    action_user_id INT NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE (user_id1, user_id2),
+    UNIQUE KEY unique_user1_user2 (user_id1, user_id2),
     FOREIGN KEY (user_id1) REFERENCES users(user_id) ON DELETE CASCADE,
     FOREIGN KEY (user_id2) REFERENCES users(user_id) ON DELETE CASCADE,
     FOREIGN KEY (action_user_id) REFERENCES users(user_id) ON DELETE CASCADE
@@ -473,9 +517,9 @@ CREATE TABLE friendships (
 CREATE TABLE notifications (
     notification_id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
-    type VARCHAR(100) NOT NULL,
+    type VARCHAR(50) NOT NULL,
     source_id INT NULL,
-    message VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
     is_read BOOLEAN NOT NULL DEFAULT FALSE,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
@@ -492,9 +536,9 @@ CREATE TABLE reports (
     report_id INT AUTO_INCREMENT PRIMARY KEY,
     reporter_id INT NOT NULL,
     reported_user_id INT NOT NULL,
-    report_type ENUM('spam', 'harassment', 'impersonation', 'inappropriate_content', 'fraud', 'other') NOT NULL,
+    report_type VARCHAR(50) NOT NULL,
     description TEXT NOT NULL,
-    status ENUM('open', 'in_review', 'action_taken', 'rejected') NOT NULL DEFAULT 'open',
+    status VARCHAR(20) NOT NULL DEFAULT 'open',
     submitted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     resolved_at DATETIME NULL,
     admin_notes TEXT NULL,
@@ -569,11 +613,18 @@ CREATE INDEX idx_tickets_status ON tickets(status);
 CREATE INDEX idx_tickets_priority ON tickets(priority);
 CREATE INDEX idx_tickets_classification ON tickets(classification);
 CREATE INDEX idx_tickets_created_at ON tickets(created_at);
+CREATE INDEX idx_tickets_archived_at ON tickets(archived_at);
 CREATE INDEX idx_ticket_assignments_ticket_id ON ticket_assignments(ticket_id);
 CREATE INDEX idx_ticket_assignments_agent_id ON ticket_assignments(agent_id);
 CREATE INDEX idx_ticket_messages_ticket_id ON ticket_messages(ticket_id);
 CREATE INDEX idx_support_agents_user_id ON support_agents(user_id);
 CREATE INDEX idx_support_agents_clearance_level ON support_agents(clearance_level);
+
+-- Archived Tickets Indexes
+CREATE INDEX idx_archived_tickets_user_id ON archived_tickets(user_id);
+CREATE INDEX idx_archived_tickets_classification ON archived_tickets(classification);
+CREATE INDEX idx_archived_tickets_archived_at ON archived_tickets(archived_at);
+CREATE INDEX idx_archived_tickets_original_id ON archived_tickets(original_ticket_id);
 
 -- Social Media Indexes
 CREATE INDEX idx_post_likes_user_id ON post_likes(user_id);
@@ -625,7 +676,10 @@ INSERT INTO permissions (permission_name, description) VALUES
 ('assign_tickets', 'Assign tickets to other agents'),
 ('view_internal_notes', 'View internal agent notes on tickets'),
 ('view_open_tickets', 'View open tickets based on clearance level'),
-('view_my_tickets', 'View assigned tickets');
+('view_my_tickets', 'View assigned tickets'),
+('archive_tickets', 'Archive tickets with read-only access'),
+('view_archived_tickets', 'View archived tickets based on clearance level'),
+('terminate_tickets', 'Permanently delete tickets (audit trail maintained)');
 
 -- ---------------------------------------------------------------------------------
 -- Role-Permission Assignments
@@ -639,7 +693,8 @@ WHERE r.role_name = 'admin' AND p.permission_name IN (
     'create_event', 'send_message', 'view_admin_panel', 'resolve_reports',
     'access_ticketing_dashboard', 'manage_tickets', 'view_all_tickets',
     'escalate_tickets', 'assign_tickets', 'view_internal_notes',
-    'view_open_tickets', 'view_my_tickets'
+    'view_open_tickets', 'view_my_tickets', 'archive_tickets',
+    'view_archived_tickets', 'terminate_tickets'
 );
 
 -- Support Agent Role Permissions
@@ -649,8 +704,8 @@ FROM roles r, permissions p
 WHERE r.role_name = 'support_agent' AND p.permission_name IN (
     'access_ticketing_dashboard', 'manage_tickets', 'view_all_tickets',
     'escalate_tickets', 'assign_tickets', 'view_internal_notes',
-    'create_post', 'create_event', 'send_message', 'view_open_tickets',
-    'view_my_tickets'
+    'view_open_tickets', 'view_my_tickets', 'archive_tickets',
+    'view_archived_tickets'
 );
 
 -- User Role Permissions
@@ -754,6 +809,14 @@ INSERT INTO ticket_assignments (ticket_id, agent_id, assigned_by, assigned_at, i
 (3, 3, 1, NOW(), TRUE),  -- Confidential ticket to L3 agent
 (4, 4, 1, NOW(), TRUE),  -- Secret ticket to L4 agent
 (5, 5, 1, NOW(), TRUE);  -- Top secret ticket to L5 agent
+
+-- ---------------------------------------------------------------------------------
+-- Sample Archived Tickets (Closed tickets moved to archive)
+-- ---------------------------------------------------------------------------------
+INSERT INTO archived_tickets (original_ticket_id, user_id, title, description, category_id, priority, status, classification, resolution, created_at, updated_at, resolved_at, archived_by) VALUES
+(101, (SELECT user_id FROM users WHERE username = 'user'), 'Resolved Password Issue', 'Password reset was successfully completed', 3, 'low', 'closed', 'public', 'Password reset link sent and user successfully logged in', '2024-11-01 10:00:00', '2024-11-01 11:30:00', '2024-11-01 11:30:00', 1),
+(102, (SELECT user_id FROM users WHERE username = 'user2'), 'Fixed API Authentication', 'API authentication issue resolved', 9, 'medium', 'closed', 'internal', 'Updated API documentation and provided new authentication tokens', '2024-11-02 14:00:00', '2024-11-02 16:45:00', '2024-11-02 16:45:00', 2),
+(103, (SELECT user_id FROM users WHERE username = 'user3'), 'Performance Optimization Complete', 'System performance issues have been resolved', 2, 'high', 'closed', 'confidential', 'Optimized database queries and increased server capacity', '2024-11-03 09:00:00', '2024-11-03 18:30:00', '2024-11-03 18:30:00', 3);
 
 -- =================================================================================
 -- END OF DATABASE SCHEMA

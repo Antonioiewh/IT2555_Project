@@ -621,36 +621,38 @@ class Ticket(db.Model):
     description = db.Column(db.Text, nullable=False)
     category_id = db.Column(db.Integer, db.ForeignKey('ticket_categories.category_id'), nullable=False)
     priority = db.Column(db.Enum('low', 'medium', 'high', 'critical', 'security'), default='medium')
-    classification = db.Column(db.Enum('public', 'internal', 'confidential', 'secret', 'top_secret'), default='public')  # New field
+    classification = db.Column(db.Enum('public', 'internal', 'confidential', 'secret', 'top_secret'), default='public')
     status = db.Column(db.Enum('open', 'in_progress', 'pending', 'resolved', 'closed', 'cancelled'), default='open')
     resolution = db.Column(db.Text)
     resolved_at = db.Column(db.DateTime)
+    archived_at = db.Column(db.DateTime, nullable=True)
+    archived_by = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relationships
-    user = db.relationship('User', backref='tickets')
+    # Relationships - specify foreign_keys to resolve ambiguity
+    user = db.relationship('User', foreign_keys=[user_id], backref='tickets')
+    archiver = db.relationship('User', foreign_keys=[archived_by])
     messages = db.relationship('TicketMessage', backref='ticket', lazy='dynamic', cascade='all, delete-orphan')
     assignments = db.relationship('TicketAssignment', backref='ticket', lazy='dynamic')
     escalations = db.relationship('TicketEscalation', backref='ticket', lazy='dynamic')
     
     def determine_classification(self):
-        """Determine classification based on priority and content"""
-        priority_classification_map = {
-            'security': 'top_secret',
-            'critical': 'secret', 
-            'high': 'confidential',
-            'medium': 'internal',
-            'low': 'public'
-        }
-        return priority_classification_map.get(self.priority, 'public')
+        """Determine appropriate classification based on category and content"""
+        # Security-related categories should be at least confidential
+        if self.category and 'security' in self.category.name.lower():
+            return 'confidential'
+        # Emergency or critical categories
+        if self.category and any(keyword in self.category.name.lower() for keyword in ['critical', 'emergency']):
+            return 'internal'
+        return 'public'
     
     def can_be_viewed_by_agent(self, agent):
-        """Check if this ticket can be viewed by given agent"""
+        """Check if agent can view this ticket based on classification"""
         return agent.can_view_classification(self.classification)
     
     def __repr__(self):
-        return f"<Ticket {self.ticket_id} - {self.title} ({self.classification})>"
+        return f"<Ticket {self.ticket_id}: {self.title}>"
 
 class TicketMessage(db.Model):
     """Messages/replies within tickets"""
@@ -712,3 +714,49 @@ class KnowledgeBaseArticle(db.Model):
     
     # Relationships
     author = db.relationship('User', backref='authored_articles')
+
+
+class ArchivedTicket(db.Model):
+    """Archived tickets - read-only with clearance level restrictions"""
+    __tablename__ = 'archived_tickets'
+    
+    archived_ticket_id = db.Column(db.Integer, primary_key=True)
+    original_ticket_id = db.Column(db.Integer, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    category_id = db.Column(db.Integer, db.ForeignKey('ticket_categories.category_id'))
+    priority = db.Column(db.Enum('low', 'medium', 'high', 'critical', 'security'), nullable=False)
+    status = db.Column(db.String(50), nullable=False)
+    classification = db.Column(db.Enum('public', 'internal', 'confidential', 'secret', 'top_secret'), nullable=False)
+    resolution = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, nullable=False)
+    updated_at = db.Column(db.DateTime, nullable=False)
+    resolved_at = db.Column(db.DateTime)
+    archived_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    archived_by = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    
+    # Relationships
+    user = db.relationship('User', foreign_keys=[user_id], backref='archived_tickets')
+    category = db.relationship('TicketCategory', backref='archived_tickets')
+    archiver = db.relationship('User', foreign_keys=[archived_by])
+    
+    def __repr__(self):
+        return f'<ArchivedTicket {self.archived_ticket_id}: {self.title}>'
+
+class TerminatedTicketAudit(db.Model):
+    """Audit trail for terminated tickets"""
+    __tablename__ = 'terminated_tickets_audit'
+    
+    audit_id = db.Column(db.Integer, primary_key=True)
+    original_ticket_id = db.Column(db.Integer, nullable=False)
+    ticket_data = db.Column(db.JSON, nullable=False)
+    terminated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    terminated_by = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    reason = db.Column(db.Text)
+    
+    # Relationships
+    terminator = db.relationship('User', backref='terminated_tickets')
+    
+    def __repr__(self):
+        return f'<TerminatedTicketAudit {self.audit_id}: Ticket {self.original_ticket_id}>'

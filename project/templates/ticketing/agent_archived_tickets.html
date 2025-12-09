@@ -1,0 +1,82 @@
+{% extends "UserBase.html" %}
+
+{% block title %}Archived Tickets - Support{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>Archived Tickets</h2>
+                <a href="{{ url_for('ticketing.agent_dashboard') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Back to Dashboard
+                </a>
+            </div>
+
+            {% if archived_tickets %}
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-archive"></i> Archived Tickets 
+                            <span class="badge bg-secondary">{{ archived_tickets|length }}</span>
+                        </h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Title</th>
+                                        <th>User</th>
+                                        <th>Priority</th>
+                                        <th>Classification</th>
+                                        <th>Status</th>
+                                        <th>Archived</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for ticket in archived_tickets %}
+                                    <tr>
+                                        <td><strong>#{{ ticket.original_ticket_id }}</strong></td>
+                                        <td>{{ ticket.title[:50] }}{% if ticket.title|length > 50 %}...{% endif %}</td>
+                                        <td>{{ ticket.user.username }}</td>
+                                        <td>
+                                            <span class="badge bg-{% if ticket.priority == 'security' %}danger{% elif ticket.priority == 'critical' %}danger{% elif ticket.priority == 'high' %}warning{% elif ticket.priority == 'medium' %}info{% else %}secondary{% endif %}">
+                                                {{ ticket.priority|title }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-{% if ticket.classification == 'top_secret' %}danger{% elif ticket.classification == 'secret' %}warning{% elif ticket.classification == 'confidential' %}info{% else %}secondary{% endif %}">
+                                                {{ ticket.classification|replace('_', ' ')|title }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-success">{{ ticket.status|title }}</span>
+                                        </td>
+                                        <td>
+                                            <small>{{ ticket.archived_at.strftime('%Y-%m-%d') }}</small>
+                                        </td>
+                                        <td>
+                                            <a href="{{ url_for('ticketing.view_archived_ticket', archived_ticket_id=ticket.archived_ticket_id) }}" 
+                                               class="btn btn-sm btn-outline-primary">
+                                                <i class="bi bi-eye"></i> View
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            {% else %}
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> No archived tickets found for your clearance level.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

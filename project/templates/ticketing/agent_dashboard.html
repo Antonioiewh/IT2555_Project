@@ -37,6 +37,18 @@
     </div>
     
     <!-- Quick Actions Row -->
+     <!-- Add to navigation or action buttons area -->
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">Archived Tickets</h5>
+                <p class="card-text">View archived tickets based on your clearance level</p>
+                <a href="{{ url_for('ticketing.agent_archived_tickets') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-archive"></i> View Archived
+                </a>
+            </div>
+        </div>
+    </div>
     <div class="row mb-4">
         <div class="col-md-4">
             <div class="card border-primary h-100">

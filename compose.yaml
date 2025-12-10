@@ -2,14 +2,13 @@ services:
   
   mysql:
     image: mysql:8.0.35
-    hostname: mysql  # Add this line to force hostname
+    hostname: mysql  
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: flaskdb
       MYSQL_USER: flaskuser
       MYSQL_PASSWORD: password
     command: --log-bin=mysql-bin --server-id=1 --binlog-format=ROW --log-slave-updates=1 --report-host=mysql
-    # Added --report-host=mysql to the command above
     volumes:
       - ./mysql:/docker-entrypoint-initdb.d
       - mysql-data:/var/lib/mysql
@@ -24,7 +23,6 @@ services:
     networks:
       - flask-sql
 
-  # Orchestrator backend database
   orchestrator-db:
     image: mysql:8.0.35
     environment:
@@ -51,8 +49,8 @@ services:
       context: ./orchestrator
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"  # Web UI
-      - "3001:3001"  # Raft port
+      - "3000:3000"  
+      - "3001:3001"  
     environment:
       - ORC_TOPOLOGY_USER=orchestrator
       - ORC_TOPOLOGY_PASSWORD=orchestrator_password
@@ -167,12 +165,53 @@ services:
     networks:
       - flask-sql
 
+    # Splunk Enterprise - FIXED
+  splunk:
+    image: splunk/splunk:8.2
+    container_name: splunk-enterprise
+    hostname: splunk
+    environment:
+      - SPLUNK_START_ARGS=--accept-license --answer-yes --no-prompt --seed-passwd Admin123!
+      - SPLUNK_PASSWORD=Admin123!
+    ports:
+      - "8000:8000"
+      - "8088:8088"
+      - "8089:8089"
+    volumes:
+      - splunk-data:/opt/splunk/var
+    networks:
+      - flask-sql
+    restart: unless-stopped
+    command: start-service
+  
+  # Universal Forwarder - FIXED
+  splunk-forwarder:
+    image: splunk/universalforwarder:latest
+    container_name: splunk-forwarder
+    hostname: splunk-forwarder
+    environment:
+      - SPLUNK_START_ARGS=--accept-license
+      - SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com
+      - SPLUNK_PASSWORD=Admin123!
+      - SPLUNK_FORWARD_SERVER=splunk:9997
+      - SPLUNK_USER=splunk
+    volumes:
+      - ./nginx_logs:/var/log/nginx:ro
+      - ./modsec_logs:/var/log/nginx/modsec_audit_data:ro
+      - ./splunk-forwarder:/opt/splunkforwarder/etc/system/local
+    depends_on:
+      - splunk
+    networks:
+      - flask-sql
+    restart: unless-stopped
 volumes:
   mysql-data:
   orchestrator-data:
   orchestrator-db-data:
   orchestrator-logs:
   two-tier:
+  splunk-data:
+  splunk-etc:
 
 networks:
   flask-sql:

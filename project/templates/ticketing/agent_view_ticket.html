@@ -1,0 +1,224 @@
+{% extends "UserBase.html" %}
+
+{% block title %}Ticket #{{ ticket.ticket_id }} - Support{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>Ticket #{{ ticket.ticket_id }}</h2>
+                <div>
+                    {% if current_user.has_role('support_agent') %}
+                        <a href="{{ url_for('ticketing.agent_dashboard') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> Back to Dashboard
+                        </a>
+                    {% else %}
+                        <a href="{{ url_for('ticketing.index') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> Back to Tickets
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Ticket Details Card -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5 class="card-title mb-0">{{ ticket.title }}</h5>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <span class="badge bg-{% if ticket.status == 'open' %}warning{% elif ticket.status == 'in_progress' %}info{% elif ticket.status == 'pending' %}secondary{% elif ticket.status == 'closed' %}success{% else %}dark{% endif %} me-2">
+                                {{ ticket.status|title }}
+                            </span>
+                            <span class="badge bg-{% if ticket.priority == 'security' %}danger{% elif ticket.priority == 'critical' %}danger{% elif ticket.priority == 'high' %}warning{% elif ticket.priority == 'medium' %}info{% else %}secondary{% endif %}">
+                                {{ ticket.priority|title }} Priority
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Created by:</strong> {{ ticket.user.username }}<br>
+                            <strong>Created at:</strong> {{ ticket.created_at.strftime('%Y-%m-%d %H:%M:%S') }}<br>
+                            <strong>Updated at:</strong> {{ ticket.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                        </div>
+                        <div class="col-md-6">
+                            {% if ticket.category %}
+                                <strong>Category:</strong> {{ ticket.category.name }}<br>
+                            {% endif %}
+                            <strong>Classification:</strong> 
+                            <span class="badge bg-{% if ticket.classification == 'top_secret' %}danger{% elif ticket.classification == 'secret' %}warning{% elif ticket.classification == 'confidential' %}info{% else %}secondary{% endif %}">
+                                {{ ticket.classification|replace('_', ' ')|title }}
+                            </span><br>
+                            {% if assignment and assignment.agent %}
+                                <strong>Assigned to:</strong> {{ assignment.agent.user.username }}<br>
+                            {% else %}
+                                <strong>Status:</strong> <em>Unassigned</em><br>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <strong>Description:</strong>
+                        <div class="border rounded p-3 mt-2 bg-light preserve-whitespace">
+                            {{ ticket.description }}
+                        </div>
+                    </div>
+
+                    {% if ticket.status == 'closed' and ticket.resolution %}
+                        <div class="mb-3">
+                            <strong>Resolution:</strong>
+                            <div class="border rounded p-3 mt-2 bg-success-light preserve-whitespace">
+                                {{ ticket.resolution }}
+                            </div>
+                            {% if ticket.resolved_at %}
+                                <small class="text-muted">Resolved on: {{ ticket.resolved_at.strftime('%Y-%m-%d %H:%M:%S') }}</small>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Agent Actions (Only for Support Agents) -->
+            {% if agent and ticket.status != 'closed' %}
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6 class="card-title mb-0">Agent Actions</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <!-- Escalate Ticket -->
+                            <div class="col-md-6 mb-3">
+                                <form method="POST" action="{{ url_for('ticketing.escalate_ticket', ticket_id=ticket.ticket_id) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    
+                                    <div class="mb-2">
+                                        <label for="escalation_type" class="form-label">Escalation Type:</label>
+                                        <select name="escalation_type" id="escalation_type" class="form-control form-control-sm" onchange="toggleEscalationOptions()">
+                                            <option value="priority">Priority Escalation</option>
+                                            <option value="tier">Tier Escalation</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <!-- Priority escalation info (shown by default) -->
+                                    <div id="priority-info" class="mb-2">
+                                        <small class="text-muted">Will escalate from <strong>{{ ticket.priority }}</strong> to next priority level</small>
+                                    </div>
+                                    
+                                    <!-- Tier escalation options (hidden by default) -->
+                                    <div id="tier-options" class="mb-2" style="display: none;">
+                                        <label for="target_tier" class="form-label">Target Tier:</label>
+                                        <select name="target_tier" id="target_tier" class="form-control form-control-sm">
+                                            {% set classification_levels = {'public': 1, 'internal': 2, 'confidential': 3, 'secret': 4, 'top_secret': 5} %}
+                                            {% set current_ticket_level = classification_levels.get(ticket.classification, 1) %}
+                                            {% set available_tiers = [] %}
+                                            
+                                            <!-- Show all tiers higher than current ticket classification -->
+                                            {% for level in range(current_ticket_level + 1, 6) %}
+                                                {% set _ = available_tiers.append(level) %}
+                                                <option value="{{ level }}">L{{ level }} - 
+                                                    {% if level == 1 %}PUBLIC
+                                                    {% elif level == 2 %}INTERNAL
+                                                    {% elif level == 3 %}CONFIDENTIAL  
+                                                    {% elif level == 4 %}SECRET
+                                                    {% elif level == 5 %}TOP SECRET
+                                                    {% endif %}
+                                                </option>
+                                            {% endfor %}
+                                            
+                                            {% if available_tiers|length == 0 %}
+                                                <option value="" disabled>No higher tiers available</option>
+                                            {% endif %}
+                                        </select>
+                                        
+                                        {% if available_tiers|length == 0 %}
+                                            <small class="text-muted">
+                                                Cannot escalate higher than {{ ticket.classification|replace('_', ' ')|title }} 
+                                                (already at highest classification level)
+                                            </small>
+                                        {% else %}
+                                            <small class="text-muted">
+                                                Escalating from {{ ticket.classification|replace('_', ' ')|title }} to higher classification level
+                                            </small>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <div class="mb-2">
+                                        <label for="reason" class="form-label">Escalation Reason:</label>
+                                        <textarea name="reason" id="reason" class="form-control form-control-sm" rows="2" placeholder="Reason for escalation..." required></textarea>
+                                    </div>
+                                    
+                                    <button type="submit" class="btn btn-warning btn-sm">
+                                        <i class="bi bi-arrow-up-circle"></i> Escalate
+                                    </button>
+                                </form>
+                            </div>
+
+                            <!-- Close Ticket -->
+                            <!-- Close Ticket form (update existing) -->
+                            <div class="col-md-6 mb-3">
+                                <form method="POST" action="{{ url_for('ticketing.close_ticket', ticket_id=ticket.ticket_id) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <div class="mb-2">
+                                        <label for="resolution" class="form-label">Resolution:</label>
+                                        <textarea name="resolution" id="resolution" class="form-control form-control-sm" rows="2" placeholder="Describe the resolution..." required></textarea>
+                                    </div>
+                                    
+                                    <!-- Archive checkbox -->
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" name="archive_ticket" id="archive_ticket">
+                                        <label class="form-check-label" for="archive_ticket">
+                                            <small>Archive ticket after closing (read-only access)</small>
+                                        </label>
+                                    </div>
+                                    
+                                    <button type="submit" class="btn btn-success btn-sm">
+                                        <i class="bi bi-check-circle"></i> Close Ticket
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleEscalationOptions() {
+    const escalationType = document.getElementById('escalation_type').value;
+    const tierOptions = document.getElementById('tier-options');
+    const priorityInfo = document.getElementById('priority-info');
+    const targetTier = document.getElementById('target_tier');
+    
+    if (escalationType === 'tier') {
+        tierOptions.style.display = 'block';
+        priorityInfo.style.display = 'none';
+        targetTier.required = true;
+    } else {
+        tierOptions.style.display = 'none';
+        priorityInfo.style.display = 'block';
+        targetTier.required = false;
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    toggleEscalationOptions();
+});
+</script>
+
+<style>
+.bg-success-light {
+    background-color: #d1e7dd !important;
+}
+
+.preserve-whitespace {
+    white-space: pre-line;
+}
+</style>
+{% endblock %}

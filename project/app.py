@@ -1,3 +1,5 @@
+# app.py - Consolidated Flask Application
+
 # --- Standard Library Imports ---
 import os
 import re
@@ -18,6 +20,7 @@ from PIL import Image
 # --- Flask Core Imports ---
 from flask import Flask, render_template, redirect, url_for, flash, request, current_app, abort, jsonify, session,make_response
 from flask_wtf import CSRFProtect, FlaskForm
+from flask_wtf.csrf import CSRFError
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_socketio import SocketIO, emit, join_room, leave_room, send
 from flask_wtf.file import FileAllowed, FileField
@@ -36,10 +39,12 @@ import magic
 # antonio: forms
 from forms import SignupForm,LoginForm,ReportForm,UpdateUserStatusForm,FriendRequestForm,UpdateReportStatusForm,Enable2FAForm,Disable2FAForm,RemovePassKeyForm, EventForm
 
+# antonio: database imports
+from database_manager import DatabaseHA, with_db_failover, create_health_endpoints
 # No clue but seems important
 from sqlalchemy.dialects.mysql import ENUM
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy import and_, or_, func
+from sqlalchemy import and_, or_, func, text
 
 # --- Forms & Validation Imports ---
 from wtforms import StringField, PasswordField, SubmitField, TextAreaField, SelectField, ValidationError
@@ -73,11 +78,8 @@ from models import (
     Notification, Report, Chat, ChatParticipant, Message, 
     Friendship, AdminAction, UserLog, ModSecLog, ErrorLog, 
     WebAuthnCredential, user_role_assignments,Event,FriendChatMap,BlockedUser,UserPublicKey, ChatKeyEnvelope
-
-
 )
-from decorators import user_required, admin_required, editor_required, role_required, admin_or_editor_required
-
+from decorators import user_required, admin_required, single_role_required
 
 # Filters
 from filters import (
@@ -98,7 +100,6 @@ from user_actions import (
     log_user_login_failure, log_user_logout
 )
 
-
 # Log parsing utilities
 from parse_test import parse_modsec_audit_log, parse_error_log
 
@@ -110,46 +111,414 @@ from message_validator import validate_attachment, save_attachment
 
 # helper functions
 from functions import get_relative_time,b64encode_all,get_fido2_server,send_user_event_reminders
-from app_factory import create_app
 
+# --- Configuration Classes ---
+class Config:
+    """Base configuration class"""
+    
+    # Basic Flask configuration
+    TEMPLATES_AUTO_RELOAD = True
+    
+    # External APIs
+    RECAPTCHA_PUBLIC_KEY = os.getenv('RECAPTCHA_PUBLIC_KEY')
+    RECAPTCHA_PRIVATE_KEY = os.getenv('RECAPTCHA_PRIVATE_KEY')
+    GOOGLE_MAPS_API_KEY = os.getenv('GOOGLE_MAPS_API_KEY')
+    
+    # Database configuration
+    DB_USER = os.getenv('MYSQL_USER', 'flaskuser')
+    DB_PASSWORD = os.getenv('MYSQL_PASSWORD', 'password')
+    DB_NAME = os.getenv('MYSQL_DATABASE', 'flaskdb')
+    DB_HOST = os.getenv('MYSQL_HOST', 'mysql')
+    SQLALCHEMY_DATABASE_URI = f'mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    
+    # Security configuration
+    CONTAINER_ID = os.environ.get('HOSTNAME', socket.gethostname())
+    BASE_SECRET = os.getenv('SECRET_KEY', 'a_very_secret_key_for_dev')
+    SECRET_KEY = f"{BASE_SECRET}-{CONTAINER_ID}"
+    
+    # Session configuration
+    SESSION_COOKIE_SECURE = False  # Changed to False for HTTP development
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    SESSION_PERMANENT = False
+    PERMANENT_SESSION_LIFETIME = timedelta(minutes=30)
+    SESSION_COOKIE_NAME = f'session_{CONTAINER_ID}'
+    
+    # File upload configuration
+    UPLOAD_FOLDER = 'static/uploads'
+    MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
+    
+    # Redis configuration
+    REDIS_URL = os.getenv('REDIS_URL', 'redis://redis:6379/0')
 
-# --- Configuration ---
-# Flask app configuration
+    # Splunk Configuration
+    SPLUNK_HOST = 'splunk'  # Docker service name
+    SPLUNK_PORT = '8088'
+    SPLUNK_HEC_TOKEN = '0bae0406-834c-4cf2-a45a-d10c4a6a8e94'
+    SPLUNK_INDEX = 'main'
+    SPLUNK_USERNAME = 'admin'
+    SPLUNK_PASSWORD = 'Admin123!'
+    SPLUNK_VERIFY_SSL = False
+
+    # MLTK configuration
+    MLTK_ENABLED = os.environ.get('MLTK_ENABLED', 'True').lower() == 'true'
+    # Allowed domains
+    ALLOWED_SESSION_DOMAINS = [
+        'localhost',
+        '127.0.0.1',
+        'glowing-briefly-cicada.ngrok-free.app'
+    ]
+    
+    # SocketIO configuration
+    SOCKETIO_CORS_ORIGINS = [
+        "http://localhost",
+        "https://localhost",
+        "http://127.0.0.1",
+        "https://127.0.0.1",
+        "https://glowing-briefly-cicada.ngrok-free.app"
+    ]
+
+class DevelopmentConfig(Config):
+    """Development configuration"""
+    DEBUG = True
+    TESTING = False
+    
+    # Development specific settings
+    WTF_CSRF_ENABLED = False  # Temporarily disabled for development
+    
+    # least scuffed but remember generate new token on the web UI and replace here
+    SPLUNK_HEC_TOKEN = '7ce65afc-1da1-483e-ac21-d7b9951d674d'  # Replace with actual token
+    SPLUNK_HOST = 'splunk'
+    SPLUNK_PORT = '8088'
+    SPLUNK_INDEX = 'main'
+    SPLUNK_VERIFY_SSL = False
+
+class ProductionConfig(Config):
+    """Production configuration"""
+    DEBUG = False
+    TESTING = False
+
+class TestingConfig(Config):
+    """Testing configuration"""
+    DEBUG = True
+    TESTING = True
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
+
+# Configuration mapping
+config = {
+    'development': DevelopmentConfig,
+    'production': ProductionConfig,
+    'testing': TestingConfig,
+    'default': DevelopmentConfig
+}
+def initialize_database_manager(app):
+    """Initialize database high availability manager"""
+    
+    # Create HA manager instance
+    db_ha = DatabaseHA()
+    
+    # Store in app for access elsewhere
+    app.db_ha = db_ha
+    
+    # Create health check endpoints
+    create_health_endpoints(app, db_ha)
+    
+    return db_ha
+# --- Application Factory Functions ---
+def create_app(config_name=None):
+    """Application factory pattern"""
+    
+    # Determine config
+    if config_name is None:
+        config_name = os.getenv('FLASK_CONFIG', 'development')
+    
+    # Create Flask app
+    app = Flask(__name__)
+    
+    # Load configuration
+    app.config.from_object(config[config_name])
+    
+    # Initialize extensions
+    initialize_extensions(app)
+
+     # Initialize database manager
+    initialize_database_manager(app)  # Add this line
+    # Register blueprints
+    register_blueprints(app)
+    
+    # Register template functions
+    register_template_functions(app)
+    
+    # Register before request handlers
+    register_before_request_handlers(app)
+    
+    # Register error handlers
+    register_error_handlers(app)
+    
+    return app
+
+def initialize_extensions(app):
+    """Initialize Flask extensions"""
+    
+    # Initialize database
+    db.init_app(app)
+    
+    # CSRF protection
+    csrf = CSRFProtect()
+    csrf.init_app(app)
+    
+    # Flask-Login
+    login_manager = LoginManager()
+    login_manager.init_app(app)
+    login_manager.login_view = 'login'
+    login_manager.login_message = 'Please log in to access this page.'
+    login_manager.login_message_category = 'info'
+    
+    @login_manager.user_loader
+    def load_user(user_id):
+        return User.query.get(int(user_id))
+    
+    # Socket.IO configuration
+    socketio = SocketIO()
+    socketio.init_app(app, 
+                     cors_allowed_origins=app.config.get('SOCKETIO_CORS_ORIGINS', "*"),
+                     message_queue=app.config.get('REDIS_URL', 'redis://redis:6379/0'),
+                     ping_interval=25,
+                     ping_timeout=60)
+    
+    # Initialize Splunk logger
+    try:
+        from splunk_logger import splunk_logger
+        splunk_logger.init_app(app)
+    except Exception as e:
+        app.logger.warning(f"Splunk logger initialization failed: {e}")
+    
+    # Store extensions in app for access elsewhere
+    app.socketio = socketio
+    app.csrf = csrf
+    app.login_manager = login_manager
+    
+    return app
+
+def register_blueprints(app):
+    """Register Flask blueprints"""
+    
+    try:
+        # Register admin blueprint
+        from admin import admin_bp
+        app.register_blueprint(admin_bp, url_prefix='/admin')
+        app.logger.info("Admin blueprint registered")
+    except Exception as e:
+        app.logger.error(f"Failed to register admin blueprint: {e}")
+    
+    try:
+        # Register user blueprint
+        from user import user_bp
+        app.register_blueprint(user_bp, url_prefix='/user')
+        app.logger.info("User blueprint registered")
+    except Exception as e:
+        app.logger.error(f"Failed to register user blueprint: {e}")
+    try:
+        # Register ticketing blueprint
+        from ticketing import ticketing_bp
+        app.register_blueprint(ticketing_bp)
+        app.logger.info("Ticketing blueprint registered")
+    except Exception as e:
+        app.logger.error(f"Failed to register ticketing blueprint: {e}")
+    
+    return app
+
+def register_template_functions(app):
+    """Register template filters and context processors"""
+    
+    @app.template_filter('has_role')
+    def has_role_filter(user, role):
+        """Template filter to check if user has role"""
+        if not user or not user.is_authenticated:
+            return False
+        try:
+            return user.has_role(role)
+        except:
+            return False
+    
+    @app.context_processor
+    def inject_user():
+        """Inject current user into templates"""
+        return dict(current_user=current_user)
+    
+    @app.context_processor
+    def inject_config():
+        """Inject config values into templates"""
+        return dict(config=current_app.config)
+    
+    @app.template_global()
+    def get_csrf_token():
+        """Generate CSRF token for templates"""
+        return session.get('csrf_token', '')
+    
+    @app.context_processor
+    def inject_now():
+        """Inject current datetime into templates"""
+        return dict(now=datetime.utcnow())
+    
+    return app
+
+def register_before_request_handlers(app):
+    """Register before_request handlers"""
+    
+    @app.before_request
+    def load_logged_in_user():
+        """Load user info before each request"""
+        if current_user.is_authenticated:
+            session['last_activity'] = datetime.utcnow().timestamp()
+    
+    @app.before_request
+    def check_session_timeout():
+        """Check for session timeout"""
+        if current_user.is_authenticated:
+            last_activity = session.get('last_activity')
+            if last_activity:
+                timeout = app.config.get('SESSION_TIMEOUT', 3600)  # 1 hour default
+                if datetime.utcnow().timestamp() - last_activity > timeout:
+                    logout_user()
+                    flash('Your session has expired. Please log in again.', 'warning')
+                    return redirect(url_for('login'))
+    
+    @app.before_request
+    def security_headers():
+        """Add security headers"""
+        pass  # Will be implemented later
+    
+    @app.before_request
+    def log_request():
+        """Log security-relevant requests"""
+        try:
+            # Log suspicious patterns, admin access, etc.
+            if request.endpoint and 'admin' in request.endpoint:
+                try:
+                    from splunk_logger import splunk_logger
+                    splunk_logger.log_security_event('admin_access', {
+                        'endpoint': request.endpoint,
+                        'method': request.method,
+                        'args': dict(request.args)
+                    })
+                except ImportError:
+                    pass
+        except Exception as e:
+            app.logger.error(f"Failed to log request: {e}")
+    
+    return app
+
+def register_error_handlers(app):
+    """Register error handlers"""
+    
+    @app.errorhandler(404)
+    def not_found(error):
+        """Handle 404 errors"""
+        try:
+            try:
+                from splunk_logger import splunk_logger
+                splunk_logger.log_security_event('page_not_found', {
+                    'requested_url': request.url,
+                    'referrer': request.referrer
+                })
+            except ImportError:
+                pass
+        except Exception as e:
+            app.logger.error(f"Failed to log 404 error: {e}")
+        
+        try:
+            return render_template('errors/404.html'), 404
+        except:
+            return '<h1>404 - Page Not Found</h1>', 404
+    
+    @app.errorhandler(403)
+    def forbidden(error):
+        """Handle 403 errors"""
+        try:
+            try:
+                from splunk_logger import splunk_logger
+                splunk_logger.log_access_violation(
+                    resource=request.endpoint or request.url,
+                    action=request.method,
+                    reason='Forbidden access'
+                )
+            except ImportError:
+                pass
+        except Exception as e:
+            app.logger.error(f"Failed to log 403 error: {e}")
+        
+        try:
+            return render_template('errors/403.html'), 403
+        except:
+            return '<h1>403 - Access Forbidden</h1>', 403
+    
+    @app.errorhandler(500)
+    def internal_error(error):
+        """Handle 500 errors"""
+        try:
+            try:
+                from splunk_logger import splunk_logger
+                splunk_logger.log_security_event('server_error', {
+                    'error': str(error),
+                    'endpoint': request.endpoint
+                }, 'HIGH')
+            except ImportError:
+                pass
+        except Exception as e:
+            app.logger.error(f"Failed to log 500 error: {e}")
+        
+        try:
+            return render_template('errors/500.html'), 500
+        except:
+            return '<h1>500 - Internal Server Error</h1>', 500
+    
+    @app.errorhandler(CSRFError)
+    def handle_csrf_error(e):
+        """Handle CSRF token errors"""
+        
+        # Check if this is an exempted endpoint
+        if request.endpoint == 'check_user_auth_methods':
+            # This should be handled by the @csrf.exempt decorator
+            # If we're here, there might be a configuration issue
+            app.logger.warning(f"CSRF error on exempted endpoint: {request.endpoint}")
+            return jsonify({"error": "Authentication check failed"}), 400
+        
+        # For non-API requests, check if user is not authenticated
+        if not current_user.is_authenticated:
+            # Don't redirect unauthenticated users, clear session and show login
+            session.clear()
+            flash('Session expired. Please log in again.', 'warning')
+            return redirect(url_for('login'))
+        
+        try:
+            try:
+                from splunk_logger import splunk_logger
+                splunk_logger.log_security_event('csrf_error', {
+                    'description': e.description,
+                    'endpoint': request.endpoint,
+                    'user_id': getattr(current_user, 'user_id', None),
+                    'source_ip': request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
+                }, 'HIGH')
+            except ImportError:
+                pass
+        except Exception as ex:
+            app.logger.error(f"Failed to log CSRF error: {ex}")
+        
+        # For AJAX/API requests
+        if request.is_xhr or request.content_type == 'application/json':
+            return jsonify({'error': 'CSRF token missing or invalid'}), 400
+        
+        # For regular requests, redirect to login with clear session
+        session.clear()
+        flash('Security violation detected. Please log in again.', 'error')
+        return redirect(url_for('login'))
+
+# --- Create Flask Application ---
 app = create_app()
 socketio = app.socketio
 connected_sids = {}  # { user_id: set([sid, ...]) }
-
-
-# socketio events
-@socketio.on('connect')
-def on_connect():
-    if getattr(current_user, 'is_authenticated', False):
-        connected_sids.setdefault(current_user.user_id, set()).add(request.sid)
-        print(f"Socket connected user {current_user.user_id} sid {request.sid}")
-
-
-@socketio.on('disconnect')
-def on_disconnect():
-    if getattr(current_user, 'is_authenticated', False):
-        s = connected_sids.get(current_user.user_id)
-        if s:
-            s.discard(request.sid)
-            if not s:
-                connected_sids.pop(current_user.user_id, None)
-        print(f"Socket disconnected user {current_user.user_id} sid {request.sid}")
-
-def emit_to_user(user_id, event, payload):
-    sids = connected_sids.get(user_id)
-    if not sids:
-        return
-    for sid in list(sids):
-        try:
-            socketio.emit(event, payload, room=sid)
-        except Exception:
-            continue
-
-
-
 
 # CSRF protection
 csrf = CSRFProtect(app)
@@ -718,7 +1087,7 @@ def check_user_auth_methods():
         return jsonify({"has_2fa": False, "has_passkeys": False})
 
 
-
+# need user role
 @app.route('/enable_2fa', methods=['GET', 'POST'])
 @user_required
 def enable_2fa():
@@ -750,6 +1119,7 @@ def enable_2fa():
             return redirect(url_for('user.account_security'))
     return render_template('UserEnable2FA.html', qr_b64=qr_b64, secret=totp_secret, form=form)
 
+# need user role
 @app.route('/disable_2fa', methods=['POST'])
 @user_required
 def disable_2fa():
@@ -760,7 +1130,7 @@ def disable_2fa():
         return redirect(url_for('user.account_security'))
     return render_template('UserDisable2FA.html', form=form)
 
-
+# login needed
 # -- User passkey management --
 @app.route('/passkey/begin_register', methods=['POST'])
 @csrf.exempt
@@ -806,6 +1176,7 @@ def passkey_begin_register():
         traceback.print_exc()
         return jsonify({"error": f"Failed to begin passkey registration: {str(e)}"}), 500
     
+# need user
 @app.route('/passkey/finish_register', methods=['POST'])
 @csrf.exempt
 @user_required
@@ -870,7 +1241,8 @@ def passkey_finish_register():
         traceback.print_exc()
         db.session.rollback()
         return jsonify({"error": f"Failed to complete passkey registration: {str(e)}"}), 500
-    
+
+# need user
 @app.route('/remove_passkey/<int:cred_id>', methods=['POST'])
 @user_required
 def remove_passkey(cred_id):
@@ -1402,7 +1774,7 @@ def begin_passkey_auth_for_password_change():
 
 # -- User friends management --
 @app.route('/UserFriends')
-@user_required
+@single_role_required('user')
 def user_friends():
     friendships = Friendship.query.filter(
         ((Friendship.user_id1 == current_user.user_id) | (Friendship.user_id2 == current_user.user_id)),
@@ -1433,7 +1805,7 @@ def user_friends():
     return render_template('userfriends.html', friends=friends_info, form=form)
 
 @app.route('/DiscoverFriends', methods=['GET'])
-@user_required
+@single_role_required('user')
 def discover_friends():
     user = current_user
 
@@ -1484,7 +1856,7 @@ def discover_friends():
     return render_template('DiscoverFriends.html',all_users=all_users,current_user=user,form=form,pending_requests=pending_requests,accepted_friends=accepted_friends)
 
 @app.route('/search_users')
-@login_required
+@single_role_required('user')
 def search_users():
     query = request.args.get('q', '').strip()
     user = current_user
@@ -1537,7 +1909,7 @@ def search_users():
 
 # --- Notifications ---
 @app.route('/Notifications')
-@user_required
+@single_role_required('user')
 def notifications():
     notifications = Notification.query.filter_by(user_id=current_user.user_id).order_by(Notification.created_at.desc()).all()
     
@@ -1654,7 +2026,7 @@ def notifications():
         )
 
 @app.route('/delete_notification/<int:notification_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def delete_notification(notification_id):
     """Delete a specific notification"""
     notification = Notification.query.get_or_404(notification_id)
@@ -1672,7 +2044,7 @@ def delete_notification(notification_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/delete_all_notifications/<notification_type>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def delete_all_notifications(notification_type):
     """Delete all notifications of a specific type for the current user"""
     
@@ -1715,7 +2087,7 @@ def delete_all_notifications(notification_type):
         return jsonify({'success': False, 'error': str(e)}), 500
     
 @app.route('/mark_notification_read/<int:notification_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def mark_notification_read(notification_id):
     """Mark a specific notification as read"""
     notification = Notification.query.get_or_404(notification_id)
@@ -1733,7 +2105,7 @@ def mark_notification_read(notification_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/mark_all_notifications_read/<notification_type>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def mark_all_notifications_read(notification_type):
     """Mark all notifications of a specific type as read for the current user"""
     try:
@@ -1770,7 +2142,7 @@ def mark_all_notifications_read(notification_type):
 
 # -- Friends Management --
 @app.route('/send_friend_request/<int:target_user_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def send_friend_request(target_user_id):
     form = FriendRequestForm()
     if form.validate_on_submit():
@@ -1828,7 +2200,7 @@ def send_friend_request(target_user_id):
     return redirect(url_for('discover_friends'))
                 
 @app.route('/respond_friend_request/<int:friendship_id>/<action>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def respond_friend_request(friendship_id, action):
     friendship = Friendship.query.get_or_404(friendship_id)
     # Only the receiver can accept/decline
@@ -1889,7 +2261,7 @@ def respond_friend_request(friendship_id, action):
     return redirect(url_for('notifications'))
 
 @app.route('/cancel_friend_request/<int:target_user_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def cancel_friend_request(target_user_id):
     user1, user2 = sorted([current_user.user_id, target_user_id])
     friendship = Friendship.query.filter_by(user_id1=user1, user_id2=user2, status='pending').first()
@@ -1904,7 +2276,7 @@ def cancel_friend_request(target_user_id):
     return redirect(url_for('discover_friends'))
 
 @app.route('/unfriend/<int:friendship_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def unfriend(friendship_id):
     friendship = Friendship.query.get_or_404(friendship_id)
     # Only allow if current user is part of the friendship and status is accepted
@@ -1988,7 +2360,7 @@ def clear_block(blocker_id, blocked_id, chat_id=None):
 
 
 @app.route('/unblock_user_friend/<int:friend_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def unblock_user_friend(friend_id):
     user1, user2 = sorted([current_user.user_id, friend_id])
     friendship = Friendship.query.filter_by(user_id1=user1, user_id2=user2).first()
@@ -2028,7 +2400,7 @@ def unblock_user_friend(friend_id):
 
 
 @app.route('/block_user/<int:chat_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def block_user(chat_id):
     chat = Chat.query.get(chat_id)
     if not chat:
@@ -2041,7 +2413,7 @@ def block_user(chat_id):
 
 
 @app.route('/is_blocked/<int:chat_id>')
-@user_required
+@single_role_required('user')
 def is_blocked_route(chat_id):
     cp = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=current_user.user_id).first()
     other_cp = ChatParticipant.query.filter(ChatParticipant.chat_id == chat_id, ChatParticipant.user_id != current_user.user_id).first()
@@ -2072,7 +2444,7 @@ def is_any_active_block_between(user_a, user_b):
 
 
 @app.route('/unblock_user/<int:chat_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def unblock_user(chat_id):
     chat = Chat.query.get(chat_id)
     if not chat:
@@ -2152,9 +2524,10 @@ def add_friend_chat_map(user_id, friend_id, chat_id):
             db.session.rollback()
     except Exception:
         db.session.rollback()
+
 # --- Messaging ---
 @app.route('/api/me/pubkey', methods=['POST'])
-@user_required
+@single_role_required('user')
 def api_set_user_pubkey():
     data = request.get_json(silent=True) or {}
     spki_b64 = (data.get('spki_b64') or '').strip()
@@ -2173,7 +2546,7 @@ def api_set_user_pubkey():
     return jsonify({'ok': True})
 
 @app.route('/api/users/<int:user_id>/pubkey', methods=['GET'])
-@user_required
+@single_role_required('user')
 def api_get_user_pubkey(user_id):
     row = UserPublicKey.query.get(user_id)
     if not row:
@@ -2181,7 +2554,7 @@ def api_get_user_pubkey(user_id):
     return jsonify({'ok': True, 'alg': row.alg, 'spki_b64': row.public_key_spki_b64})
 
 @app.route('/api/chats/<int:chat_id>/key_envelope', methods=['POST'])
-@user_required
+@single_role_required('user')
 def api_put_chat_envelope(chat_id):
     data = request.get_json(silent=True) or {}
     envelope_b64 = (data.get('envelope_b64') or '').strip()
@@ -2204,7 +2577,7 @@ def api_put_chat_envelope(chat_id):
     return jsonify({'ok': True})
 
 @app.route('/api/chats/<int:chat_id>/key_envelope', methods=['GET'])
-@user_required
+@single_role_required('user')
 def api_get_chat_envelope(chat_id):
     key_version = request.args.get('version', type=int)
     q = ChatKeyEnvelope.query.filter_by(chat_id=chat_id, user_id=current_user.user_id)
@@ -3684,145 +4057,69 @@ def send_user_event_reminders(user_id):
         print(f"Error sending user event reminders: {e}")
         db.session.rollback()
 
-class DatabaseHA:
-    def __init__(self, orchestrator_url="http://orchestrator:3000"):
-        self.orchestrator_url = orchestrator_url
-        
-    def get_master_host(self, cluster_alias="main"):
-        """Get current master from orchestrator"""
-        try:
-            response = requests.get(f"{self.orchestrator_url}/api/cluster-info/{cluster_alias}")
-            if response.status_code == 200:
-                data = response.json()
-                for instance in data:
-                    if instance.get('IsMaster', False):
-                        return instance.get('Key', {}).get('Hostname', 'mysql')
-            return 'mysql'  # fallback
-        except:
-            return 'mysql'  # fallback
-    
-    def get_replica_hosts(self, cluster_alias="main"):
-        """Get available replicas from orchestrator"""
-        try:
-            response = requests.get(f"{self.orchestrator_url}/api/cluster-info/{cluster_alias}")
-            if response.status_code == 200:
-                data = response.json()
-                replicas = []
-                for instance in data:
-                    if not instance.get('IsMaster', False) and instance.get('IsLastCheckValid', False):
-                        replicas.append(instance.get('Key', {}).get('Hostname'))
-                return replicas
-            return []
-        except:
-            return []
+# ADMIN - CREATE AGENT
+# Add this route to app.py
 
-# Initialize HA manager
-db_ha = DatabaseHA()
-
-def with_db_failover(func):
-    """Decorator to handle database failover"""
-    @wraps(func)
-    def wrapper(*args, **kwargs):
+@app.route('/admin/create_support_agent', methods=['GET', 'POST'])
+@admin_required
+def create_support_agent():
+    """Admin route to create support agents"""
+    if request.method == 'POST':
         try:
-            return func(*args, **kwargs)
+            user_id = request.form.get('user_id', type=int)
+            clearance_level = request.form.get('clearance_level', type=int)
+            department = request.form.get('department', '').strip()
+            specialization = request.form.get('specialization', '').strip()
+            
+            # Validate inputs
+            if not all([user_id, clearance_level, department]):
+                flash('User ID, clearance level, and department are required.', 'error')
+                return redirect(url_for('create_support_agent'))
+            
+            if clearance_level < 1 or clearance_level > 5:
+                flash('Clearance level must be between 1 and 5.', 'error')
+                return redirect(url_for('create_support_agent'))
+            
+            # Check if user exists
+            user = User.query.get(user_id)
+            if not user:
+                flash('User not found.', 'error')
+                return redirect(url_for('create_support_agent'))
+            
+            # Check if already an agent
+            existing_agent = SupportAgent.query.filter_by(user_id=user_id).first()
+            if existing_agent:
+                flash(f'{user.username} is already a support agent.', 'error')
+                return redirect(url_for('create_support_agent'))
+            
+            # Create support agent
+            agent = SupportAgent(
+                user_id=user_id,
+                clearance_level=clearance_level,
+                department=department,
+                specialization=specialization,
+                created_by=current_user.user_id,
+                created_at=datetime.utcnow(),
+                is_active=True
+            )
+            
+            db.session.add(agent)
+            db.session.commit()
+            
+            flash(f'Support agent created for {user.username} with L{clearance_level} clearance!', 'success')
+            return redirect(url_for('admin_dashboard'))
+            
         except Exception as e:
-            if "lost connection" in str(e).lower() or "can't connect" in str(e).lower():
-                # Trigger orchestrator to check topology
-                try:
-                    requests.post(f"{db_ha.orchestrator_url}/api/discover/mysql/{db_ha.get_master_host()}/3306")
-                except:
-                    pass
-                # Update database URI if needed
-                new_master = db_ha.get_master_host()
-                if new_master != 'mysql':
-                    app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace('mysql', new_master)
-                    db.session.remove()
-                    db.create_all()
-                # Retry the operation
-                return func(*args, **kwargs)
-            raise e
-    return wrapper
-
-# Apply to critical routes
-@app.route('/api/health')
-@with_db_failover
-def health_check():
-    """Health check endpoint with HA support"""
-    try:
-        # Test database connection
-        db.session.execute('SELECT 1')
-        master_host = db_ha.get_master_host()
-        replicas = db_ha.get_replica_hosts()
-        
-        return jsonify({
-            'status': 'healthy',
-            'database': {
-                'master': master_host,
-                'replicas': replicas,
-                'connection': 'ok'
-            }
-        })
-    except Exception as e:
-        return jsonify({
-            'status': 'unhealthy',
-            'error': str(e)
-        }), 500
-@app.route('/api/db-health')
-def db_health():
-    """Database health check endpoint"""
-    try:
-        # Test database connection
-        result = db.session.execute(text('SELECT 1')).scalar()
-        if result == 1:
-            return jsonify({
-                'status': 'healthy',
-                'database': 'mysql',
-                'connection': 'ok',
-                'timestamp': datetime.now().isoformat()
-            })
-        else:
-            raise Exception('Unexpected result from health check query')
-    except Exception as e:
-        return jsonify({
-            'status': 'unhealthy',
-            'error': str(e),
-            'timestamp': datetime.now().isoformat()
-        }), 500
-
-@app.route('/api/system-health')
-def system_health():
-    """Complete system health check"""
-    health_status = {
-        'database': 'unknown',
-        'redis': 'unknown',
-        'overall': 'unknown'
-    }
+            db.session.rollback()
+            current_app.logger.error(f"Error creating support agent: {str(e)}")
+            flash('An error occurred while creating the support agent.', 'error')
     
-    try:
-        # Check database
-        db.session.execute(text('SELECT 1')).scalar()
-        health_status['database'] = 'healthy'
-    except:
-        health_status['database'] = 'unhealthy'
+    # GET request - show form
+    users = User.query.all()
+    existing_agents = {agent.user_id for agent in SupportAgent.query.all()}
+    available_users = [user for user in users if user.user_id not in existing_agents]
     
-    try:
-        # Check Redis if you're using it
-        import redis
-        r = redis.Redis(host='redis', port=6379, db=0)
-        r.ping()
-        health_status['redis'] = 'healthy'
-    except:
-        health_status['redis'] = 'unhealthy'
-    
-    # Determine overall health
-    if health_status['database'] == 'healthy' and health_status['redis'] == 'healthy':
-        health_status['overall'] = 'healthy'
-        status_code = 200
-    else:
-        health_status['overall'] = 'degraded'
-        status_code = 503
-    
-    return jsonify(health_status), status_code
+    return render_template('admin/create_support_agent.html', users=available_users)
 # Initialize scheduler for event reminders
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=send_event_reminders, trigger="interval", hours=24)

@@ -1,5 +1,5 @@
-#where all your form objects are defined
-#Basic signup form - name, password + phone no.
+# where all your form objects are defined
+# Basic signup form - name, password + phone no.
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField, IntegerField,SelectField,TextAreaField,HiddenField
 from wtforms.validators import DataRequired, Length, Email, EqualTo,ValidationError, Optional
@@ -206,3 +206,86 @@ class ChangePasswordForm(FlaskForm):
         from flask_login import current_user
         if current_user.check_password(field.data):
             raise ValidationError('New password must be different from current password.')
+        
+
+class TicketForm(FlaskForm):
+    """Form for creating support tickets"""
+    title = StringField('Title', validators=[
+        DataRequired(),
+        Length(min=5, max=255, message="Title must be between 5 and 255 characters")
+    ])
+    
+    category_id = SelectField('Category', validators=[DataRequired()], coerce=int)
+    
+    description = TextAreaField('Description', validators=[
+        DataRequired(),
+        Length(min=20, max=5000, message="Description must be between 20 and 5000 characters")
+    ])
+    
+    submit = SubmitField('Create Ticket')
+
+class TicketReplyForm(FlaskForm):
+    """Form for replying to tickets"""
+    message = TextAreaField('Message', validators=[
+        DataRequired(),
+        Length(min=10, max=5000, message="Message must be between 10 and 5000 characters")
+    ])
+    
+    is_internal = BooleanField('Internal Note (visible only to support agents)')
+    
+    submit = SubmitField('Send Reply')
+
+class TicketAssignForm(FlaskForm):
+    """Form for assigning tickets to agents"""
+    agent_id = SelectField('Assign to Agent', validators=[DataRequired()], coerce=int)
+    submit = SubmitField('Assign Ticket')
+
+class SupportAgentForm(FlaskForm):
+    """Form for creating/editing support agents"""
+    user_id = SelectField('User', validators=[DataRequired()], coerce=int)
+    
+    clearance_level = SelectField('Clearance Level', validators=[DataRequired()], coerce=int, choices=[
+        (1, 'L1 - Basic Support'),
+        (2, 'L2 - Intermediate Support'),
+        (3, 'L3 - Advanced Support'),
+        (4, 'L4 - Critical/Security Issues'),
+        (5, 'L5 - Admin Escalations')
+    ])
+    
+    department = StringField('Department', validators=[
+        DataRequired(),
+        Length(min=2, max=100, message="Department must be between 2 and 100 characters")
+    ])
+    
+    specialization = StringField('Specialization', validators=[
+        Optional(),
+        Length(max=255, message="Specialization must be less than 255 characters")
+    ])
+    
+    submit = SubmitField('Create Agent')
+
+class KnowledgeBaseForm(FlaskForm):
+    """Form for creating knowledge base articles"""
+    title = StringField('Title', validators=[
+        DataRequired(),
+        Length(min=5, max=255, message="Title must be between 5 and 255 characters")
+    ])
+    
+    category_id = SelectField('Category', validators=[DataRequired()], coerce=int)
+    
+    content = TextAreaField('Content', validators=[
+        DataRequired(),
+        Length(min=50, message="Content must be at least 50 characters")
+    ])
+    
+    required_clearance = SelectField('Required Clearance Level', validators=[DataRequired()], coerce=int, choices=[
+        (1, 'L1 - Public'),
+        (2, 'L2 - Basic Support'),
+        (3, 'L3 - Advanced Support'),
+        (4, 'L4 - Critical/Security'),
+        (5, 'L5 - Admin Only')
+    ])
+    
+    is_public = BooleanField('Visible to Users', default=True)
+    
+    submit = SubmitField('Create Article')

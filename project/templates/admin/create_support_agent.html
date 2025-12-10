@@ -1,0 +1,58 @@
+<!-- templates/admin/create_support_agent.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3><i class="fas fa-user-shield"></i> Create Support Agent</h3>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <div class="form-group">
+                            <label for="user_id">Select User:</label>
+                            <select name="user_id" id="user_id" class="form-control" required>
+                                <option value="">-- Select a User --</option>
+                                {% for user in users %}
+                                <option value="{{ user.user_id }}">{{ user.username }} ({{ user.email }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="clearance_level">Clearance Level:</label>
+                            <select name="clearance_level" id="clearance_level" class="form-control" required>
+                                <option value="">-- Select Clearance Level --</option>
+                                <option value="1">L1 - Basic Support (Low priority tickets)</option>
+                                <option value="2">L2 - Intermediate Support (Medium priority tickets)</option>
+                                <option value="3">L3 - Advanced Support (High priority tickets)</option>
+                                <option value="4">L4 - Critical Support (Critical priority tickets)</option>
+                                <option value="5">L5 - Security Support (Security priority tickets)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="department">Department:</label>
+                            <input type="text" name="department" id="department" class="form-control" 
+                                   placeholder="e.g., Technical Support, Security, Customer Service" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="specialization">Specialization (Optional):</label>
+                            <input type="text" name="specialization" id="specialization" class="form-control" 
+                                   placeholder="e.g., Network Security, Database Issues, Account Management">
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Create Support Agent
+                        </button>
+                        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">Cancel</a>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

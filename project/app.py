@@ -79,7 +79,7 @@ from models import (
     Friendship, AdminAction, UserLog, ModSecLog, ErrorLog, 
     WebAuthnCredential, user_role_assignments,Event,FriendChatMap,BlockedUser,UserPublicKey, ChatKeyEnvelope
 )
-from decorators import user_required, admin_required, single_role_required
+from decorators import user_required, admin_required, single_role_required,role_required
 
 # Filters
 from filters import (
@@ -633,7 +633,7 @@ def google_maps_api_key():
 
 # load posts
 @app.route('/api/load_more_posts')
-@login_required
+@role_required('user')
 def load_more_posts():
     try:
         page = request.args.get('page', 1, type=int)
@@ -704,7 +704,7 @@ def load_more_posts():
 
 
 @app.route('/upload_banner', methods=['POST'])
-@login_required
+@role_required('user')
 def upload_banner():
     try:
         if 'banner' not in request.files:
@@ -745,7 +745,7 @@ def upload_banner():
         return jsonify({'success': False, 'error': 'Failed to upload banner. Please try again.'})
 
 @app.route('/remove_banner', methods=['POST'])
-@login_required
+@role_required('user')
 def remove_banner():
     try:
         # Remove banner file if exists
@@ -773,7 +773,7 @@ def remove_banner():
         return jsonify({'success': False, 'error': 'Failed to remove banner. Please try again.'})
 
 @app.route('/')
-@login_required
+@role_required('user')
 def home():
     try:
         page = request.args.get('page', 1, type=int)
@@ -863,7 +863,7 @@ def home():
 
 
 @app.route('/api/toggle_like/<int:post_id>', methods=['POST'])
-@login_required
+@role_required('user')
 def toggle_like_api(post_id):
     try:
         post = Post.query.get_or_404(post_id)
@@ -1087,9 +1087,8 @@ def check_user_auth_methods():
         return jsonify({"has_2fa": False, "has_passkeys": False})
 
 
-# need user role
 @app.route('/enable_2fa', methods=['GET', 'POST'])
-@user_required
+@role_required('user')
 def enable_2fa():
     form = Enable2FAForm()
 
@@ -1119,9 +1118,8 @@ def enable_2fa():
             return redirect(url_for('user.account_security'))
     return render_template('UserEnable2FA.html', qr_b64=qr_b64, secret=totp_secret, form=form)
 
-# need user role
 @app.route('/disable_2fa', methods=['POST'])
-@user_required
+@role_required('user')
 def disable_2fa():
     form = Disable2FAForm()
     if form.validate_on_submit():
@@ -1130,11 +1128,11 @@ def disable_2fa():
         return redirect(url_for('user.account_security'))
     return render_template('UserDisable2FA.html', form=form)
 
-# login needed
+
 # -- User passkey management --
 @app.route('/passkey/begin_register', methods=['POST'])
 @csrf.exempt
-@login_required
+@role_required('user')
 def passkey_begin_register():
     try:
         # Check if user has 2FA enabled
@@ -1179,7 +1177,7 @@ def passkey_begin_register():
 # need user
 @app.route('/passkey/finish_register', methods=['POST'])
 @csrf.exempt
-@user_required
+@role_required('user')
 def passkey_finish_register():
     try:
         fido2_server = get_fido2_server()
@@ -1244,7 +1242,7 @@ def passkey_finish_register():
 
 # need user
 @app.route('/remove_passkey/<int:cred_id>', methods=['POST'])
-@user_required
+@role_required('user')
 def remove_passkey(cred_id):
     cred = WebAuthnCredential.query.filter_by(id=cred_id, user_id=current_user.user_id).first()
     if cred:
@@ -1526,7 +1524,7 @@ def passkey_finish_login():
 
 # --- change password ---
 @app.route('/change_password', methods=['GET', 'POST'])
-@login_required
+@role_required('user')
 def change_password():
     form = ChangePasswordForm()
     
@@ -1593,7 +1591,7 @@ def change_password():
 
 @app.route('/verify_passkey_for_password_change', methods=['POST'])
 @csrf.exempt
-@login_required
+@role_required('user')
 def verify_passkey_for_password_change():
     """Verify passkey for password change"""
     try:

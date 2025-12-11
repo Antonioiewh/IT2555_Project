@@ -76,7 +76,7 @@ from models import (
 
 
 )
-from decorators import user_required, admin_required, editor_required, role_required, admin_or_editor_required
+from decorators import user_required, admin_required, role_required, admin_or_editor_required
 
 
 # Filters
@@ -134,7 +134,7 @@ def test_logging():
 
 # -- User security management --
 @user_bp.route('/account_security', methods=['GET', 'POST'])
-@user_required
+@role_required('user')
 def account_security():
     has_2fa = bool(current_user.totp_secret)
     

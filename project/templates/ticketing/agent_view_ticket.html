@@ -158,7 +158,6 @@
                             </div>
 
                             <!-- Close Ticket -->
-                            <!-- Close Ticket form (update existing) -->
                             <div class="col-md-6 mb-3">
                                 <form method="POST" action="{{ url_for('ticketing.close_ticket', ticket_id=ticket.ticket_id) }}" class="d-inline">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -169,7 +168,7 @@
                                     
                                     <!-- Archive checkbox -->
                                     <div class="form-check mb-2">
-                                        <input class="form-check-input" type="checkbox" name="archive_ticket" id="archive_ticket">
+                                        <input class="form-check-input" type="checkbox" name="archive_ticket" id="archive_ticket" value="1">
                                         <label class="form-check-label" for="archive_ticket">
                                             <small>Archive ticket after closing (read-only access)</small>
                                         </label>
@@ -179,11 +178,60 @@
                                         <i class="bi bi-check-circle"></i> Close Ticket
                                     </button>
                                 </form>
+                                
+                                <!-- Terminate Button -->
+                                <div class="mt-2">
+                                    <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#terminateModal">
+                                        <i class="bi bi-trash"></i> Terminate Ticket
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Terminate Ticket Confirmation Modal -->
+<div class="modal fade" id="terminateModal" tabindex="-1" aria-labelledby="terminateModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="terminateModalLabel">
+                    <i class="bi bi-exclamation-triangle"></i> Terminate Ticket
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <strong>⚠️ WARNING: This action is irreversible!</strong>
+                </div>
+                <p>You are about to <strong>permanently delete</strong> this ticket from the database:</p>
+                <ul>
+                    <li><strong>Ticket #{{ ticket.ticket_id }}:</strong> {{ ticket.title }}</li>
+                    <li><strong>Priority:</strong> {{ ticket.priority|title }}</li>
+                    <li><strong>Classification:</strong> {{ ticket.classification|replace('_', ' ')|title }}</li>
+                </ul>
+                <p class="text-danger">
+                    <strong>This will completely remove:</strong><br>
+                    • The ticket and all its data<br>
+                    • All messages and replies<br>
+                    • Assignment history<br>
+                    • Escalation records<br>
+                </p>
+                <p>Are you sure you want to continue?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" action="{{ url_for('ticketing.terminate_ticket', ticket_id=ticket.ticket_id) }}" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash"></i> Yes, Terminate Permanently
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
 </div>

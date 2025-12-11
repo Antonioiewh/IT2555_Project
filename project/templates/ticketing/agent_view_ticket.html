@@ -89,104 +89,124 @@
                         <h6 class="card-title mb-0">Agent Actions</h6>
                     </div>
                     <div class="card-body">
-                        <div class="row">
-                            <!-- Escalate Ticket -->
-                            <div class="col-md-6 mb-3">
-                                <form method="POST" action="{{ url_for('ticketing.escalate_ticket', ticket_id=ticket.ticket_id) }}" class="d-inline">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                    
-                                    <div class="mb-2">
-                                        <label for="escalation_type" class="form-label">Escalation Type:</label>
-                                        <select name="escalation_type" id="escalation_type" class="form-control form-control-sm" onchange="toggleEscalationOptions()">
-                                            <option value="priority">Priority Escalation</option>
-                                            <option value="tier">Tier Escalation</option>
-                                        </select>
-                                    </div>
-                                    
-                                    <!-- Priority escalation info (shown by default) -->
-                                    <div id="priority-info" class="mb-2">
-                                        <small class="text-muted">Will escalate from <strong>{{ ticket.priority }}</strong> to next priority level</small>
-                                    </div>
-                                    
-                                    <!-- Tier escalation options (hidden by default) -->
-                                    <div id="tier-options" class="mb-2" style="display: none;">
-                                        <label for="target_tier" class="form-label">Target Tier:</label>
-                                        <select name="target_tier" id="target_tier" class="form-control form-control-sm">
-                                            {% set classification_levels = {'public': 1, 'internal': 2, 'confidential': 3, 'secret': 4, 'top_secret': 5} %}
-                                            {% set current_ticket_level = classification_levels.get(ticket.classification, 1) %}
-                                            {% set available_tiers = [] %}
-                                            
-                                            <!-- Show all tiers higher than current ticket classification -->
-                                            {% for level in range(current_ticket_level + 1, 6) %}
-                                                {% set _ = available_tiers.append(level) %}
-                                                <option value="{{ level }}">L{{ level }} - 
-                                                    {% if level == 1 %}PUBLIC
-                                                    {% elif level == 2 %}INTERNAL
-                                                    {% elif level == 3 %}CONFIDENTIAL  
-                                                    {% elif level == 4 %}SECRET
-                                                    {% elif level == 5 %}TOP SECRET
-                                                    {% endif %}
-                                                </option>
-                                            {% endfor %}
+                        <!-- Check if ticket is assigned to show appropriate actions -->
+                        {% if assignment and assignment.agent %}
+                            <!-- Ticket is assigned - show all actions -->
+                            <div class="row">
+                                <!-- Escalate Ticket -->
+                                <div class="col-md-6 mb-3">
+                                    <form method="POST" action="{{ url_for('ticketing.escalate_ticket', ticket_id=ticket.ticket_id) }}" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        
+                                        <div class="mb-2">
+                                            <label for="escalation_type" class="form-label">Escalation Type:</label>
+                                            <select name="escalation_type" id="escalation_type" class="form-control form-control-sm" onchange="toggleEscalationOptions()">
+                                                <option value="priority">Priority Escalation</option>
+                                                <option value="tier">Tier Escalation</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <!-- Priority escalation info (shown by default) -->
+                                        <div id="priority-info" class="mb-2">
+                                            <small class="text-muted">Will escalate from <strong>{{ ticket.priority }}</strong> to next priority level</small>
+                                        </div>
+                                        
+                                        <!-- Tier escalation options (hidden by default) -->
+                                        <div id="tier-options" class="mb-2" style="display: none;">
+                                            <label for="target_tier" class="form-label">Target Tier:</label>
+                                            <select name="target_tier" id="target_tier" class="form-control form-control-sm">
+                                                {% set classification_levels = {'public': 1, 'internal': 2, 'confidential': 3, 'secret': 4, 'top_secret': 5} %}
+                                                {% set current_ticket_level = classification_levels.get(ticket.classification, 1) %}
+                                                {% set available_tiers = [] %}
+                                                
+                                                <!-- Show all tiers higher than current ticket classification -->
+                                                {% for level in range(current_ticket_level + 1, 6) %}
+                                                    {% set _ = available_tiers.append(level) %}
+                                                    <option value="{{ level }}">L{{ level }} - 
+                                                        {% if level == 1 %}PUBLIC
+                                                        {% elif level == 2 %}INTERNAL
+                                                        {% elif level == 3 %}CONFIDENTIAL  
+                                                        {% elif level == 4 %}SECRET
+                                                        {% elif level == 5 %}TOP SECRET
+                                                        {% endif %}
+                                                    </option>
+                                                {% endfor %}
+                                                
+                                                {% if available_tiers|length == 0 %}
+                                                    <option value="" disabled>No higher tiers available</option>
+                                                {% endif %}
+                                            </select>
                                             
                                             {% if available_tiers|length == 0 %}
-                                                <option value="" disabled>No higher tiers available</option>
+                                                <small class="text-muted">
+                                                    Cannot escalate higher than {{ ticket.classification|replace('_', ' ')|title }} 
+                                                    (already at highest classification level)
+                                                </small>
+                                            {% else %}
+                                                <small class="text-muted">
+                                                    Escalating from {{ ticket.classification|replace('_', ' ')|title }} to higher classification level
+                                                </small>
                                             {% endif %}
-                                        </select>
+                                        </div>
                                         
-                                        {% if available_tiers|length == 0 %}
-                                            <small class="text-muted">
-                                                Cannot escalate higher than {{ ticket.classification|replace('_', ' ')|title }} 
-                                                (already at highest classification level)
-                                            </small>
-                                        {% else %}
-                                            <small class="text-muted">
-                                                Escalating from {{ ticket.classification|replace('_', ' ')|title }} to higher classification level
-                                            </small>
-                                        {% endif %}
-                                    </div>
-                                    
-                                    <div class="mb-2">
-                                        <label for="reason" class="form-label">Escalation Reason:</label>
-                                        <textarea name="reason" id="reason" class="form-control form-control-sm" rows="2" placeholder="Reason for escalation..." required></textarea>
-                                    </div>
-                                    
-                                    <button type="submit" class="btn btn-warning btn-sm">
-                                        <i class="bi bi-arrow-up-circle"></i> Escalate
-                                    </button>
-                                </form>
-                            </div>
+                                        <div class="mb-2">
+                                            <label for="reason" class="form-label">Escalation Reason:</label>
+                                            <textarea name="reason" id="reason" class="form-control form-control-sm" rows="2" placeholder="Reason for escalation..." required></textarea>
+                                        </div>
+                                        
+                                        <button type="submit" class="btn btn-warning btn-sm">
+                                            <i class="bi bi-arrow-up-circle"></i> Escalate
+                                        </button>
+                                    </form>
+                                </div>
 
-                            <!-- Close Ticket -->
-                            <div class="col-md-6 mb-3">
-                                <form method="POST" action="{{ url_for('ticketing.close_ticket', ticket_id=ticket.ticket_id) }}" class="d-inline">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                    <div class="mb-2">
-                                        <label for="resolution" class="form-label">Resolution:</label>
-                                        <textarea name="resolution" id="resolution" class="form-control form-control-sm" rows="2" placeholder="Describe the resolution..." required></textarea>
-                                    </div>
+                                <!-- Close Ticket -->
+                                <div class="col-md-6 mb-3">
+                                    <form method="POST" action="{{ url_for('ticketing.close_ticket', ticket_id=ticket.ticket_id) }}" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <div class="mb-2">
+                                            <label for="resolution" class="form-label">Resolution:</label>
+                                            <textarea name="resolution" id="resolution" class="form-control form-control-sm" rows="2" placeholder="Describe the resolution..." required></textarea>
+                                        </div>
+                                        
+                                        <!-- Archive checkbox -->
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" name="archive_ticket" id="archive_ticket" value="1">
+                                            <label class="form-check-label" for="archive_ticket">
+                                                <small>Archive ticket after closing (read-only access)</small>
+                                            </label>
+                                        </div>
+                                        
+                                        <button type="submit" class="btn btn-success btn-sm">
+                                            <i class="bi bi-check-circle"></i> Close Ticket
+                                        </button>
+                                    </form>
                                     
-                                    <!-- Archive checkbox -->
-                                    <div class="form-check mb-2">
-                                        <input class="form-check-input" type="checkbox" name="archive_ticket" id="archive_ticket" value="1">
-                                        <label class="form-check-label" for="archive_ticket">
-                                            <small>Archive ticket after closing (read-only access)</small>
-                                        </label>
+                                    <!-- Terminate Button -->
+                                    <div class="mt-2">
+                                        <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#terminateModal">
+                                            <i class="bi bi-trash"></i> Terminate Ticket
+                                        </button>
                                     </div>
-                                    
-                                    <button type="submit" class="btn btn-success btn-sm">
-                                        <i class="bi bi-check-circle"></i> Close Ticket
-                                    </button>
-                                </form>
-                                
-                                <!-- Terminate Button -->
-                                <div class="mt-2">
-                                    <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#terminateModal">
-                                        <i class="bi bi-trash"></i> Terminate Ticket
-                                    </button>
                                 </div>
                             </div>
-                        </div>
+                        {% else %}
+                            <!-- Ticket is unassigned - only show take ticket option -->
+                            <div class="alert alert-warning">
+                                <h6><i class="bi bi-exclamation-triangle"></i> Ticket Not Assigned</h6>
+                                <p class="mb-2">This ticket is currently unassigned. You must take ownership of the ticket before you can close, escalate, or terminate it.</p>
+                                
+                                {% if agent.can_view_classification(ticket.classification) %}
+                                    <button type="button" class="btn btn-primary btn-sm" onclick="takeTicket({{ ticket.ticket_id }})">
+                                        <i class="bi bi-person-check"></i> Take Ticket
+                                    </button>
+                                {% else %}
+                                    <p class="text-muted small mb-0">
+                                        <i class="bi bi-lock"></i> You do not have sufficient clearance to take this {{ ticket.classification|replace('_', ' ')|title }} classified ticket.
+                                    </p>
+                                {% endif %}
+                            </div>
+                        {% endif %}
                     </div>
                 </div>
             {% endif %}
@@ -238,25 +258,55 @@
 
 <script>
 function toggleEscalationOptions() {
-    const escalationType = document.getElementById('escalation_type').value;
+    const escalationType = document.getElementById('escalation_type');
     const tierOptions = document.getElementById('tier-options');
     const priorityInfo = document.getElementById('priority-info');
     const targetTier = document.getElementById('target_tier');
     
-    if (escalationType === 'tier') {
+    if (escalationType && escalationType.value === 'tier') {
         tierOptions.style.display = 'block';
         priorityInfo.style.display = 'none';
-        targetTier.required = true;
-    } else {
+        if (targetTier) targetTier.required = true;
+    } else if (escalationType) {
         tierOptions.style.display = 'none';
         priorityInfo.style.display = 'block';
-        targetTier.required = false;
+        if (targetTier) targetTier.required = false;
+    }
+}
+
+function takeTicket(ticketId) {
+    if (confirm('Do you want to take ownership of this ticket?')) {
+        fetch(`/tickets/take/${ticketId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            },
+            body: `csrf_token={{ csrf_token() }}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.message) {
+                alert(data.message);
+                location.reload(); // Refresh the page to show updated assignment
+            } else if (data.error) {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while taking the ticket.');
+        });
     }
 }
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
-    toggleEscalationOptions();
+    // Only initialize escalation options if the form exists (ticket is assigned)
+    const escalationType = document.getElementById('escalation_type');
+    if (escalationType) {
+        toggleEscalationOptions();
+    }
 });
 </script>
 

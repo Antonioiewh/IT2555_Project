@@ -1,0 +1,255 @@
+{% extends "UserBase.html" %}
+
+{% block title %}Create Support Ticket{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-ticket-perforated"></i> Create New Support Ticket
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <!-- Help Text -->
+                    <div class="alert alert-info">
+                        <h6><i class="bi bi-info-circle"></i> Ticket Creation Guidelines</h6>
+                        <ul class="mb-0">
+                            <li><strong>Be specific:</strong> Provide clear, detailed descriptions</li>
+                            <li><strong>Security matters:</strong> Security-related tickets will be automatically classified and prioritized</li>
+                            <li><strong>Priority:</strong> System will automatically determine priority based on content and category</li>
+                            <li><strong>Assignment:</strong> Tickets will be auto-assigned to qualified support agents</li>
+                        </ul>
+                    </div>
+                    
+                    <form method="POST" id="ticketForm">
+                        {{ form.hidden_tag() }}
+                        
+                        <!-- Title Field -->
+                        <div class="mb-3">
+                            {{ form.title.label(class="form-label") }}
+                            <span class="text-danger">*</span>
+                            {{ form.title(class="form-control" + (" is-invalid" if form.title.errors else ""), 
+                                placeholder="Brief, clear description of the issue") }}
+                            {% if form.title.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.title.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <small class="form-text text-muted">
+                                <span id="titleCounter">0</span>/255 characters
+                            </small>
+                        </div>
+                        
+                        <!-- Category Field -->
+                        <div class="mb-3">
+                            {{ form.category_id.label(class="form-label") }}
+                            <span class="text-danger">*</span>
+                            {{ form.category_id(class="form-select" + (" is-invalid" if form.category_id.errors else "")) }}
+                            {% if form.category_id.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.category_id.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <small class="form-text text-muted">
+                                Select the category that best describes your issue. This affects priority and assignment.
+                            </small>
+                        </div>
+                        
+                        <!-- Description Field -->
+                        <div class="mb-3">
+                            {{ form.description.label(class="form-label") }}
+                            <span class="text-danger">*</span>
+                            {{ form.description(class="form-control" + (" is-invalid" if form.description.errors else ""), 
+                                rows="6", 
+                                placeholder="Detailed description of the issue:\n\n• What happened?\n• What were you trying to do?\n• What did you expect to happen?\n• Any error messages?\n• Steps to reproduce (if applicable)") }}
+                            {% if form.description.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.description.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <small class="form-text text-muted">
+                                <span id="descriptionCounter">0</span>/5000 characters. 
+                                Be as detailed as possible - more information helps us resolve your issue faster.
+                            </small>
+                        </div>
+                        
+                        <!-- Submit Buttons -->
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('ticketing.index') }}" class="btn btn-secondary">
+                                <i class="bi bi-arrow-left"></i> Cancel
+                            </a>
+                            
+                            <div>
+                                <button type="button" class="btn btn-outline-primary me-2" id="previewBtn">
+                                    <i class="bi bi-eye"></i> Preview
+                                </button>
+                                {{ form.submit(class="btn btn-primary") }}
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Preview Modal -->
+<div class="modal fade" id="previewModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-eye"></i> Ticket Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="card">
+                    <div class="card-header">
+                        <span id="previewTitle" class="fw-bold"></span>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Category:</strong> <span id="previewCategory"></span></p>
+                        <p><strong>Description:</strong></p>
+                        <div id="previewDescription" class="border p-3 bg-light"></div>
+                        <hr>
+                        <small class="text-muted">
+                            <strong>Submitted by:</strong> {{ current_user.username }}<br>
+                            <strong>Status:</strong> Open<br>
+                            <strong>Created:</strong> <span id="previewDate"></span>
+                        </small>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-pencil"></i> Continue Editing
+                </button>
+                <button type="button" class="btn btn-primary" id="submitFromPreview">
+                    <i class="bi bi-check"></i> Create Ticket
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('ticketForm');
+    const titleField = document.getElementById('title');
+    const descriptionField = document.getElementById('description');
+    const categoryField = document.getElementById('category_id');
+    const titleCounter = document.getElementById('titleCounter');
+    const descriptionCounter = document.getElementById('descriptionCounter');
+    const previewBtn = document.getElementById('previewBtn');
+    const previewModal = new bootstrap.Modal(document.getElementById('previewModal'));
+    
+    // Character counters
+    function updateTitleCounter() {
+        const length = titleField.value.length;
+        titleCounter.textContent = length;
+        titleCounter.className = length > 255 ? 'text-danger' : length > 200 ? 'text-warning' : 'text-muted';
+    }
+    
+    function updateDescriptionCounter() {
+        const length = descriptionField.value.length;
+        descriptionCounter.textContent = length;
+        descriptionCounter.className = length > 5000 ? 'text-danger' : length > 4000 ? 'text-warning' : 'text-muted';
+    }
+    
+    titleField.addEventListener('input', updateTitleCounter);
+    descriptionField.addEventListener('input', updateDescriptionCounter);
+    
+    // Initialize counters
+    updateTitleCounter();
+    updateDescriptionCounter();
+    
+    // Preview functionality
+    previewBtn.addEventListener('click', function() {
+        const title = titleField.value.trim();
+        const description = descriptionField.value.trim();
+        const categoryText = categoryField.options[categoryField.selectedIndex]?.text || '';
+        
+        if (!title || !description || !categoryField.value) {
+            alert('Please fill in all required fields before previewing.');
+            return;
+        }
+        
+        document.getElementById('previewTitle').textContent = title;
+        document.getElementById('previewCategory').textContent = categoryText;
+        document.getElementById('previewDescription').innerHTML = description.replace(/\n/g, '<br>');
+        document.getElementById('previewDate').textContent = new Date().toLocaleString();
+        
+        previewModal.show();
+    });
+    
+    // Submit from preview
+    document.getElementById('submitFromPreview').addEventListener('click', function() {
+        previewModal.hide();
+        form.submit();
+    });
+    
+    // Form validation
+    form.addEventListener('submit', function(e) {
+        const title = titleField.value.trim();
+        const description = descriptionField.value.trim();
+        
+        if (title.length < 5) {
+            e.preventDefault();
+            titleField.focus();
+            alert('Title must be at least 5 characters long.');
+            return;
+        }
+        
+        if (description.length < 20) {
+            e.preventDefault();
+            descriptionField.focus();
+            alert('Description must be at least 20 characters long.');
+            return;
+        }
+        
+        if (!categoryField.value) {
+            e.preventDefault();
+            categoryField.focus();
+            alert('Please select a category.');
+            return;
+        }
+        
+        // Show loading state
+        const submitBtn = form.querySelector('input[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.value = 'Creating...';
+    });
+});
+</script>
+
+<style>
+.form-control:focus, .form-select:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.invalid-feedback {
+    font-size: 0.875rem;
+}
+
+.text-danger {
+    color: #dc3545 !important;
+}
+
+.text-warning {
+    color: #ffc107 !important;
+}
+
+.badge {
+    font-size: 0.75rem;
+}
+</style>
+{% endblock %}

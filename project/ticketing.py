@@ -313,63 +313,6 @@ def agent_my_tickets():
         flash('An error occurred while loading your tickets.', 'error')
         return redirect(url_for('ticketing.agent_dashboard'))
 
-@ticketing_bp.route('/create', methods=['GET', 'POST'])
-@agent_required
-def create_ticket():
-    """Create new support ticket"""
-    form = TicketForm()
-    
-    # Populate categories
-    categories = TicketCategory.query.filter_by(is_active=True).all()
-    form.category_id.choices = [(c.category_id, c.name) for c in categories]
-    
-    if form.validate_on_submit():
-        try:
-            # Determine priority based on category and content
-            category = TicketCategory.query.get(form.category_id.data)
-            priority = determine_ticket_priority(form.description.data, category)
-            
-            # Create ticket
-            ticket = Ticket(
-                user_id=current_user.user_id,
-                title=form.title.data,
-                description=form.description.data,
-                category_id=form.category_id.data,
-                priority=priority,
-                status='open',
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
-            )
-            
-            # Set classification based on priority
-            ticket.classification = ticket.determine_classification()
-            
-            db.session.add(ticket)
-            db.session.flush()
-            
-            # Auto-assign based on priority and agent availability
-            auto_assign_ticket(ticket)
-            
-            db.session.commit()
-            
-            # Log ticket creation
-            if splunk_logger:
-                splunk_logger.log_security_event('ticket_created', {
-                    'ticket_id': ticket.ticket_id,
-                    'priority': priority,
-                    'classification': ticket.classification,
-                    'category': category.name if category else 'Unknown'
-                })
-            
-            flash(f'Ticket #{ticket.ticket_id} created successfully!', 'success')
-            return redirect(url_for('ticketing.view_ticket', ticket_id=ticket.ticket_id))
-            
-        except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f"Error creating ticket: {str(e)}")
-            flash('An error occurred while creating the ticket.', 'error')
-    
-    return render_template('ticketing/create_ticket.html', form=form)
 
 @ticketing_bp.route('/view/<int:ticket_id>')
 @agent_required
@@ -810,6 +753,26 @@ def close_ticket(ticket_id):
             flash('Access denied.', 'error')
             return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
         
+        # Check if ticket is assigned before allowing closure
+        assignment = TicketAssignment.query.filter_by(
+            ticket_id=ticket_id, is_active=True
+        ).first()
+        
+        if not assignment:
+            flash('Cannot close an unassigned ticket. Please take ownership of the ticket first.', 'error')
+            return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
+        
+        # Get current agent
+        current_agent = SupportAgent.query.filter_by(user_id=current_user.user_id, is_active=True).first()
+        if not current_agent:
+            flash('Only support agents can close tickets.', 'error')
+            return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
+        
+        # Check if the current agent is the one assigned to this ticket
+        if assignment.agent_id != current_agent.agent_id:
+            flash('Only the agent assigned to this ticket can close it.', 'error')
+            return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
+        
         resolution = request.form.get('resolution', '').strip()
         archive_ticket_raw = request.form.get('archive_ticket')
         archive_ticket = request.form.get('archive_ticket') == 'on'
@@ -821,6 +784,7 @@ def close_ticket(ticket_id):
         current_app.logger.info(f"Archive ticket boolean: {archive_ticket}")
         current_app.logger.info(f"Resolution: '{resolution}'")
         current_app.logger.info(f"Current user: {current_user.username} (ID: {current_user.user_id})")
+        current_app.logger.info(f"Assigned agent: {assignment.agent.user.username}")
         
         if not resolution:
             flash('Resolution is required to close the ticket.', 'error')
@@ -837,7 +801,6 @@ def close_ticket(ticket_id):
         if archive_ticket:
             try:
                 current_app.logger.info(f"ARCHIVING: Starting archive process for ticket {ticket_id}")
-                
                 
                 # Create archived ticket record with explicit field validation
                 archived_ticket = ArchivedTicket(
@@ -1139,7 +1102,8 @@ def handle_password_verification(ticket_id, ticket, required_methods):
     
     # Password verified, show next step
     flash('Password verified. Please complete additional authentication.', 'info')
-    return render_template('ticketing/agent_verify_access.html', 
+    return render_template('ticketing/agent_' \
+    'verify_access.html', 
                          ticket=ticket, 
                          required_methods=required_methods,
                          password_verified=True)
@@ -1262,88 +1226,107 @@ def manage_agents():
         flash('An error occurred while loading agents.', 'error')
         return redirect(url_for('ticketing.index'))
 
-@ticketing_bp.route('/admin/agents/create', methods=['POST'])
-@admin_required
-def create_agent():
-    """Create new support agent"""
-    try:
-        user_id = request.form.get('user_id', type=int)
-        clearance_level = request.form.get('clearance_level', type=int)
-        department = request.form.get('department', '').strip()
-        specialization = request.form.get('specialization', '').strip()
-        
-        if not all([user_id, clearance_level, department]):
-            flash('User, clearance level, and department are required.', 'error')
-            return redirect(url_for('ticketing.manage_agents'))
-        
-        if clearance_level < 1 or clearance_level > 5:
-            flash('Clearance level must be between 1 and 5.', 'error')
-            return redirect(url_for('ticketing.manage_agents'))
-        
-        # Check if user already has agent record
-        existing_agent = SupportAgent.query.filter_by(user_id=user_id).first()
-        if existing_agent:
-            flash('User is already a support agent.', 'error')
-            return redirect(url_for('ticketing.manage_agents'))
-        
-        # Create agent
-        agent = SupportAgent(
-            user_id=user_id,
-            clearance_level=clearance_level,
-            department=department,
-            specialization=specialization if specialization else None,
-            created_by=current_user.user_id,
-            created_at=datetime.utcnow(),
-            is_active=True
-        )
-        
-        db.session.add(agent)
-        db.session.commit()
-        
-        user = User.query.get(user_id)
-        clearance = ClearanceLevel.query.get(clearance_level)
-        clearance_name = clearance.level_name if clearance else f'L{clearance_level}'
-        flash(f'Support agent created for {user.username} with {clearance_name} clearance.', 'success')
-        
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Error creating agent: {str(e)}")
-        flash('An error occurred while creating the agent.', 'error')
+@ticketing_bp.route('/create', methods=['GET', 'POST'])
+@agent_required
+def create_ticket():
+    """Create new support ticket"""
+    form = TicketForm()
     
-    return redirect(url_for('ticketing.manage_agents'))
-
+    # Populate categories
+    categories = TicketCategory.query.filter_by(is_active=True).all()
+    form.category_id.choices = [(c.category_id, c.name) for c in categories]
+    
+    if form.validate_on_submit():
+        try:
+            # Get selected category to determine clearance and priority
+            category = TicketCategory.query.get(form.category_id.data)
+            if not category:
+                flash('Invalid category selected.', 'error')
+                return render_template('ticketing/create_ticket.html', form=form)
+            
+            # Use category's default priority and required_clearance
+            priority = category.default_priority
+            clearance_level = category.required_clearance
+            
+            # Map clearance level to classification
+            clearance_to_classification = {
+                1: 'public',
+                2: 'internal', 
+                3: 'confidential',
+                4: 'secret',
+                5: 'top_secret'
+            }
+            classification = clearance_to_classification.get(clearance_level, 'public')
+            
+            # Create ticket with category-based classification
+            ticket = Ticket(
+                user_id=current_user.user_id,
+                title=form.title.data,
+                description=form.description.data,
+                category_id=form.category_id.data,
+                priority=priority,
+                classification=classification,
+                status='open',
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            
+            db.session.add(ticket)
+            db.session.flush()  # Get the ticket_id
+            
+            # Don't auto-assign - leave unassigned as requested
+            # auto_assign_ticket(ticket)  # Commented out
+            
+            db.session.commit()
+            
+            # Log ticket creation
+            if splunk_logger:
+                splunk_logger.log_security_event('ticket_created', {
+                    'user_id': current_user.user_id,
+                    'username': current_user.username,
+                    'ticket_id': ticket.ticket_id,
+                    'title': ticket.title,
+                    'priority': priority,
+                    'classification': classification,
+                    'category': category.name,
+                    'clearance_level': clearance_level,
+                    'status': ticket.status
+                })
+            
+            flash(f'Ticket #{ticket.ticket_id} created successfully with {classification} classification!', 'success')
+            return redirect(url_for('ticketing.view_ticket', ticket_id=ticket.ticket_id))
+            
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error creating ticket: {str(e)}")
+            flash('An error occurred while creating the ticket. Please try again.', 'error')
+    
+    return render_template('ticketing/create_ticket.html', form=form)
 # --- Utility Functions ---
-
-def determine_ticket_priority(description, category):
-    """Determine ticket priority based on content and category"""
-    description_lower = description.lower()
-    
-    # Security-related keywords
-    security_keywords = ['hack', 'breach', 'unauthorized', 'malware', 'phishing', 'security', 'exploit']
-    if any(keyword in description_lower for keyword in security_keywords):
-        return 'security'
-    
-    # Critical keywords  
-    critical_keywords = ['cannot login', 'system down', 'data loss', 'urgent', 'critical']
-    if any(keyword in description_lower for keyword in critical_keywords):
-        return 'critical'
-    
-    # High priority keywords
-    high_keywords = ['error', 'bug', 'broken', 'not working', 'issue']
-    if any(keyword in description_lower for keyword in high_keywords):
-        return 'high'
-    
-    # Category-based priority
-    if category:
-        if 'security' in category.name.lower():
-            return 'security'
-        elif 'critical' in category.name.lower() or 'urgent' in category.name.lower():
-            return 'critical'
-        elif 'technical' in category.name.lower():
-            return 'high'
-    
-    return 'medium'
-
+def determine_classification(self):
+    """Determine appropriate classification based on category, content, and priority"""
+    # Security priority always gets confidential or higher classification
+    if hasattr(self, 'priority') and self.priority == 'security':
+        return 'confidential'
+        
+    # Critical priority gets internal classification
+    if hasattr(self, 'priority') and self.priority == 'critical':
+        return 'internal'
+        
+    # Security-related categories should be at least confidential
+    if self.category and 'security' in self.category.name.lower():
+        return 'confidential'
+        
+    # Emergency or critical categories get internal classification
+    if self.category and any(keyword in self.category.name.lower() for keyword in ['critical', 'emergency']):
+        return 'internal'
+        
+    # High priority tickets get internal classification
+    if hasattr(self, 'priority') and self.priority == 'high':
+        return 'internal'
+        
+    # Default to public for low/medium priority
+    return 'public'
 def auto_assign_ticket(ticket):
     """Auto-assign ticket to available agent based on classification and workload"""
     try:

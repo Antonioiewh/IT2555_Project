@@ -775,7 +775,10 @@ INSERT INTO ticket_categories (name, description, default_priority, required_cle
 ('Critical System Issues', 'System outages and critical problems', 'critical', 3),
 ('Data Privacy', 'Data protection and privacy concerns', 'high', 3),
 ('API Support', 'Developer and API related questions', 'medium', 2),
-('Emergency Support', 'Urgent emergency situations', 'critical', 4);
+('Emergency Support', 'Urgent emergency situations', 'critical', 4),
+('Security Breach Investigation', 'Active security breaches and forensic investigations', 'security', 5),
+('Classified Data Incidents', 'Incidents involving classified or top secret information', 'security', 5),
+('Intelligence Operations Support', 'Support for intelligence and surveillance operations', 'security', 5);
 
 -- ---------------------------------------------------------------------------------
 -- Support Agents with Clearance Levels

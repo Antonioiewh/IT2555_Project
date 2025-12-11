@@ -2589,7 +2589,7 @@ def api_get_chat_envelope(chat_id):
 
 
 @app.route('/messages', methods=['GET'])
-@user_required
+@single_role_required('user')
 def messages():
     #to be Implemented later
     """
@@ -2697,7 +2697,7 @@ def messages():
 
 @csrf.exempt
 @app.route('/create_chat/<int:friend_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def create_chat(friend_id):
     try:
         chat_id = readd_friend_chat(current_user.user_id, friend_id)
@@ -2969,7 +2969,7 @@ def handle_delete_message(data):
 
 
 @app.route('/get_chat_id/<int:friend_id>')
-@user_required
+@single_role_required('user')
 def get_chat_id(friend_id):
     # Try to find existing chat
     chat = get_strict_pair_chat(current_user.user_id, friend_id)
@@ -2980,7 +2980,7 @@ def get_chat_id(friend_id):
 
 
 @app.route('/chat_history/<int:friend_id>')
-@user_required
+@single_role_required('user')
 def chat_history(friend_id):
     me = current_user.user_id
     chat = get_strict_pair_chat(me, friend_id)  # your helper
@@ -3017,7 +3017,7 @@ def chat_history(friend_id):
 
 
 @app.route('/clear_chat/<int:chat_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def clear_chat(chat_id):
     updated = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=current_user.user_id).update(
         { ChatParticipant.cleared_at: func.now() }
@@ -3028,7 +3028,7 @@ def clear_chat(chat_id):
 
 
 @app.route('/delete_chat/<int:chat_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def delete_chat(chat_id):
     try:
         cp = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=current_user.user_id).first()
@@ -3062,7 +3062,7 @@ def delete_chat(chat_id):
         return jsonify({'error': 'internal'}), 500
 
 @app.route('/api/friends_to_readd')
-@user_required
+@single_role_required('user')
 def api_friends_to_readd():
     # accepted friends
     friendships = Friendship.query.filter(
@@ -3101,7 +3101,7 @@ def api_friends_to_readd():
 # -------------------- Message validation and filtering --------------------
 
 @app.route('/upload_message_attachment', methods=['POST'])
-@login_required
+@single_role_required('user')
 def upload_message_attachment():
     file = request.files.get('file')
     verdict = validate_attachment(file)
@@ -3144,7 +3144,7 @@ def add_message_notification(recipient_id: int, sender_id: int, text: str):
         current_app.logger.warning(f'add_message_notification failed: {e}')
 
 @app.route('/api/unread_message_notifications_count')
-@user_required
+@single_role_required('user')
 def unread_message_notifications_count():
     try:
         cnt = Notification.query.filter_by(
@@ -3158,7 +3158,7 @@ def unread_message_notifications_count():
         return jsonify({'ok': False, 'count': 0}), 500
 
 @app.route('/api/notifications/message_stacks')
-@user_required
+@single_role_required('user')
 def api_message_notification_stacks():
     try:
         rows = (Notification.query
@@ -3200,7 +3200,7 @@ def api_message_notification_stacks():
         return jsonify({'ok': False, 'items': []}), 500
 
 @app.route('/api/notifications/messages/mark_read', methods=['POST'])
-@user_required
+@single_role_required('user')
 def mark_message_notifications_read():
     """Mark all message notifications from a specific sender as read."""
     try:
@@ -3647,7 +3647,7 @@ def inject_datetime():
 
 # Create Event Route
 @app.route('/create_event', methods=['GET', 'POST'])
-@user_required
+@single_role_required('user')
 def create_event():
     form = EventForm()
     
@@ -3700,7 +3700,7 @@ def create_event():
 
 # Events Dashboard Route
 @app.route('/events_dashboard', methods=['GET', 'POST'])
-@user_required
+@single_role_required('user')
 def events_dashboard():
     # Events created by the user (user is the event organizer)
     created_events = Event.query.filter_by(user_id=current_user.user_id).order_by(Event.event_datetime.desc()).all()
@@ -3724,7 +3724,7 @@ def events_dashboard():
 
 # Discover Events Route
 @app.route('/discover_events', methods=['GET'])
-@user_required
+@single_role_required('user')
 def discover_events():
     # Get all public events that are not reminders and not created by current user
     public_events = Event.query.filter(
@@ -3747,7 +3747,7 @@ def discover_events():
 
 # JOIN event
 @app.route('/join_event/<int:event_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def join_event(event_id):
     event = Event.query.get_or_404(event_id)
     
@@ -3825,7 +3825,7 @@ def join_event(event_id):
 
 # Leave Event Route
 @app.route('/leave_event/<int:event_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def leave_event(event_id):
     participation = EventParticipant.query.filter_by(
         user_id=current_user.user_id,
@@ -3854,7 +3854,7 @@ def leave_event(event_id):
         return redirect(url_for('events_dashboard'))
 
 @app.route('/delete_event/<int:event_id>', methods=['POST'])
-@user_required
+@single_role_required('user')
 def delete_event(event_id):
     event = Event.query.get_or_404(event_id)
     

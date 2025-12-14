@@ -71,6 +71,7 @@ class User(UserMixin, db.Model):
     user_logs = db.relationship('UserLog', backref='user', lazy=True)
     notifications = db.relationship('Notification', backref='user', lazy=True, cascade='all, delete-orphan')
     likes = db.relationship("PostLike", back_populates="user", cascade="all, delete-orphan")
+    
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
@@ -110,6 +111,7 @@ class User(UserMixin, db.Model):
             'terminated': 'Terminated'
         }
         return status_map.get(self.current_status, self.current_status.title())
+    
     def __repr__(self):
         return f"<User {self.username}>"
 
@@ -136,6 +138,28 @@ class Permission(db.Model):
 
     def __repr__(self):
         return f"<Permission {self.permission_name}>"
+
+# **************************************
+# 2.1 Clearance Levels (NEW)
+# **************************************
+class ClearanceLevel(db.Model):
+    """Clearance levels with access permissions"""
+    __tablename__ = 'clearance_levels'
+    
+    level_id = db.Column(db.Integer, primary_key=True)
+    level_name = db.Column(db.String(50), nullable=False, unique=True)
+    level_description = db.Column(db.Text)
+    can_view_public = db.Column(db.Boolean, default=True)
+    can_view_internal = db.Column(db.Boolean, default=False)
+    can_view_confidential = db.Column(db.Boolean, default=False)
+    can_view_secret = db.Column(db.Boolean, default=False)
+    can_view_top_secret = db.Column(db.Boolean, default=False)
+    
+    # Relationship
+    agents = db.relationship('SupportAgent', backref='clearance_level_info')
+    
+    def __repr__(self):
+        return f"<ClearanceLevel {self.level_name}>"
 
 # **************************************
 # 3. Events/Reminders
@@ -253,6 +277,7 @@ class PostImage(db.Model):
     
     def __repr__(self):
         return f"<PostImage {self.image_id} for Post {self.post_id}>"
+        
 class PostLike(db.Model):
     __tablename__ = 'post_likes'
     
@@ -413,7 +438,7 @@ class ChatKeyEnvelope(db.Model):
     chat_id = db.Column(db.Integer, db.ForeignKey('chats.chat_id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     key_version = db.Column(db.Integer, nullable=False, default=1)
-    envelope_b64 = db.Column(db.Text, nullable=False)  # chat key encrypted to this user’s public key (base64)
+    envelope_b64 = db.Column(db.Text, nullable=False)  # chat key encrypted to this user's public key (base64)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -499,7 +524,6 @@ class WebAuthnCredential(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     credential_id = db.Column(db.String(255), unique=True, nullable=False)
-
     sign_count = db.Column(db.Integer, default=0)
     nickname = db.Column(db.String(100), nullable=True)
     added_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
@@ -509,3 +533,230 @@ class WebAuthnCredential(db.Model):
     
     def __repr__(self):
         return f"<WebAuthnCredential {self.credential_id[:10]}...>"
+
+# **************************************
+# 10. Ticketing System with Classification (UPDATED)
+# **************************************
+
+class SupportAgent(db.Model):
+    """Support agent with clearance levels"""
+    __tablename__ = 'support_agents'
+    
+    agent_id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False, unique=True)
+    clearance_level = db.Column(db.Integer, db.ForeignKey('clearance_levels.level_id'), nullable=False)  # Changed to FK
+    department = db.Column(db.String(100), nullable=False)
+    specialization = db.Column(db.String(255))
+    created_by = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    
+    # Relationships
+    user = db.relationship('User', foreign_keys=[user_id], backref='support_agent_profile')
+    created_by_user = db.relationship('User', foreign_keys=[created_by])
+    assignments = db.relationship('TicketAssignment', backref='agent', lazy='dynamic')
+    
+    def can_view_classification(self, classification):
+        """Check if agent can view tickets with given classification"""
+        clearance = ClearanceLevel.query.get(self.clearance_level)
+        if not clearance:
+            return False
+            
+        classification_map = {
+            'public': clearance.can_view_public,
+            'internal': clearance.can_view_internal,
+            'confidential': clearance.can_view_confidential,
+            'secret': clearance.can_view_secret,
+            'top_secret': clearance.can_view_top_secret
+        }
+        return classification_map.get(classification, False)
+    
+    def get_accessible_classifications(self):
+        """Get list of classifications this agent can access"""
+        clearance = ClearanceLevel.query.get(self.clearance_level)
+        if not clearance:
+            return ['public']
+            
+        accessible = []
+        if clearance.can_view_public:
+            accessible.append('public')
+        if clearance.can_view_internal:
+            accessible.append('internal')
+        if clearance.can_view_confidential:
+            accessible.append('confidential')
+        if clearance.can_view_secret:
+            accessible.append('secret')
+        if clearance.can_view_top_secret:
+            accessible.append('top_secret')
+            
+        return accessible
+    
+    def __repr__(self):
+        return f"<SupportAgent {self.user.username} (L{self.clearance_level})>"
+
+class TicketCategory(db.Model):
+    """Ticket categories with clearance requirements"""
+    __tablename__ = 'ticket_categories'
+    
+    category_id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    description = db.Column(db.Text)
+    default_priority = db.Column(db.Enum('low', 'medium', 'high', 'critical', 'security'), default='medium')
+    required_clearance = db.Column(db.Integer, nullable=False, default=1)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    
+    # Relationships
+    tickets = db.relationship('Ticket', backref='category', lazy='dynamic')
+    articles = db.relationship('KnowledgeBaseArticle', backref='category', lazy='dynamic')
+
+class Ticket(db.Model):
+    """Support tickets with classification-based access control"""
+    __tablename__ = 'tickets'
+    
+    ticket_id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    category_id = db.Column(db.Integer, db.ForeignKey('ticket_categories.category_id'), nullable=False)
+    priority = db.Column(db.Enum('low', 'medium', 'high', 'critical', 'security'), default='medium')
+    classification = db.Column(db.Enum('public', 'internal', 'confidential', 'secret', 'top_secret'), default='public')
+    status = db.Column(db.Enum('open', 'in_progress', 'pending', 'resolved', 'closed', 'cancelled'), default='open')
+    resolution = db.Column(db.Text)
+    resolved_at = db.Column(db.DateTime)
+    archived_at = db.Column(db.DateTime, nullable=True)
+    archived_by = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships - specify foreign_keys to resolve ambiguity
+    user = db.relationship('User', foreign_keys=[user_id], backref='tickets')
+    archiver = db.relationship('User', foreign_keys=[archived_by])
+    messages = db.relationship('TicketMessage', backref='ticket', lazy='dynamic', cascade='all, delete-orphan')
+    assignments = db.relationship('TicketAssignment', backref='ticket', lazy='dynamic')
+    escalations = db.relationship('TicketEscalation', backref='ticket', lazy='dynamic')
+    
+    def determine_classification(self):
+        """Determine appropriate classification based on category and content"""
+        # Security-related categories should be at least confidential
+        if self.category and 'security' in self.category.name.lower():
+            return 'confidential'
+        # Emergency or critical categories
+        if self.category and any(keyword in self.category.name.lower() for keyword in ['critical', 'emergency']):
+            return 'internal'
+        return 'public'
+    
+    def can_be_viewed_by_agent(self, agent):
+        """Check if agent can view this ticket based on classification"""
+        return agent.can_view_classification(self.classification)
+    
+    def __repr__(self):
+        return f"<Ticket {self.ticket_id}: {self.title}>"
+
+class TicketMessage(db.Model):
+    """Messages/replies within tickets"""
+    __tablename__ = 'ticket_messages'
+    
+    message_id = db.Column(db.Integer, primary_key=True)
+    ticket_id = db.Column(db.Integer, db.ForeignKey('tickets.ticket_id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    is_internal = db.Column(db.Boolean, nullable=False, default=False)  # Internal agent notes
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    
+    # Relationships
+    user = db.relationship('User', backref='ticket_messages')
+
+class TicketAssignment(db.Model):
+    """Ticket assignments to support agents"""
+    __tablename__ = 'ticket_assignments'
+    
+    assignment_id = db.Column(db.Integer, primary_key=True)
+    ticket_id = db.Column(db.Integer, db.ForeignKey('tickets.ticket_id'), nullable=False)
+    agent_id = db.Column(db.Integer, db.ForeignKey('support_agents.agent_id'), nullable=False)
+    assigned_by = db.Column(db.Integer, db.ForeignKey('users.user_id'))
+    assigned_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    
+    # Relationships
+    assigned_by_user = db.relationship('User', foreign_keys=[assigned_by])
+
+class TicketEscalation(db.Model):
+    """Ticket escalation history"""
+    __tablename__ = 'ticket_escalations'
+    
+    escalation_id = db.Column(db.Integer, primary_key=True)
+    ticket_id = db.Column(db.Integer, db.ForeignKey('tickets.ticket_id'), nullable=False)
+    escalated_by = db.Column(db.Integer, db.ForeignKey('support_agents.agent_id'), nullable=False)
+    escalated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    previous_priority = db.Column(db.Enum('low', 'medium', 'high', 'critical', 'security'), nullable=False)
+    new_priority = db.Column(db.Enum('low', 'medium', 'high', 'critical', 'security'), nullable=False)
+    reason = db.Column(db.Text, nullable=False)
+    
+    # Relationships
+    escalated_by_agent = db.relationship('SupportAgent', foreign_keys=[escalated_by])
+
+class KnowledgeBaseArticle(db.Model):
+    """Knowledge base articles with clearance-based access"""
+    __tablename__ = 'knowledge_base_articles'
+    
+    article_id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    category_id = db.Column(db.Integer, db.ForeignKey('ticket_categories.category_id'), nullable=False)
+    author_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    required_clearance = db.Column(db.Integer, nullable=False, default=1)
+    is_public = db.Column(db.Boolean, nullable=False, default=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    author = db.relationship('User', backref='authored_articles')
+
+
+class ArchivedTicket(db.Model):
+    """Archived tickets - read-only with clearance level restrictions"""
+    __tablename__ = 'archived_tickets'
+    
+    archived_ticket_id = db.Column(db.Integer, primary_key=True)
+    original_ticket_id = db.Column(db.Integer, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    category_id = db.Column(db.Integer, db.ForeignKey('ticket_categories.category_id'))
+    priority = db.Column(db.Enum('low', 'medium', 'high', 'critical', 'security'), nullable=False)
+    status = db.Column(db.String(50), nullable=False)
+    classification = db.Column(db.Enum('public', 'internal', 'confidential', 'secret', 'top_secret'), nullable=False)
+    resolution = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, nullable=False)
+    updated_at = db.Column(db.DateTime, nullable=False)
+    resolved_at = db.Column(db.DateTime)
+    archived_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    archived_by = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    
+    # Relationships
+    user = db.relationship('User', foreign_keys=[user_id], backref='archived_tickets')
+    category = db.relationship('TicketCategory', backref='archived_tickets')
+    archiver = db.relationship('User', foreign_keys=[archived_by])
+    
+    def __repr__(self):
+        return f'<ArchivedTicket {self.archived_ticket_id}: {self.title}>'
+
+class TerminatedTicketAudit(db.Model):
+    """Audit trail for terminated tickets"""
+    __tablename__ = 'terminated_tickets_audit'
+    
+    audit_id = db.Column(db.Integer, primary_key=True)
+    original_ticket_id = db.Column(db.Integer, nullable=False)
+    ticket_data = db.Column(db.JSON, nullable=False)
+    terminated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    terminated_by = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    reason = db.Column(db.Text)
+    
+    # Relationships
+    terminator = db.relationship('User', backref='terminated_tickets')
+    
+    def __repr__(self):
+        return f'<TerminatedTicketAudit {self.audit_id}: Ticket {self.original_ticket_id}>'

@@ -1,0 +1,231 @@
+{% extends "UserBase.html" %}
+
+{% block title %}Security Verification - Ticket #{{ ticket.ticket_id }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-shield-exclamation"></i> Security Verification Required
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <strong>High Classification Access</strong><br>
+                        This ticket is classified as <strong>{{ ticket.classification|replace('_', ' ')|title }}</strong> and requires additional authentication.
+                    </div>
+                    
+                    <div class="mb-3">
+                        <strong>Ticket Details:</strong><br>
+                        <strong>Ticket #{{ ticket.ticket_id }}:</strong> {{ ticket.title }}<br>
+                        <strong>Classification:</strong> 
+                        <span class="badge bg-{% if ticket.classification == 'top_secret' %}danger{% elif ticket.classification == 'secret' %}warning{% elif ticket.classification == 'confidential' %}info{% else %}secondary{% endif %}">
+                            {{ ticket.classification|replace('_', ' ')|title }}
+                        </span>
+                    </div>
+
+                    <!-- Progress Indicator for Multi-Step Auth -->
+                    {% if required_methods|length > 1 %}
+                    <div class="mb-4">
+                        <h6>Authentication Progress:</h6>
+                        <div class="progress mb-2">
+                            {% set total_steps = required_methods|length %}
+                            {% set completed_steps = 0 %}
+                            {% if 'password' in required_methods and password_verified %}
+                                {% set completed_steps = completed_steps + 1 %}
+                            {% endif %}
+                            {% if '2fa' in required_methods and totp_verified %}
+                                {% set completed_steps = completed_steps + 1 %}
+                            {% endif %}
+                            {% if 'passkey' in required_methods and passkey_verified %}
+                                {% set completed_steps = completed_steps + 1 %}
+                            {% endif %}
+                            <div class="progress-bar" role="progressbar" 
+                                 style="width: {{ (completed_steps / total_steps * 100)|round|int }}%">
+                                {{ completed_steps }}/{{ total_steps }} Steps
+                            </div>
+                        </div>
+                        <small class="text-muted">
+                            Required methods: 
+                            {% for method in required_methods %}
+                                {% if method == 'password' %}Password{% endif %}
+                                {% if method == '2fa' %}Two-Factor Auth{% endif %}
+                                {% if method == 'passkey' %}Passkey{% endif %}
+                                {% if not loop.last %}, {% endif %}
+                            {% endfor %}
+                        </small>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Password Authentication Step -->
+                    {% if 'password' in required_methods %}
+                        {% if not password_verified %}
+                            <div class="auth-step active">
+                                <h6><i class="bi bi-key"></i> Step 1: Password Verification</h6>
+                                <form method="POST" class="mt-3">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <input type="hidden" name="auth_method" value="password">
+                                    
+                                    <div class="mb-3">
+                                        <label for="password" class="form-label">Enter Your Password:</label>
+                                        <input type="password" 
+                                               class="form-control {% if show_password_error %}is-invalid{% endif %}" 
+                                               id="password" 
+                                               name="password" 
+                                               placeholder="Your account password"
+                                               required 
+                                               autofocus>
+                                        {% if show_password_error %}
+                                            <div class="invalid-feedback">Password is required or incorrect.</div>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <button type="submit" class="btn btn-warning">
+                                        <i class="bi bi-shield-check"></i> Verify Password
+                                    </button>
+                                </form>
+                            </div>
+                        {% else %}
+                            <div class="auth-step completed">
+                                <h6><i class="bi bi-check-circle-fill text-success"></i> Step 1: Password Verified</h6>
+                                <p class="text-success mb-0">Password verification completed successfully.</p>
+                            </div>
+                        {% endif %}
+                    {% endif %}
+
+                    <!-- 2FA Authentication Step -->
+                    {% if '2fa' in required_methods %}
+                        {% if ('password' not in required_methods or password_verified) and not totp_verified %}
+                            <div class="auth-step active mt-3">
+                                <h6><i class="bi bi-phone"></i> 
+                                    {% if 'password' in required_methods %}Step 2:{% else %}Step 1:{% endif %}
+                                    Two-Factor Authentication
+                                </h6>
+                                <p>Enter the 6-digit code from your authenticator app:</p>
+                                <form method="POST" class="mt-3">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <input type="hidden" name="auth_method" value="totp">
+                                    
+                                    <div class="mb-3">
+                                        <label for="totp_code" class="form-label">TOTP Code:</label>
+                                        <input type="text" 
+                                               class="form-control {% if show_2fa_error %}is-invalid{% endif %}" 
+                                               id="totp_code" 
+                                               name="totp_code" 
+                                               placeholder="123456"
+                                               maxlength="6"
+                                               pattern="[0-9]{6}"
+                                               required 
+                                               autofocus>
+                                        {% if show_2fa_error %}
+                                            <div class="invalid-feedback">2FA code is required or invalid.</div>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="bi bi-shield-check"></i> Verify 2FA Code
+                                    </button>
+                                </form>
+                            </div>
+                        {% elif totp_verified %}
+                            <div class="auth-step completed mt-3">
+                                <h6><i class="bi bi-check-circle-fill text-success"></i> 
+                                    {% if 'password' in required_methods %}Step 2:{% else %}Step 1:{% endif %}
+                                    2FA Verified
+                                </h6>
+                                <p class="text-success mb-0">Two-factor authentication completed successfully.</p>
+                            </div>
+                        {% elif 'password' in required_methods and not password_verified %}
+                            <div class="auth-step disabled mt-3">
+                                <h6><i class="bi bi-lock"></i> Step 2: Two-Factor Authentication</h6>
+                                <p class="text-muted">Complete password verification first.</p>
+                            </div>
+                        {% endif %}
+                    {% endif %}
+
+                    <!-- Passkey Authentication Step -->
+                    {% if 'passkey' in required_methods %}
+                        {% set passkey_step_num = required_methods|length %}
+                        {% if ('password' not in required_methods or password_verified) and ('2fa' not in required_methods or totp_verified) and not passkey_verified %}
+                            <div class="auth-step active mt-3">
+                                <h6><i class="bi bi-fingerprint"></i> Step {{ passkey_step_num }}: Passkey Authentication</h6>
+                                <p>Use your security key or biometric authentication:</p>
+                                <form method="POST" class="mt-3">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <input type="hidden" name="auth_method" value="passkey">
+                                    
+                                    <button type="submit" class="btn btn-success">
+                                        <i class="bi bi-fingerprint"></i> Authenticate with Passkey
+                                    </button>
+                                </form>
+                            </div>
+                        {% elif passkey_verified %}
+                            <div class="auth-step completed mt-3">
+                                <h6><i class="bi bi-check-circle-fill text-success"></i> Step {{ passkey_step_num }}: Passkey Verified</h6>
+                                <p class="text-success mb-0">Passkey authentication completed successfully.</p>
+                            </div>
+                        {% else %}
+                            <div class="auth-step disabled mt-3">
+                                <h6><i class="bi bi-lock"></i> Step {{ passkey_step_num }}: Passkey Authentication</h6>
+                                <p class="text-muted">Complete previous authentication steps first.</p>
+                            </div>
+                        {% endif %}
+                    {% endif %}
+                    
+                </div>
+                <div class="card-footer">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle"></i> 
+                        This verification is valid for 10 minutes. You will need to re-verify if you access this ticket again after that time.
+                    </small>
+                    <div class="mt-2">
+                        <a href="{{ url_for('ticketing.agent_dashboard') if current_user.has_role('support_agent') else url_for('ticketing.index') }}" 
+                           class="btn btn-secondary btn-sm">
+                            <i class="bi bi-arrow-left"></i> Cancel
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.auth-step {
+    padding: 1rem;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    background-color: #f8f9fa;
+}
+.auth-step.active {
+    border-color: #0d6efd;
+    background-color: #e7f3ff;
+}
+.auth-step.completed {
+    border-color: #198754;
+    background-color: #d1e7dd;
+}
+.auth-step.disabled {
+    opacity: 0.6;
+}
+.card-header.bg-warning {
+    border-bottom: 2px solid #f0ad4e;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-format TOTP input
+    const totpInput = document.getElementById('totp_code');
+    if (totpInput) {
+        totpInput.addEventListener('input', function() {
+            // Only allow digits and limit to 6 characters
+            this.value = this.value.replace(/\D/g, '').substring(0, 6);
+        });
+    }
+});
+</script>
+{% endblock %}

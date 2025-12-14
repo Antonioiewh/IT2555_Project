@@ -1,3 +1,5 @@
+# file validate function
+
 import os
 import re
 import hashlib

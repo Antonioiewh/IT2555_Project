@@ -716,6 +716,7 @@ socket.on('connect', () => {
 });
 
 // Register listeners unconditionally (no if (window.socket) guards)
+// Register listeners unconditionally (no if (window.socket) guards)
 socket.on('receive_message', async (data) => {
   if (!data) return;
 
@@ -726,9 +727,23 @@ socket.on('receive_message', async (data) => {
     if (li) li.classList.add('has-unread');
     return;
   }
-  const keyStr = getChatKey(data.chat_id) || await loadChatKey(data.chat_id) || DEFAULT_CHAT_KEY;
+
   const isDeleted = data.message_text === 'Message deleted';
-  const text = isDeleted ? 'Message deleted' : await decryptWithKey(data.message_text, keyStr);
+  let text = data.message_text;
+
+  if (!isDeleted) {
+    // For receivers: get the friend's user ID to ensure we have the right key
+    const friendUserId = String(data.sender_id) === String(myUserId) 
+      ? document.querySelector('.friend-link.active')?.dataset?.userId 
+      : data.sender_id;
+    
+    // Ensure we have the proper encryption key before trying to decrypt
+    const keyStr = await ensureChatKey(data.chat_id, friendUserId);
+    
+    // Now decrypt with the proper key
+    text = await decryptWithKey(data.message_text, keyStr);
+  }
+
   appendMessage(String(data.sender_id) === String(myUserId) ? 'me' : 'friend', text, data.sent_at, data.message_id, isDeleted);
 });
 // message deleted handler

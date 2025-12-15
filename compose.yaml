@@ -206,6 +206,7 @@ services:
       - ./project/templates/rate_limit.html:/usr/share/nginx/html/rate_limit.html:ro
       - ./nginxproxy/custom_modsec_rules:/etc/nginx/modsec/custom_modsec_rules
       - ./certs:/etc/nginx/certs:ro 
+      - ./modsec_logs:/var/log/nginx/modsec_audit_data 
       - ./nginx_logs:/var/log/nginx
       - ./project/static:/var/www/static:ro
     depends_on:
@@ -246,7 +247,7 @@ services:
       - SPLUNK_USER=splunk
     volumes:
       - ./nginx_logs:/var/log/nginx:ro
-      - ./nginx_logs/modsec_audit_data:/var/log/nginx/modsec_audit_data:ro
+      - ./modsec_logs:/var/log/nginx/modsec_audit_data:ro
       - ./splunk-forwarder:/opt/splunkforwarder/etc/system/local
     depends_on:
       - splunk

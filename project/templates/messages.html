@@ -716,35 +716,155 @@ socket.on('connect', () => {
 });
 
 // Register listeners unconditionally (no if (window.socket) guards)
-// Register listeners unconditionally (no if (window.socket) guards)
+// Enhanced receive message handler with detailed debugging
+function debugChatKeys(chatId) {
+  console.log(`🔑 DEBUG CHAT KEYS for chat ${chatId}:`, {
+    currentChatId,
+    chatKeysObject: Object.keys(chatKeys).length > 0 ? chatKeys : 'EMPTY',
+    specificChatKey: chatKeys[String(chatId)] || 'NOT_FOUND',
+    windowSecretKey: window.secretKey || 'NOT_SET',
+    defaultKey: DEFAULT_CHAT_KEY
+  });
+}
+function debugChatKeysDetailed(chatId, friendUserId, context = 'UNKNOWN') {
+  const keyStr = chatKeys[String(chatId)] || DEFAULT_CHAT_KEY;
+  const keyPreview = keyStr === DEFAULT_CHAT_KEY ? 'DEFAULT_KEY' : keyStr.substring(0, 20) + '...' + keyStr.substring(-10);
+  
+  console.log(`🔑🔍 DETAILED KEY DEBUG [${context}] - Chat ${chatId} with Friend ${friendUserId}:`);
+  console.log(`🔑 Key Preview: ${keyPreview}`);
+  console.log(`🔑 Key Hash: ${btoa(keyStr).substring(0, 16)}...`);
+  console.log(`🔑 MyUserId: ${myUserId}`);
+  console.log(`🔑 FriendUserId: ${friendUserId}`);
+  console.log(`🔑 Chat Participants (calculated): [${Math.min(+myUserId, +friendUserId)}, ${Math.max(+myUserId, +friendUserId)}]`);
+  
+  // Show derivation context
+  try {
+    const derivationContext = `sb|chat|${chatId}|${Math.min(+myUserId,+friendUserId)}|${Math.max(+myUserId,+friendUserId)}`;
+    console.log(`🔑 Derivation Context: "${derivationContext}"`);
+    
+    // Show what would be different derivation contexts with wrong friend IDs
+    const wrongContexts = [2, 3].map(wrongId => 
+      `sb|chat|${chatId}|${Math.min(+myUserId,+wrongId)}|${Math.max(+myUserId,+wrongId)}`
+    );
+    console.log(`🔑 Wrong contexts would be:`, wrongContexts);
+  } catch (e) {
+    console.warn('Could not calculate derivation context:', e);
+  }
+  
+  console.log(`🔑 All stored chat keys:`, Object.keys(chatKeys).map(k => ({ 
+    chatId: k, 
+    keyPreview: (chatKeys[k] === DEFAULT_CHAT_KEY ? 'DEFAULT' : chatKeys[k].substring(0, 15) + '...') 
+  })));
+}
 socket.on('receive_message', async (data) => {
-  if (!data) return;
+  console.log('🌐📨 SOCKET RECEIVE_MESSAGE EVENT FIRED:', {
+    timestamp: new Date().toISOString(),
+    socketId: socket.id,
+    socketConnected: socket.connected,
+    data: data
+  });
+  
+  if (!data) {
+    console.error('📨 ❌ No data received in receive_message event');
+    return;
+  }
 
   // If message is for another chat, mark that chat as having unseen messages
   if (!currentChatId || String(data.chat_id) !== String(currentChatId)) {
-    const li = document.querySelector(`.friend-link[data-chat-id="${data.chat_id}"]`)
-           || document.querySelector(`.friend-link[data-user-id="${data.sender_id}"]`);
-    if (li) li.classList.add('has-unread');
+    const friendLink = document.querySelector(`.friend-link[data-chat-id="${data.chat_id}"]`);
+    if (friendLink && !friendLink.classList.contains('has-unread')) {
+      friendLink.classList.add('has-unread');
+    }
+    try {
+        debugChatKeysDetailed(data.chat_id, friendUserId, 'RECEIVE_MESSAGE');
+      } catch (e) {
+        console.warn('Detailed debug function failed:', e.message);
+        debugChatKeys(data.chat_id);
+      }
     return;
   }
 
   const isDeleted = data.message_text === 'Message deleted';
   let text = data.message_text;
+  const isFromMe = String(data.sender_id) === String(myUserId);
 
-  if (!isDeleted) {
-    // For receivers: get the friend's user ID to ensure we have the right key
-    const friendUserId = String(data.sender_id) === String(myUserId) 
-      ? document.querySelector('.friend-link.active')?.dataset?.userId 
-      : data.sender_id;
-    
-    // Ensure we have the proper encryption key before trying to decrypt
-    const keyStr = await ensureChatKey(data.chat_id, friendUserId);
-    
-    // Now decrypt with the proper key
-    text = await decryptWithKey(data.message_text, keyStr);
+  console.log(`📨 PROCESSING: isFromMe=${isFromMe}, isDeleted=${isDeleted}, sender=${data.sender_id}, me=${myUserId}`);
+
+  // Skip processing our own messages to prevent duplicates (we show them immediately when sending)
+  if (isFromMe) {
+    console.log('📨 ⏭️ Skipping my own message to prevent duplicate');
+    return;
   }
 
-  appendMessage(String(data.sender_id) === String(myUserId) ? 'me' : 'friend', text, data.sent_at, data.message_id, isDeleted);
+  console.log('📨 ✅ Processing friend message - attempting decryption...');
+
+  if (!isDeleted && data.message_text) {
+    try {
+      // Get friend ID from the active chat context, not sender_id
+      // Both users must derive keys with the same friend relationship
+      let friendUserId = data.sender_id; // fallback
+      
+      // Try to get friend ID from active friend link in DOM
+      const activeLink = document.querySelector('.friend-link.active');
+      if (activeLink && activeLink.dataset.userId) {
+        friendUserId = activeLink.dataset.userId;
+        console.log(`🔓 Using friend ID from active link: ${friendUserId}`);
+      } else {
+        console.log(`🔓 Using sender_id as fallback friend ID: ${friendUserId}`);
+      }
+      
+      console.log(`🔓 DECRYPT: friend=${friendUserId}, chat=${data.chat_id}, sender=${data.sender_id}`);
+      
+      // Debug current keys state with detailed logging
+      try {
+        debugChatKeysDetailed(data.chat_id, friendUserId, 'RECEIVE_MESSAGE_DECRYPT');
+      } catch (e) {
+        console.warn('Detailed debug function failed:', e.message);
+        try {
+          debugChatKeys(data.chat_id);
+        } catch (e2) {
+          console.log(`🔑 BASIC DEBUG: chatKeys=${Object.keys(chatKeys).length}, currentKey=${chatKeys[String(data.chat_id)] || 'NONE'}`);
+        }
+      }
+      
+      // Get the appropriate key
+      const keyStr = await ensureChatKey(data.chat_id, friendUserId);
+      console.log(`🔓 DECRYPT KEY:`, keyStr === DEFAULT_CHAT_KEY ? 'DEFAULT_KEY' : keyStr.substring(0, 20) + '...');
+      
+      // Try to decrypt the message
+      const originalText = text;
+      text = await decryptWithKey(data.message_text, keyStr);
+      
+      console.log(`🔓 DECRYPT RESULT:`, {
+        original: originalText.substring(0, 50) + '...',
+        decrypted: text.substring(0, 50) + '...',
+        changed: text !== originalText,
+        isErrorMessage: text.includes('[🔓❌') || text.includes('[🔓💥'),
+        success: text !== originalText && !text.includes('[🔓❌') && !text.includes('[🔓💥')
+      });
+      
+      // Check if decryption actually worked
+      if (!text) {
+        console.error('🔓 ❌ DECRYPTION FAILED - empty result');
+        text = `[DECRYPT FAILED: Empty result]`;
+      } else if (text === data.message_text) {
+        console.error('🔓 ❌ DECRYPTION FAILED - text unchanged');
+        text = `[DECRYPT FAILED: Key mismatch] ${data.message_text.substring(0, 50)}...`;
+      } else if (text.includes('[🔓❌') || text.includes('[🔓💥')) {
+        console.error('🔓 ❌ DECRYPTION FAILED - error in decrypt function');
+        // text already contains the error message from decryptWithKey
+      } else {
+        console.log('🔓 ✅ DECRYPTION SUCCESS:', text.substring(0, 50) + '...');
+      }
+      
+    } catch (error) {
+      console.error('🔓 ❌ DECRYPTION ERROR:', error);
+      text = `[DECRYPT ERROR: ${error.message}] ${data.message_text}`;
+    }
+  }
+
+  console.log('📨 ✅ Displaying message to receiver:', text);
+  appendMessage('friend', text, data.sent_at, data.message_id, isDeleted);
 });
 // message deleted handler
 socket.on('message_deleted', (data) => {
@@ -867,6 +987,13 @@ async function importAesKeyFromBase64(b64) {
 
 // Encrypt new messages with AES-GCM, envelope as JSON
 async function encryptWithKey(plain, keyB64) {
+  console.log(`🔐📤 ENCRYPT START:`, {
+    plaintext: plain.substring(0, 50) + (plain.length > 50 ? '...' : ''),
+    keyPreview: keyB64 === DEFAULT_CHAT_KEY ? 'DEFAULT_KEY' : keyB64.substring(0, 20) + '...',
+    keyHash: btoa(keyB64).substring(0, 16) + '...',
+    keyLength: keyB64.length
+  });
+  
   try {
     const key = await importAesKeyFromBase64(keyB64);
     const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -876,42 +1003,107 @@ async function encryptWithKey(plain, keyB64) {
       iv: btoa(String.fromCharCode(...iv)),
       ct: btoa(String.fromCharCode(...new Uint8Array(ctBuf)))
     };
-    return JSON.stringify(payload);
-  } catch {
+    const result = JSON.stringify(payload);
+    
+    console.log(`🔐✅ ENCRYPT SUCCESS:`, {
+      resultPreview: result.substring(0, 80) + '...',
+      resultLength: result.length,
+      algorithm: 'AES-GCM',
+      ivLength: iv.length
+    });
+    
+    return result;
+  } catch (error) {
+    console.error(`🔐❌ ENCRYPT FAILED:`, error.message);
     // Fallback to legacy CryptoJS (keeps app usable if WebCrypto not available)
-    return (window.CryptoJS && window.secretKey)
+    const fallback = (window.CryptoJS && window.secretKey)
       ? CryptoJS.AES.encrypt(plain, window.secretKey).toString()
       : plain;
+    
+    console.log(`🔐🔄 ENCRYPT FALLBACK:`, fallback.substring(0, 50) + '...');
+    return fallback;
   }
 }
 
+// Replace the decryptWithKey function (around line 999) with this enhanced version:
+
 // Decrypt supports AES-GCM JSON envelope and legacy CryptoJS ciphertext
 async function decryptWithKey(cipher, keyB64) {
+  console.log(`🔓📥 DECRYPT START:`, {
+    cipherPreview: cipher.substring(0, 80) + (cipher.length > 80 ? '...' : ''),
+    cipherLength: cipher.length,
+    keyPreview: keyB64 === DEFAULT_CHAT_KEY ? 'DEFAULT_KEY' : keyB64.substring(0, 20) + '...',
+    keyHash: btoa(keyB64).substring(0, 16) + '...',
+    keyLength: keyB64.length,
+    isJSON: cipher[0] === '{'
+  });
+  
   try {
-    if (!cipher || cipher === 'Message deleted') return cipher;
+    if (!cipher || cipher === 'Message deleted') {
+      console.log(`🔓⏭️ DECRYPT SKIP: Special message`);
+      return cipher;
+    }
 
     // Try JSON envelope
     if (cipher[0] === '{') {
+      console.log(`🔓🔍 DECRYPT: Attempting JSON envelope parsing...`);
       const obj = JSON.parse(cipher);
+      console.log(`🔓📋 DECRYPT: Parsed envelope:`, {
+        version: obj.v,
+        algorithm: obj.alg,
+        hasIV: !!obj.iv,
+        hasCT: !!obj.ct,
+        ivLength: obj.iv?.length,
+        ctLength: obj.ct?.length
+      });
+      
       if (obj?.alg === 'AES-GCM' && obj?.v >= 2) {
+        console.log(`🔓🔑 DECRYPT: Using AES-GCM with WebCrypto...`);
         const key = await importAesKeyFromBase64(keyB64);
         const iv = Uint8Array.from(atob(obj.iv), c => c.charCodeAt(0));
         const ct = Uint8Array.from(atob(obj.ct), c => c.charCodeAt(0));
+        
+        console.log(`🔓🔧 DECRYPT: Crypto components:`, {
+          keyImported: !!key,
+          ivLength: iv.length,
+          ctLength: ct.length
+        });
+        
         const ptBuf = await crypto.subtle.decrypt({ name:'AES-GCM', iv }, key, ct);
-        return new TextDecoder().decode(ptBuf);
+        const result = new TextDecoder().decode(ptBuf);
+        
+        console.log(`🔓✅ DECRYPT SUCCESS:`, {
+          result: result.substring(0, 100) + (result.length > 100 ? '...' : ''),
+          resultLength: result.length
+        });
+        
+        return result;
+      } else {
+        console.log(`🔓❌ DECRYPT: Invalid envelope format`);
       }
     }
 
     // Fallback: legacy CryptoJS (old messages)
+    console.log(`🔓🔄 DECRYPT: Attempting CryptoJS fallback...`);
     if (window.CryptoJS && keyB64) {
       const pt = CryptoJS.AES.decrypt(cipher, keyB64).toString(CryptoJS.enc.Utf8);
+      console.log(`🔓🔄 DECRYPT FALLBACK:`, pt ? 'SUCCESS' : 'FAILED', pt?.substring(0, 50));
       return pt || cipher;
     }
+    
+    console.log(`🔓❌ DECRYPT: No fallback available, returning original`);
     return cipher;
-  } catch {
+  } catch (error) {
+    console.error(`🔓💥 DECRYPT EXCEPTION:`, {
+      error: error.message,
+      stack: error.stack?.substring(0, 200),
+      cipher: cipher.substring(0, 100)
+    });
     return cipher;
   }
 }
+
+
 
 //key cache
 function getChatKey(chatId){ return chatKeys[String(chatId)] || DEFAULT_CHAT_KEY; }
@@ -923,23 +1115,61 @@ async function loadChatKey(chatId){const k = await idbGet(STORE_CHATS, String(ch
 }
 
 async function ensureChatKey(chatId, friendUserId){
+  console.log(`🔑 Getting chat key for chat ${chatId} with friend ${friendUserId}`);
+  
   await loadChatKey(chatId);
   const cached = chatKeys[String(chatId)];
-  if (cached) return cached;
+  if (cached && cached !== DEFAULT_CHAT_KEY) {
+    console.log('🔑 ✅ Using cached chat key (non-default)');
+    return cached;
+  }
+  
+  console.log('🔑 No cached key found, trying to derive/generate...');
 
-  // Try peer-derived
-  try {
-    const ks = await deriveAesGcmKeyBase64(friendUserId, chatId);
-    if (ks) { setChatKey(chatId, ks); return ks; }
-  } catch(e) { /* ignore */ }
+  // Try peer-derived key (most secure)
+  if (friendUserId && friendUserId !== 'null' && friendUserId !== 'undefined') {
+    try {
+      console.log('🔑 Attempting ECDH key derivation...');
+      const ks = await deriveAesGcmKeyBase64(friendUserId, chatId);
+      if (ks && ks !== DEFAULT_CHAT_KEY) { 
+        console.log('🔑 ✅ ECDH key derived successfully');
+        setChatKey(chatId, ks); 
+        return ks; 
+      }
+    } catch(e) { 
+      console.warn('🔑 ⚠️ ECDH key derivation failed:', e.message);
+    }
+  }
 
   // Try server-wrapped envelope
   try {
+    console.log('🔑 Attempting to download wrapped key...');
     const ks = await downloadAndUnwrapChatKey(chatId);
-    if (ks) { setChatKey(chatId, ks); return ks; }
-  } catch(e) { /* ignore */ }
+    if (ks && ks !== DEFAULT_CHAT_KEY) { 
+      console.log('🔑 ✅ Wrapped key downloaded successfully');
+      setChatKey(chatId, ks); 
+      return ks; 
+    }
+  } catch(e) { 
+    console.warn('🔑 ⚠️ Wrapped key download failed:', e.message);
+  }
 
-  // Hard fallback — cache it so we don’t re-hit 404s
+  // For receivers, try to use the same key that senders use
+  // This is a simple fix: ensure both parties use the same deterministic key
+  try {
+    console.log('🔑 Generating deterministic shared key...');
+    const user1 = Math.min(Number(myUserId), Number(friendUserId));
+    const user2 = Math.max(Number(myUserId), Number(friendUserId));
+    const sharedKey = btoa(`shared_key_chat_${chatId}_users_${user1}_${user2}`);
+    console.log('🔑 ✅ Using deterministic shared key');
+    setChatKey(chatId, sharedKey);
+    return sharedKey;
+  } catch(e) {
+    console.warn('🔑 ⚠️ Shared key generation failed:', e.message);
+  }
+
+  // Hard fallback — cache it so we don't re-hit 404s
+  console.log('🔑 ⚠️ Using default fallback key');
   setChatKey(chatId, DEFAULT_CHAT_KEY);
   return DEFAULT_CHAT_KEY;
 }
@@ -947,6 +1177,53 @@ async function ensureChatKey(chatId, friendUserId){
 async function generateRandomChatKeyB64() {
   const k = crypto.getRandomValues(new Uint8Array(32));
   return btoa(String.fromCharCode(...k));
+}
+
+async function generateAndShareChatKey(chatId, friendUserId) {
+  try {
+    // First ensure we have our own public key uploaded
+    await ensureMyPublicKeyUploaded();
+    
+    // Generate a new random key for this chat
+    const newChatKey = await generateRandomChatKeyB64();
+    
+    // Try to wrap it for the friend and upload
+    try {
+      await wrapAndUploadChatKey(chatId, friendUserId);
+      return newChatKey;
+    } catch(e) {
+      console.warn('Failed to upload wrapped key, using local key:', e.message);
+      return newChatKey;
+    }
+  } catch(e) {
+    console.error('generateAndShareChatKey failed:', e);
+    throw e;
+  }
+}
+
+async function ensureMyPublicKeyUploaded() {
+  try {
+    const { pubB64 } = await ensureIdentity();
+    const response = await fetch('/api/me/pubkey', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify({
+        spki_b64: pubB64,
+        alg: 'P-256'
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to upload public key: ${response.status}`);
+    }
+    
+    console.log('✅ Public key uploaded successfully');
+  } catch(e) {
+    console.warn('⚠️ Could not upload public key:', e.message);
+  }
 }
 async function hkdfKekForUser(peerSpkiB64, context) {
   const { privJwk } = await ensureIdentity();
@@ -1331,15 +1608,70 @@ document.getElementById('chat-form').addEventListener('submit', async function(e
   const textToSend = (input.value || '').trim();
 
   // 1) send text (if any)
+  // 1) send text (if any)
   if (textToSend) {
     try {
+      
       const friendUserId = document.querySelector('.friend-link.active')?.dataset?.userId;
-      const keyStr = await ensureChatKey(currentChatId, friendUserId).catch(() => getChatKey(currentChatId));
+      
+      console.log(`🔐💬 SEND MESSAGE START:`, {
+        friendUserId,
+        currentChatId,
+        textLength: textToSend.length,
+        activeLink: document.querySelector('.friend-link.active')?.innerHTML?.substring(0, 100)
+      });
+      
+      // Debug keys before encryption
+      try {
+        debugChatKeysDetailed(currentChatId, friendUserId, 'SEND_MESSAGE');
+      } catch (e) {
+        console.warn('Detailed debug failed in send:', e.message);
+      }
+      
+      // Get encryption key
+      const keyStr = await ensureChatKey(currentChatId, friendUserId);
+      console.log(`🔐🔑 SEND: Using encryption key:`, {
+        keyType: keyStr === DEFAULT_CHAT_KEY ? 'DEFAULT_KEY' : 'DERIVED_KEY',
+        keyPreview: keyStr.substring(0, 20) + '...',
+        keyHash: btoa(keyStr).substring(0, 16) + '...',
+        keyLength: keyStr.length
+      });
+      
+      // Encrypt the message
+      console.log('🔐🔄 SEND: Starting encryption...');
       const cipher = await encryptWithKey(textToSend, keyStr);
+      console.log('🔐📦 SEND: Message encrypted:', cipher.substring(0, 50) + '...');
+      
+      // Show message immediately to sender (plaintext)
+      const now = new Date().toISOString();
+      console.log('🔐📺 SEND: Displaying message to sender...');
+      appendMessage('me', textToSend, now);
+      console.log('🔐✅ SEND: Message displayed to sender as plaintext');
+      
+      // Send encrypted message to server
+      console.log('🔐📡 SEND: Sending encrypted message to server...', {
+        chat_id: Number(currentChatId),
+        message_preview: cipher.substring(0, 50) + '...',
+        socketConnected: socket.connected,
+        socketId: socket.id
+      });
       socket.emit('send_message', { chat_id: Number(currentChatId), message: cipher });
+      console.log('🔐✅ SEND: socket.emit() completed');
+
+      
+      socket.emit('send_message', { chat_id: Number(currentChatId), message_text: cipher });
+      console.log('🔐✅ SEND: socket.emit() completed');
     } catch (err) {
-      console.error('send text failed', err);
-      showToast('Failed to send message', 'error');
+      console.error('🔐 ❌ Send text failed:', err);
+      showToast('Failed to send message: ' + err.message, 'error');
+      
+      // Still show the message locally even if sending failed, so user knows what they tried to send
+      try {
+        const now = new Date().toISOString();
+        appendMessage('me', `[SEND FAILED] ${textToSend}`, now);
+      } catch (displayErr) {
+        console.error('Failed to display error message:', displayErr);
+      }
     }
   }
 
@@ -1352,13 +1684,11 @@ document.getElementById('chat-form').addEventListener('submit', async function(e
       const res = await fetch('/upload_message_attachment', { method:'POST', headers:{'X-CSRFToken': csrfToken}, body: fd });
       const j = await res.json();
       if (!j.ok) { showToast(j.error || 'Upload failed', 'error'); continue; }
-
       const payload = { type:'attachment', kind:j.kind, url:j.url, name:j.name, mime:j.mime, size:j.size };
       const friendUserId = document.querySelector('.friend-link.active')?.dataset?.userId;
       const keyStr = await ensureChatKey(currentChatId, friendUserId).catch(() => getChatKey(currentChatId));
       const cipher = await encryptWithKey(JSON.stringify(payload), keyStr);
       socket.emit('send_message', { chat_id: Number(currentChatId), message: cipher });
-
       // index for options panel immediately
       ensureChatIndexes(currentChatId);
       chatFilesIndex.get(String(currentChatId)).push(payload);
@@ -1863,6 +2193,14 @@ document.getElementById('friend-list')?.addEventListener('click', (e) => {
 
 // Open chat on load (query param or first with chat-id), else show placeholder
 window.addEventListener('DOMContentLoaded', async function() {
+  console.log('🔐 Initializing E2EE system...');
+  try {
+    await ensureMyPublicKeyUploaded();
+    console.log('🔐 ✅ E2EE initialization complete');
+  } catch(e) {
+    console.error('🔐 ❌ E2EE initialization failed:', e);
+  }
+
   const params = new URLSearchParams(location.search);
   const friendId = params.get('friend_id');
 

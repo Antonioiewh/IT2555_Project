@@ -1,0 +1,620 @@
+{% extends "UserBase.html" %}
+
+{% block title %}Report User{% endblock %}
+{% from "includes/_formHelper.html" import render_field %}
+
+{% block head %}
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<style>
+.google-report-container {
+    min-height: 80vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f8f9fa;
+    padding: 20px;
+}
+
+.google-report-card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    padding: 40px 32px;
+    width: 100%;
+    max-width: 500px;
+    border: 1px solid #dadce0;
+}
+
+.google-report-header {
+    text-align: center;
+    margin-bottom: 32px;
+}
+
+.google-report-icon {
+    width: 48px;
+    height: 48px;
+    background: #ea4335;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+    color: white;
+    font-size: 20px;
+    transition: all 0.3s ease;
+}
+
+.google-report-title {
+    font-size: 24px;
+    font-weight: 400;
+    color: #3c4043;
+    margin: 0 0 8px 0;
+    letter-spacing: -0.5px;
+    transition: all 0.3s ease;
+}
+
+.google-report-subtitle {
+    font-size: 16px;
+    color: #5f6368;
+    font-weight: 400;
+    margin: 0;
+    line-height: 1.4;
+    transition: all 0.3s ease;
+}
+
+.success-state .google-report-icon {
+    background: #34a853;
+    width: 64px;
+    height: 64px;
+    font-size: 28px;
+    animation: checkmark 0.6s ease-in-out;
+}
+
+.success-state .google-report-title {
+    font-size: 28px;
+}
+
+.google-form-group {
+    margin-bottom: 24px;
+}
+
+.google-form-label {
+    display: block;
+    font-size: 14px;
+    color: #3c4043;
+    font-weight: 500;
+    margin-bottom: 8px;
+}
+
+.google-form-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    font-size: 16px;
+    color: #3c4043;
+    background: #fff;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+
+.google-form-input:focus {
+    outline: none;
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+}
+
+.google-form-select {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    font-size: 16px;
+    color: #3c4043;
+    background: #fff;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    font-family: inherit;
+    box-sizing: border-box;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%235f6368' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 12px center;
+    background-repeat: no-repeat;
+    background-size: 16px;
+    padding-right: 40px;
+}
+
+.google-form-select:focus {
+    outline: none;
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+}
+
+.google-form-textarea {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    font-size: 16px;
+    color: #3c4043;
+    background: #fff;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    font-family: inherit;
+    box-sizing: border-box;
+    min-height: 120px;
+    resize: vertical;
+}
+
+.google-form-textarea:focus {
+    outline: none;
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+}
+
+.google-form-input.error,
+.google-form-select.error,
+.google-form-textarea.error {
+    border-color: #ea4335;
+}
+
+.google-form-input.error:focus,
+.google-form-select.error:focus,
+.google-form-textarea.error:focus {
+    border-color: #ea4335;
+    box-shadow: 0 0 0 2px rgba(234, 67, 53, 0.2);
+}
+
+.google-btn {
+    width: 100%;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s, box-shadow 0.2s;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    text-decoration: none;
+}
+
+.google-btn-primary {
+    background: #ea4335;
+    color: #fff;
+}
+
+.google-btn-primary:hover {
+    background: #d33b2c;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.google-btn-primary:disabled {
+    background: #94a3b8;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.google-btn-success {
+    background: #1a73e8;
+    color: #fff;
+}
+
+.google-btn-success:hover {
+    background: #1557b0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    color: #fff;
+    text-decoration: none;
+}
+
+.google-btn-icon {
+    margin-right: 8px;
+    font-size: 16px;
+}
+
+.google-error-text {
+    color: #ea4335;
+    font-size: 12px;
+    margin-top: 4px;
+    display: block;
+}
+
+.g-recaptcha {
+    margin: 20px 0;
+    display: flex;
+    justify-content: center;
+}
+
+.google-info-box {
+    background: #e8f0fe;
+    border: 1px solid #1a73e8;
+    border-radius: 4px;
+    padding: 16px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: flex-start;
+}
+
+.google-info-icon {
+    margin-right: 12px;
+    font-size: 16px;
+    color: #1a73e8;
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+
+.google-info-content {
+    flex: 1;
+    font-size: 14px;
+    color: #3c4043;
+    line-height: 1.4;
+}
+
+.google-confirmation-message {
+    font-size: 16px;
+    color: #3c4043;
+    margin: 0 0 8px 0;
+    line-height: 1.5;
+    text-align: center;
+}
+
+.google-confirmation-submessage {
+    font-size: 14px;
+    color: #5f6368;
+    margin: 0 0 32px 0;
+    line-height: 1.5;
+    text-align: center;
+}
+
+.google-reported-user {
+    background: #f1f3f4;
+    border-radius: 20px;
+    padding: 8px 16px;
+    display: inline-block;
+    font-weight: 500;
+    color: #3c4043;
+    margin: 0 4px;
+    font-family: 'Courier New', monospace;
+}
+
+.google-info-section {
+    background: #e8f0fe;
+    border: 1px solid #1a73e8;
+    border-radius: 4px;
+    padding: 16px;
+    margin: 24px 0;
+    text-align: left;
+}
+
+.google-info-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: #1a73e8;
+    margin: 0 0 8px 0;
+    display: flex;
+    align-items: center;
+}
+
+.google-info-list {
+    font-size: 14px;
+    color: #3c4043;
+    margin: 0;
+    padding-left: 20px;
+    line-height: 1.5;
+}
+
+.google-info-list li {
+    margin-bottom: 4px;
+}
+
+.report-form {
+    transition: opacity 0.3s ease;
+}
+
+.report-form.hidden {
+    display: none;
+}
+
+.confirmation-content {
+    transition: opacity 0.3s ease;
+}
+
+.confirmation-content.hidden {
+    display: none;
+}
+
+@keyframes checkmark {
+    0% {
+        transform: scale(0);
+    }
+    50% {
+        transform: scale(1.2);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+@media (max-width: 768px) {
+    .google-report-card {
+        padding: 32px 24px;
+        margin: 0 16px;
+    }
+}
+</style>
+
+<div class="google-report-container">
+    <div class="google-report-card" id="reportCard">
+        <div class="google-report-header">
+            <div class="google-report-icon" id="reportIcon">
+                <i class="bi bi-flag" id="reportIconContent"></i>
+            </div>
+            <h1 class="google-report-title" id="reportTitle">Report User</h1>
+            <p class="google-report-subtitle" id="reportSubtitle">
+                Help us maintain a safe community by reporting inappropriate behavior
+            </p>
+        </div>
+
+        <!-- Form Content -->
+        <div class="report-form" id="reportForm" {% if report_submitted %}style="display: none;"{% endif %}>
+            <div class="google-info-box">
+                <i class="bi bi-info-circle google-info-icon"></i>
+                <div class="google-info-content">
+                    <strong>Please be specific:</strong> Provide detailed information about the violation to help our moderation team take appropriate action.
+                </div>
+            </div>
+
+            <form method="POST" action="" enctype="multipart/form-data" id="userReportForm">
+                {{ form.hidden_tag() }}
+
+                <div class="google-form-group">
+                    <label for="reported_username" class="google-form-label">Username of User to Report</label>
+                    {{ form.reported_username(class="google-form-input", id="reported_username", placeholder="Enter the username you want to report") }}
+                    {% if form.reported_username.errors %}
+                        {% for error in form.reported_username.errors %}
+                            <span class="google-error-text">{{ error }}</span>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+
+                <div class="google-form-group">
+                    <label for="report_type" class="google-form-label">Type of Report</label>
+                    {{ form.report_type(class="google-form-select", id="report_type") }}
+                    {% if form.report_type.errors %}
+                        {% for error in form.report_type.errors %}
+                            <span class="google-error-text">{{ error }}</span>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+
+                <div class="google-form-group">
+                    <label for="description" class="google-form-label">Description (Please be detailed)</label>
+                    {{ form.description(class="google-form-textarea", id="description", placeholder="Please provide specific details about the violation, including when it occurred and what happened...") }}
+                    {% if form.description.errors %}
+                        {% for error in form.description.errors %}
+                            <span class="google-error-text">{{ error }}</span>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+
+                {% if form.recaptcha %}
+                <div class="google-form-group">
+                    {{ form.recaptcha }}
+                    {% if form.recaptcha.errors %}
+                        {% for error in form.recaptcha.errors %}
+                            <span class="google-error-text">{{ error }}</span>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <button type="submit" class="google-btn google-btn-primary" id="submitBtn">
+                    <i class="bi bi-flag google-btn-icon"></i>
+                    <span id="submitBtnText">Submit Report</span>
+                </button>
+            </form>
+        </div>
+
+        <!-- Confirmation Content -->
+        <div class="confirmation-content" id="confirmationContent" {% if not report_submitted %}style="display: none;"{% endif %}>
+            <p class="google-confirmation-message">
+                Your report concerning<span class="google-reported-user">{% if reported_username %}{{ reported_username }}{% else %}the user{% endif %}</span>has been successfully submitted.
+            </p>
+            
+            <p class="google-confirmation-submessage">
+                Our moderation team will review it shortly. Thank you for helping us maintain a safe community.
+            </p>
+
+            <div class="google-info-section">
+                <div class="google-info-title">
+                    <i class="bi bi-clock google-info-icon"></i>
+                    What happens next?
+                </div>
+                <ul class="google-info-list">
+                    <li>Our team will review your report within 24-48 hours</li>
+                    <li>We'll investigate the reported content or behavior</li>
+                    <li>Appropriate action will be taken if violations are found</li>
+                    <li>You may receive an update on the report status</li>
+                </ul>
+            </div>
+
+            <a href="{{ url_for('home') }}" class="google-btn google-btn-success">
+                <i class="bi bi-house google-btn-icon"></i>
+                Go to Homepage
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('userReportForm');
+    const usernameField = document.getElementById('reported_username');
+    const reportTypeField = document.getElementById('report_type');
+    const descriptionField = document.getElementById('description');
+    const submitBtn = document.getElementById('submitBtn');
+    const submitBtnText = document.getElementById('submitBtnText');
+    
+    // Check if we should show confirmation on page load
+    {% if report_submitted %}
+        showConfirmation('{{ reported_username }}');
+    {% endif %}
+    
+    function showConfirmation(username) {
+        const card = document.getElementById('reportCard');
+        const icon = document.getElementById('reportIcon');
+        const iconContent = document.getElementById('reportIconContent');
+        const title = document.getElementById('reportTitle');
+        const subtitle = document.getElementById('reportSubtitle');
+        const formContent = document.getElementById('reportForm');
+        const confirmationContent = document.getElementById('confirmationContent');
+        
+        // Add success state class
+        card.classList.add('success-state');
+        
+        // Update header
+        iconContent.className = 'bi bi-check-lg';
+        title.textContent = 'Report Submitted!';
+        subtitle.textContent = '';
+        
+        // Hide form, show confirmation
+        formContent.style.display = 'none';
+        confirmationContent.style.display = 'block';
+        
+        // Update reported username in confirmation
+        const reportedUserSpan = confirmationContent.querySelector('.google-reported-user');
+        if (reportedUserSpan && username) {
+            reportedUserSpan.textContent = username;
+        }
+    }
+    
+    // Form validation styling
+    function updateFieldValidation(field, isValid, message = '') {
+        if (isValid) {
+            field.classList.remove('error');
+            const errorSpan = field.parentNode.querySelector('.google-error-text:not([data-server-error])');
+            if (errorSpan) {
+                errorSpan.remove();
+            }
+        } else {
+            field.classList.add('error');
+            let errorSpan = field.parentNode.querySelector('.google-error-text:not([data-server-error])');
+            if (!errorSpan && message) {
+                errorSpan = document.createElement('span');
+                errorSpan.className = 'google-error-text';
+                errorSpan.textContent = message;
+                field.parentNode.appendChild(errorSpan);
+            } else if (errorSpan && message) {
+                errorSpan.textContent = message;
+            }
+        }
+    }
+
+    // Real-time validation
+    usernameField.addEventListener('input', function() {
+        const value = this.value.trim();
+        if (value.length > 0) {
+            updateFieldValidation(this, true);
+        }
+    });
+
+    reportTypeField.addEventListener('change', function() {
+        if (this.value) {
+            updateFieldValidation(this, true);
+        }
+    });
+
+    descriptionField.addEventListener('input', function() {
+        const value = this.value.trim();
+        if (value.length >= 10) {
+            updateFieldValidation(this, true);
+        }
+    });
+
+    // Form submission
+    form.addEventListener('submit', function(e) {
+        let isValid = true;
+        
+        // Username validation
+        if (!usernameField.value.trim()) {
+            updateFieldValidation(usernameField, false, 'Please enter a username to report');
+            isValid = false;
+        } else {
+            updateFieldValidation(usernameField, true);
+        }
+        
+        // Report type validation
+        if (!reportTypeField.value) {
+            updateFieldValidation(reportTypeField, false, 'Please select a report type');
+            isValid = false;
+        } else {
+            updateFieldValidation(reportTypeField, true);
+        }
+        
+        // Description validation
+        if (!descriptionField.value.trim()) {
+            updateFieldValidation(descriptionField, false, 'Please provide a detailed description');
+            isValid = false;
+        } else if (descriptionField.value.trim().length < 10) {
+            updateFieldValidation(descriptionField, false, 'Description must be at least 10 characters long');
+            isValid = false;
+        } else {
+            updateFieldValidation(descriptionField, true);
+        }
+        
+        if (!isValid) {
+            e.preventDefault();
+            // Focus on first invalid field
+            const firstError = form.querySelector('.error');
+            if (firstError) firstError.focus();
+            return;
+        }
+        
+        // Show loading state
+        submitBtn.disabled = true;
+        submitBtnText.innerHTML = '<span class="loading-dots">Submitting</span>';
+    });
+});
+
+// Loading dots animation
+const style = document.createElement('style');
+style.textContent = `
+.loading-dots:after {
+    content: '.';
+    animation: dots 1.5s steps(5, end) infinite;
+}
+
+@keyframes dots {
+    0%, 20% {
+        color: rgba(0,0,0,0);
+        text-shadow:
+            .25em 0 0 rgba(0,0,0,0),
+            .5em 0 0 rgba(0,0,0,0);
+    }
+    40% {
+        color: #fff;
+        text-shadow:
+            .25em 0 0 rgba(0,0,0,0),
+            .5em 0 0 rgba(0,0,0,0);
+    }
+    60% {
+        text-shadow:
+            .25em 0 0 #fff,
+            .5em 0 0 rgba(0,0,0,0);
+    }
+    80%, 100% {
+        text-shadow:
+            .25em 0 0 #fff,
+            .5em 0 0 #fff;
+    }
+}`;
+document.head.appendChild(style);
+</script>
+{% endblock %}

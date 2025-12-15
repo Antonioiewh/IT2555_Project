@@ -1,0 +1,1302 @@
+{% extends "UserBase.html" %}
+{% block title %}My Events Dashboard{% endblock %}
+
+{% block head %}
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<script async defer src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key() }}&callback=initDashboardMaps"></script>
+{% endblock %}
+
+{% block content %}
+<style>
+.google-container {
+    font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #ffffff;
+    min-height: 100vh;
+    padding: 0;
+}
+
+.google-header {
+    background: #fff;
+    border-bottom: 1px solid #e8eaed;
+    padding: 24px 40px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.google-header-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.google-title {
+    font-size: 28px;
+    font-weight: 400;
+    color: #202124;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 0;
+}
+
+.google-title-icon {
+    color: #4285f4;
+    font-size: 28px;
+}
+
+.google-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.google-btn {
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: all 0.15s cubic-bezier(0.4,0.0,0.2,1);
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    text-decoration: none;
+    position: relative;
+    overflow: hidden;
+}
+
+.google-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: currentColor;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.google-btn:hover::before {
+    opacity: 0.04;
+}
+
+.google-btn:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(66,133,244,0.4);
+}
+
+.google-btn-primary {
+    background: #4285f4;
+    color: #fff;
+    box-shadow: 0 1px 2px 0 rgba(66,133,244,0.3);
+}
+
+.google-btn-primary:hover {
+    background: #3367d6;
+    box-shadow: 0 1px 3px 0 rgba(66,133,244,0.5);
+    color: #fff;
+    text-decoration: none;
+}
+
+.google-btn-secondary {
+    background: #fff;
+    color: #3c4043;
+    border: 1px solid #dadce0;
+}
+
+.google-btn-secondary:hover {
+    background: #f8f9fa;
+    box-shadow: 0 1px 1px 0 rgba(65,69,73,0.3), 0 1px 3px 1px rgba(65,69,73,0.15);
+    color: #3c4043;
+    text-decoration: none;
+}
+
+.google-btn-small {
+    font-size: 12px;
+    padding: 6px 12px;
+    min-height: 32px;
+}
+
+.google-main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 32px 40px;
+}
+
+.google-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 24px;
+    margin-bottom: 32px;
+}
+
+.google-stat-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 6px rgba(32,33,36,0.28);
+    border: 1px solid #dadce0;
+    padding: 24px;
+    text-align: center;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.google-stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(32,33,36,0.32);
+}
+
+.google-stat-value {
+    font-size: 2.5rem;
+    font-weight: 400;
+    color: #4285f4;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.google-stat-label {
+    font-size: 14px;
+    color: #5f6368;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-weight: 500;
+}
+
+.google-section-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 6px rgba(32,33,36,0.28);
+    border: 1px solid #dadce0;
+    margin-bottom: 32px;
+    overflow: hidden;
+}
+
+.google-section-header {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e8f0fe 100%);
+    border-bottom: 1px solid #e8eaed;
+    padding: 20px 24px;
+}
+
+.google-section-title {
+    font-size: 1.25rem;
+    font-weight: 500;
+    color: #3c4043;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.google-section-title .material-icons {
+    color: #4285f4;
+    font-size: 24px;
+}
+
+.google-section-count {
+    background: #e8f0fe;
+    color: #1967d2;
+    border-radius: 16px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    margin-left: auto;
+}
+
+.google-section-body {
+    padding: 24px;
+}
+
+.google-event-card {
+    background: #fff;
+    border: 1px solid #e8eaed;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    overflow: hidden;
+    transition: all 0.15s cubic-bezier(0.4,0.0,0.2,1);
+    transform: translateY(0);
+}
+
+.google-event-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(32,33,36,0.28);
+    border-color: #dadce0;
+}
+
+.google-event-header {
+    background: linear-gradient(135deg, #4285f4 0%, #34a853 100%);
+    color: #fff;
+    padding: 16px 20px;
+    font-size: 16px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.google-event-body {
+    padding: 20px;
+}
+
+.google-event-details {
+    font-size: 14px;
+    color: #5f6368;
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+.google-event-details > div {
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.google-event-details .material-icons {
+    width: 16px;
+    font-size: 16px;
+    color: #9aa0a6;
+}
+
+.google-event-description {
+    font-size: 14px;
+    color: #3c4043;
+    margin-bottom: 16px;
+    line-height: 1.6;
+    background: #f8f9fa;
+    padding: 12px;
+    border-radius: 4px;
+    border-left: 3px solid #4285f4;
+}
+
+.google-event-badges {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.google-badge {
+    display: inline-flex;
+    align-items: center;
+    background: #e8f0fe;
+    color: #1967d2;
+    border-radius: 16px;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 10px;
+    gap: 4px;
+    border: 1px solid rgba(26,115,232,0.2);
+}
+
+.google-badge-success {
+    background: #e6f4ea;
+    color: #1e8e3e;
+    border-color: rgba(30,142,62,0.2);
+}
+
+.google-badge-info {
+    background: #fff3e0;
+    color: #e8710a;
+    border-color: rgba(232,113,10,0.2);
+}
+
+.google-badge-reminder {
+    background: #fce8e6;
+    color: #d33b2c;
+    border-color: rgba(211,59,44,0.2);
+}
+
+.google-event-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.google-btn-outline {
+    background: #fff;
+    color: #4285f4;
+    border: 1px solid #dadce0;
+}
+
+.google-btn-outline:hover {
+    background: #f8f9fa;
+    border-color: #4285f4;
+    color: #4285f4;
+    text-decoration: none;
+}
+
+.google-btn-danger {
+    background: #ea4335;
+    color: #fff;
+    box-shadow: 0 1px 2px 0 rgba(234,67,53,0.3);
+}
+
+.google-btn-danger:hover {
+    background: #d33b2c;
+    color: #fff;
+    text-decoration: none;
+}
+
+.google-btn-warning {
+    background: #fbbc04;
+    color: #1f2937;
+    box-shadow: 0 1px 2px 0 rgba(251,188,4,0.3);
+}
+
+.google-btn-warning:hover {
+    background: #f9ab00;
+    color: #1f2937;
+    text-decoration: none;
+}
+
+.google-empty-state {
+    text-align: center;
+    padding: 80px 20px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 6px rgba(32,33,36,0.28);
+    border: 1px solid #dadce0;
+}
+
+.google-empty-icon {
+    font-size: 64px;
+    color: #dadce0;
+    margin-bottom: 24px;
+}
+
+.google-empty-title {
+    font-size: 24px;
+    font-weight: 400;
+    color: #3c4043;
+    margin-bottom: 12px;
+}
+
+.google-empty-subtitle {
+    font-size: 16px;
+    color: #5f6368;
+    margin-bottom: 32px;
+}
+
+.google-empty-actions {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.google-modal .modal-dialog {
+    max-width: 700px;
+    margin: 1rem auto;
+}
+
+.google-modal .modal-content {
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 8px 25px rgba(60,64,67,.3);
+    overflow: hidden;
+}
+
+.google-modal .modal-header {
+    background: #f8f9fa;
+    border-bottom: 1px solid #e8eaed;
+    padding: 24px;
+    position: relative;
+}
+
+.google-modal .modal-title {
+    font-family: 'Google Sans', Arial, sans-serif;
+    font-size: 1.375rem;
+    font-weight: 400;
+    color: #3c4043;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.google-modal .modal-title .material-icons {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #4285f4;
+    color: white;
+    border-radius: 50%;
+    font-size: 16px;
+}
+
+.google-modal .btn-close {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+}
+
+.google-modal .btn-close:hover {
+    background: #f1f3f4;
+}
+
+.google-modal .modal-body {
+    padding: 24px;
+    font-family: 'Google Sans', Arial, sans-serif;
+}
+
+.google-modal .modal-footer {
+    background: #f8f9fa;
+    border-top: 1px solid #e8eaed;
+    padding: 16px 24px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.event-location-info {
+    background: #f8f9fa;
+    border: 1px solid #e8eaed;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    color: #5f6368;
+}
+
+.event-map-container {
+    border: 1px solid #e8eaed;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 16px;
+    background: #f8f9fa;
+}
+
+.event-map {
+    height: 300px;
+    width: 100%;
+}
+
+.directions-btn {
+    background: #4285f4;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.2s;
+    margin-right: 8px;
+}
+
+.directions-btn:hover {
+    background: #3367d6;
+    color: #fff;
+    text-decoration: none;
+}
+
+.participant-list-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    border: 1px solid #e8eaed;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    background: #fff;
+    transition: background 0.15s;
+}
+
+.participant-list-item:hover {
+    background: #f8f9fa;
+}
+
+.participant-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #4285f4;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.participant-info {
+    flex: 1;
+}
+
+.participant-name {
+    font-weight: 500;
+    color: #3c4043;
+    font-size: 14px;
+    margin-bottom: 2px;
+}
+
+.participant-meta {
+    font-size: 12px;
+    color: #5f6368;
+}
+
+.participant-status {
+    background: #e6f4ea;
+    color: #1e8e3e;
+    border-radius: 16px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+@media (max-width: 768px) {
+    .google-header {
+        padding: 16px 20px;
+    }
+    
+    .google-main {
+        padding: 20px 16px;
+    }
+    
+    .google-header-content {
+        flex-direction: column;
+        gap: 16px;
+        align-items: stretch;
+    }
+    
+    .google-title {
+        font-size: 24px;
+        justify-content: center;
+    }
+    
+    .google-stats-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    
+    .google-empty-actions {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .google-empty-actions .google-btn {
+        min-width: 200px;
+    }
+
+    .google-modal .modal-dialog {
+        margin: 0.5rem;
+        max-width: calc(100% - 1rem);
+    }
+    
+    .google-modal .modal-header {
+        padding: 16px;
+    }
+    
+    .google-modal .modal-body {
+        padding: 16px;
+    }
+    
+    .google-modal .modal-footer {
+        padding: 12px 16px;
+        flex-direction: column-reverse;
+    }
+    
+    .google-btn {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .google-section-header {
+        padding: 16px 20px;
+    }
+    
+    .google-section-body {
+        padding: 16px 20px;
+    }
+    
+    .google-event-body {
+        padding: 16px;
+    }
+}
+
+/* Animation for cards */
+.google-event-card {
+    opacity: 0;
+    transform: translateY(20px);
+    animation: fadeInUp 0.3s ease forwards;
+}
+
+@keyframes fadeInUp {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+</style>
+
+<div class="google-container">
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div style="max-width: 1200px; margin: 0 auto; padding: 16px 40px 0;">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Header -->
+    <div class="google-header">
+        <div class="google-header-content">
+            <h1 class="google-title">
+                <span class="material-icons google-title-icon">dashboard</span>
+                My Events Dashboard
+            </h1>
+            <div class="google-actions">
+                <a href="{{ url_for('discover_events') }}" class="google-btn google-btn-secondary">
+                    <span class="material-icons" style="font-size: 18px;">search</span>
+                    Discover Events
+                </a>
+                <a href="{{ url_for('create_event') }}" class="google-btn google-btn-primary">
+                    <span class="material-icons" style="font-size: 18px;">add</span>
+                    Create Event
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="google-main">
+        <!-- Stats -->
+        <div class="google-stats-grid">
+            <div class="google-stat-card">
+                <div class="google-stat-value">
+                    <span class="material-icons" style="font-size: 2.5rem; color: #4285f4;">event_available</span>
+                    {{ created_events|length }}
+                </div>
+                <div class="google-stat-label">
+                    <span class="material-icons" style="font-size: 16px;">create</span>
+                    Events Created
+                </div>
+            </div>
+            <div class="google-stat-card">
+                <div class="google-stat-value">
+                    <span class="material-icons" style="font-size: 2.5rem; color: #34a853;">event_seat</span>
+                    {{ participated_events|length }}
+                </div>
+                <div class="google-stat-label">
+                    <span class="material-icons" style="font-size: 16px;">check_circle</span>
+                    Events Attending
+                </div>
+            </div>
+        </div>
+
+        <!-- Events You Created -->
+        <div class="google-section-card">
+            <div class="google-section-header">
+                <div class="google-section-title">
+                    <span class="material-icons">create</span>
+                    Events You Created
+                    <span class="google-section-count">{{ created_events|length }}</span>
+                </div>
+            </div>
+            <div class="google-section-body">
+                {% if created_events %}
+                    {% for event in created_events %}
+                        {% set participant_count = event.participants.filter_by(status='joined').count() %}
+                        <div class="google-event-card">
+                            <div class="google-event-header">
+                                <span class="material-icons">event</span>
+                                {{ event.title }}
+                            </div>
+                            <div class="google-event-body">
+                                <div class="google-event-details">
+                                    <div>
+                                        <span class="material-icons">calendar_today</span>
+                                        {{ event.event_datetime.strftime('%A, %B %d, %Y') }}
+                                    </div>
+                                    <div>
+                                        <span class="material-icons">schedule</span>
+                                        {{ event.event_datetime.strftime('%I:%M %p') }}
+                                    </div>
+                                    {% if event.location %}
+                                        <div>
+                                            <span class="material-icons">location_on</span>
+                                            {{ event.location }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                
+                                {% if event.description %}
+                                    <div class="google-event-description">
+                                        {{ event.description[:150] }}{% if event.description|length > 150 %}...{% endif %}
+                                    </div>
+                                {% endif %}
+                                
+                                <div class="google-event-badges">
+                                    <span class="google-badge">
+                                        <span class="material-icons" style="font-size: 12px;">group</span>
+                                        {{ participant_count }} attendee{{ 's' if participant_count != 1 else '' }}
+                                    </span>
+                                    {% if event.is_reminder %}
+                                        <span class="google-badge google-badge-reminder">
+                                            <span class="material-icons" style="font-size: 12px;">notifications</span>
+                                            Personal Reminder
+                                        </span>
+                                    {% endif %}
+                                    {% if event.latitude and event.longitude %}
+                                        <span class="google-badge google-badge-success">
+                                            <span class="material-icons" style="font-size: 12px;">location_on</span>
+                                            Location Mapped
+                                        </span>
+                                    {% endif %}
+                                </div>
+                                
+                                <div class="google-event-actions">
+                                    {% if event.latitude and event.longitude %}
+                                        <button type="button" class="google-btn google-btn-outline google-btn-small" data-bs-toggle="modal" data-bs-target="#locationModal{{ event.event_id }}">
+                                            <span class="material-icons" style="font-size: 16px;">location_on</span>
+                                            View Location
+                                        </button>
+                                    {% endif %}
+                                    {% if not event.is_reminder and participant_count > 0 %}
+                                        <button type="button" class="google-btn google-btn-outline google-btn-small" data-bs-toggle="modal" data-bs-target="#viewParticipantsModal{{ event.event_id }}">
+                                            <span class="material-icons" style="font-size: 16px;">group</span>
+                                            View Attendees ({{ participant_count }})
+                                        </button>
+                                    {% endif %}
+                                    <button type="button" class="google-btn google-btn-danger google-btn-small" data-bs-toggle="modal" data-bs-target="#deleteModal{{ event.event_id }}">
+                                        <span class="material-icons" style="font-size: 16px;">delete</span>
+                                        Delete
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Enhanced Location Modal for Created Events -->
+                        {% if event.latitude and event.longitude %}
+                            <div class="modal fade google-modal" id="locationModal{{ event.event_id }}" tabindex="-1" aria-labelledby="locationModalLabel{{ event.event_id }}" aria-hidden="true">
+                                <div class="modal-dialog modal-lg">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title" id="locationModalLabel{{ event.event_id }}">
+                                                <span class="material-icons">location_on</span>
+                                                Location for "{{ event.title|e }}"
+                                            </h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close">
+                                                <span class="material-icons" style="font-size: 16px; color: #5f6368;">close</span>
+                                            </button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div class="event-location-info">
+                                                <div><strong>Event:</strong> {{ event.title }}</div>
+                                                <div><strong>Address:</strong> {{ event.location }}</div>
+                                                <div><strong>Date:</strong> {{ event.event_datetime.strftime('%A, %B %d, %Y at %I:%M %p') }}</div>
+                                                <div><strong>Coordinates:</strong> {{ event.latitude|round(6) }}, {{ event.longitude|round(6) }}</div>
+                                            </div>
+                                            <div class="event-map-container">
+                                                <div id="createdEventMap{{ event.event_id }}" class="event-map"></div>
+                                            </div>
+                                            <div class="text-center">
+                                                <a href="https://www.google.com/maps/dir/?api=1&destination={{ event.latitude }},{{ event.longitude }}" 
+                                                   target="_blank" class="directions-btn">
+                                                    <span class="material-icons" style="font-size: 16px;">directions</span>
+                                                    Get Directions
+                                                </a>
+                                                <a href="https://www.google.com/maps?q={{ event.latitude }},{{ event.longitude }}" 
+                                                   target="_blank" class="google-btn google-btn-secondary">
+                                                    <span class="material-icons" style="font-size: 16px;">map</span>
+                                                    View on Google Maps
+                                                </a>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="google-btn google-btn-secondary" data-bs-dismiss="modal">Close</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endif %}
+
+                        <!-- Enhanced Participants Modal -->
+                        {% if not event.is_reminder %}
+                            <div class="modal fade google-modal" id="viewParticipantsModal{{ event.event_id }}" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">
+                                                <span class="material-icons">group</span>
+                                                Attendees for "{{ event.title|e }}"
+                                            </h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close">
+                                                <span class="material-icons" style="font-size: 16px; color: #5f6368;">close</span>
+                                            </button>
+                                        </div>
+                                        <div class="modal-body">
+                                            {% set participants = event.participants.filter_by(status='joined').all() %}
+                                            {% if participants %}
+                                                <div style="margin-bottom: 16px; padding: 12px; background: #e8f0fe; border-radius: 8px; text-align: center;">
+                                                    <span style="color: #1967d2; font-weight: 500;">{{ participants|length }} attendee{{ 's' if participants|length != 1 else '' }} confirmed</span>
+                                                </div>
+                                                {% for participant in participants %}
+                                                    <div class="participant-list-item">
+                                                        <div class="participant-avatar">
+                                                            {{ participant.participant.username[0].upper() }}
+                                                        </div>
+                                                        <div class="participant-info">
+                                                            <div class="participant-name">{{ participant.participant.username }}</div>
+                                                            <div class="participant-meta">
+                                                                Joined {{ participant.joined_at.strftime('%B %d, %Y at %I:%M %p') }}
+                                                            </div>
+                                                        </div>
+                                                        <div class="participant-status">
+                                                            <span class="material-icons" style="font-size: 12px;">check_circle</span>
+                                                            Confirmed
+                                                        </div>
+                                                    </div>
+                                                {% endfor %}
+                                            {% else %}
+                                                <div class="text-center" style="padding: 40px 20px; color: #5f6368;">
+                                                    <span class="material-icons" style="font-size: 48px; color: #dadce0; margin-bottom: 16px;">group_off</span>
+                                                    <p style="margin: 0;">No one has signed up yet.</p>
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="google-btn google-btn-secondary" data-bs-dismiss="modal">Close</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endif %}
+
+                        <!-- Enhanced Delete Modal -->
+                        <div class="modal fade google-modal" id="deleteModal{{ event.event_id }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">
+                                            <span class="material-icons" style="color: #ea4335;">warning</span>
+                                            Confirm Deletion
+                                        </h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close">
+                                            <span class="material-icons" style="font-size: 16px; color: #5f6368;">close</span>
+                                        </button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div style="padding: 16px; background: #fce8e6; border-radius: 8px; margin-bottom: 16px;">
+                                            <p style="margin: 0; color: #3c4043;"><strong>Are you sure you want to delete "{{ event.title|e }}"?</strong></p>
+                                        </div>
+                                        
+                                        {% if not event.is_reminder and participant_count > 0 %}
+                                            <div style="padding: 16px; background: #fff3e0; border-radius: 8px; margin-bottom: 16px; border-left: 4px solid #fbbc04;">
+                                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                                    <span class="material-icons" style="color: #f9ab00; font-size: 20px;">info</span>
+                                                    <strong style="color: #e8710a;">Important Notice</strong>
+                                                </div>
+                                                <p style="margin: 0; color: #5f6368;">This will notify all <strong>{{ participant_count }} attendee{{ 's' if participant_count != 1 else '' }}</strong> that the event has been cancelled.</p>
+                                            </div>
+                                        {% endif %}
+                                        
+                                        <p style="color: #5f6368; margin: 8px 0;">This action cannot be undone.</p>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="google-btn google-btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <form method="POST" action="{{ url_for('delete_event', event_id=event.event_id) }}" class="d-inline">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                            <button type="submit" class="google-btn google-btn-danger">
+                                                <span class="material-icons" style="font-size: 16px;">delete</span>
+                                                Delete Event
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="google-empty-state">
+                        <div class="google-empty-icon">
+                            <span class="material-icons" style="font-size: inherit;">event_busy</span>
+                        </div>
+                        <h3 class="google-empty-title">No Events Created Yet</h3>
+                        <p class="google-empty-subtitle">Start by creating your first event and invite others to join.</p>
+                        <div class="google-empty-actions">
+                            <a href="{{ url_for('create_event') }}" class="google-btn google-btn-primary">
+                                <span class="material-icons" style="font-size: 16px;">add_circle</span>
+                                Create Your First Event
+                            </a>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Events You're Attending -->
+        <div class="google-section-card">
+            <div class="google-section-header">
+                <div class="google-section-title">
+                    <span class="material-icons">event_seat</span>
+                    Events You're Attending
+                    <span class="google-section-count">{{ participated_events|length }}</span>
+                </div>
+            </div>
+            <div class="google-section-body">
+                {% if participated_events %}
+                    {% for event in participated_events %}
+                        <div class="google-event-card">
+                            <div class="google-event-header">
+                                <span class="material-icons">event</span>
+                                {{ event.title }}
+                            </div>
+                            <div class="google-event-body">
+                                <div class="google-event-details">
+                                    <div>
+                                        <span class="material-icons">calendar_today</span>
+                                        {{ event.event_datetime.strftime('%A, %B %d, %Y') }}
+                                    </div>
+                                    <div>
+                                        <span class="material-icons">schedule</span>
+                                        {{ event.event_datetime.strftime('%I:%M %p') }}
+                                    </div>
+                                    {% if event.location %}
+                                        <div>
+                                            <span class="material-icons">location_on</span>
+                                            {{ event.location }}
+                                        </div>
+                                    {% endif %}
+                                    <div>
+                                        <span class="material-icons">person</span>
+                                        Created by {{ event.creator.username }}
+                                    </div>
+                                </div>
+                                
+                                {% if event.description %}
+                                    <div class="google-event-description">
+                                        {{ event.description[:150] }}{% if event.description|length > 150 %}...{% endif %}
+                                    </div>
+                                {% endif %}
+                                
+                                <div class="google-event-badges">
+                                    {% set total_attendees = event.participants.filter_by(status='joined').count() %}
+                                    <span class="google-badge">
+                                        <span class="material-icons" style="font-size: 12px;">group</span>
+                                        {{ total_attendees }} attendee{{ 's' if total_attendees != 1 else '' }}
+                                    </span>
+                                    <span class="google-badge google-badge-success">
+                                        <span class="material-icons" style="font-size: 12px;">check_circle</span>
+                                        Joined
+                                    </span>
+                                    {% if event.latitude and event.longitude %}
+                                        <span class="google-badge google-badge-success">
+                                            <span class="material-icons" style="font-size: 12px;">location_on</span>
+                                            Location Available
+                                        </span>
+                                    {% endif %}
+                                </div>
+                                
+                                <div class="google-event-actions">
+                                    {% if event.latitude and event.longitude %}
+                                        <button type="button" class="google-btn google-btn-outline google-btn-small" data-bs-toggle="modal" data-bs-target="#attendingLocationModal{{ event.event_id }}">
+                                            <span class="material-icons" style="font-size: 16px;">location_on</span>
+                                            View Location
+                                        </button>
+                                    {% endif %}
+                                    <button type="button" class="google-btn google-btn-warning google-btn-small" data-bs-toggle="modal" data-bs-target="#leaveModal{{ event.event_id }}">
+                                        <span class="material-icons" style="font-size: 16px;">exit_to_app</span>
+                                        Leave Event
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Enhanced Location Modal for Attending Events -->
+                        {% if event.latitude and event.longitude %}
+                            <div class="modal fade google-modal" id="attendingLocationModal{{ event.event_id }}" tabindex="-1">
+                                <div class="modal-dialog modal-lg">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">
+                                                <span class="material-icons">location_on</span>
+                                                Location for "{{ event.title|e }}"
+                                            </h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close">
+                                                <span class="material-icons" style="font-size: 16px; color: #5f6368;">close</span>
+                                            </button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div class="event-location-info">
+                                                <div><strong>Event:</strong> {{ event.title }}</div>
+                                                <div><strong>Address:</strong> {{ event.location }}</div>
+                                                <div><strong>Date:</strong> {{ event.event_datetime.strftime('%A, %B %d, %Y at %I:%M %p') }}</div>
+                                                <div><strong>Organizer:</strong> {{ event.creator.username }}</div>
+                                                <div><strong>Coordinates:</strong> {{ event.latitude|round(6) }}, {{ event.longitude|round(6) }}</div>
+                                            </div>
+                                            <div class="event-map-container">
+                                                <div id="attendingEventMap{{ event.event_id }}" class="event-map"></div>
+                                            </div>
+                                            <div class="text-center">
+                                                <a href="https://www.google.com/maps/dir/?api=1&destination={{ event.latitude }},{{ event.longitude }}" 
+                                                   target="_blank" class="directions-btn">
+                                                    <span class="material-icons" style="font-size: 16px;">directions</span>
+                                                    Get Directions
+                                                </a>
+                                                <a href="https://www.google.com/maps?q={{ event.latitude }},{{ event.longitude }}" 
+                                                   target="_blank" class="google-btn google-btn-secondary">
+                                                    <span class="material-icons" style="font-size: 16px;">map</span>
+                                                    View on Google Maps
+                                                </a>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="google-btn google-btn-secondary" data-bs-dismiss="modal">Close</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endif %}
+
+                        <!-- Enhanced Leave Modal -->
+                        <div class="modal fade google-modal" id="leaveModal{{ event.event_id }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">
+                                            <span class="material-icons" style="color: #fbbc04;">help</span>
+                                            Confirm Leave
+                                        </h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close">
+                                            <span class="material-icons" style="font-size: 16px; color: #5f6368;">close</span>
+                                        </button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div style="padding: 16px; background: #fff3e0; border-radius: 8px; margin-bottom: 16px;">
+                                            <p style="margin: 0; color: #3c4043;"><strong>Are you sure you want to leave "{{ event.title|e }}"?</strong></p>
+                                        </div>
+                                        <p style="color: #5f6368; margin: 8px 0;">You can always join again later if the event is still available.</p>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="google-btn google-btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <form method="POST" action="{{ url_for('leave_event', event_id=event.event_id) }}" class="d-inline">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                            <button type="submit" class="google-btn google-btn-warning">
+                                                <span class="material-icons" style="font-size: 16px;">exit_to_app</span>
+                                                Leave Event
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="google-empty-state">
+                        <div class="google-empty-icon">
+                            <span class="material-icons" style="font-size: inherit;">event_busy</span>
+                        </div>
+                        <h3 class="google-empty-title">No Events Joined Yet</h3>
+                        <p class="google-empty-subtitle">Discover and join events created by other users in your community.</p>
+                        <div class="google-empty-actions">
+                            <a href="{{ url_for('discover_events') }}" class="google-btn google-btn-primary">
+                                <span class="material-icons" style="font-size: 16px;">search</span>
+                                Discover Events
+                            </a>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function initDashboardMaps() {
+    // This function will be called after Google Maps API loads
+    console.log('Dashboard maps initialized');
+}
+
+// Initialize individual event maps
+{% for event in created_events %}
+    {% if event.latitude and event.longitude %}
+    function initCreatedEventMap{{ event.event_id }}() {
+        const location = { lat: {{ event.latitude }}, lng: {{ event.longitude }} };
+        
+        const mapContainer = document.getElementById('createdEventMap{{ event.event_id }}');
+        if (!mapContainer) return;
+        
+        const map = new google.maps.Map(mapContainer, {
+            zoom: 15,
+            center: location,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: false,
+            gestureHandling: 'cooperative',
+            styles: [
+                {
+                    featureType: 'poi',
+                    elementType: 'labels',
+                    stylers: [{ visibility: 'off' }]
+                }
+            ]
+        });
+        
+        const marker = new google.maps.Marker({
+            position: location,
+            map: map,
+            title: '{{ event.title|e }}',
+            animation: google.maps.Animation.DROP,
+            icon: {
+                url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+            }
+        });
+        
+        const infoWindow = new google.maps.InfoWindow({
+            content: `
+                <div style="font-family: Google Sans, Arial, sans-serif; padding: 8px;">
+                    <strong>{{ event.title|e }}</strong><br>
+                    {{ event.location|e }}<br>
+                    <small style="color: #5f6368;">{{ event.event_datetime.strftime('%B %d, %Y at %I:%M %p') }}</small>
+                </div>
+            `
+        });
+        
+        marker.addListener('click', function() {
+            infoWindow.open(map, marker);
+        });
+    }
+    {% endif %}
+{% endfor %}
+
+{% for event in participated_events %}
+    {% if event.latitude and event.longitude %}
+    function initAttendingEventMap{{ event.event_id }}() {
+        const location = { lat: {{ event.latitude }}, lng: {{ event.longitude }} };
+        
+        const mapContainer = document.getElementById('attendingEventMap{{ event.event_id }}');
+        if (!mapContainer) return;
+        
+        const map = new google.maps.Map(mapContainer, {
+            zoom: 15,
+            center: location,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: false,
+            gestureHandling: 'cooperative',
+            styles: [
+                {
+                    featureType: 'poi',
+                    elementType: 'labels',
+                    stylers: [{ visibility: 'off' }]
+                }
+            ]
+        });
+        
+        const marker = new google.maps.Marker({
+            position: location,
+            map: map,
+            title: '{{ event.title|e }}',
+            animation: google.maps.Animation.DROP,
+            icon: {
+                url: 'https://maps.google.com/mapfiles/ms/icons/green-dot.png'
+            }
+        });
+        
+        const infoWindow = new google.maps.InfoWindow({
+            content: `
+                <div style="font-family: Google Sans, Arial, sans-serif; padding: 8px;">
+                    <strong>{{ event.title|e }}</strong><br>
+                    {{ event.location|e }}<br>
+                    <small style="color: #5f6368;">Created by {{ event.creator.username }}</small><br>
+                    <small style="color: #5f6368;">{{ event.event_datetime.strftime('%B %d, %Y at %I:%M %p') }}</small>
+                </div>
+            `
+        });
+        
+        marker.addListener('click', function() {
+            infoWindow.open(map, marker);
+        });
+    }
+    {% endif %}
+{% endfor %}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-dismiss alerts with animation
+    setTimeout(function() {
+        var alerts = document.querySelectorAll('.alert');
+        alerts.forEach(function(alert) {
+            if (bootstrap && bootstrap.Alert) {
+                var bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            }
+        });
+    }, 5000);
+
+    // Initialize maps when modals are shown
+    {% for event in created_events %}
+        {% if event.latitude and event.longitude %}
+        const createdModal{{ event.event_id }} = document.getElementById('locationModal{{ event.event_id }}');
+        if (createdModal{{ event.event_id }}) {
+            createdModal{{ event.event_id }}.addEventListener('shown.bs.modal', function() {
+                setTimeout(() => initCreatedEventMap{{ event.event_id }}(), 200);
+            });
+        }
+        {% endif %}
+    {% endfor %}
+
+    {% for event in participated_events %}
+        {% if event.latitude and event.longitude %}
+        const attendingModal{{ event.event_id }} = document.getElementById('attendingLocationModal{{ event.event_id }}');
+        if (attendingModal{{ event.event_id }}) {
+            attendingModal{{ event.event_id }}.addEventListener('shown.bs.modal', function() {
+                setTimeout(() => initAttendingEventMap{{ event.event_id }}(), 200);
+            });
+        }
+        {% endif %}
+    {% endfor %}
+
+    // Add stagger animation to event cards
+    const eventCards = document.querySelectorAll('.google-event-card');
+    eventCards.forEach((card, index) => {
+        card.style.animationDelay = `${index * 0.1}s`;
+    });
+
+    // Add hover effects to stat cards
+    const statCards = document.querySelectorAll('.google-stat-card');
+    statCards.forEach(card => {
+        card.addEventListener('mouseenter', function() {
+            this.style.transform = 'translateY(-4px)';
+        });
+        card.addEventListener('mouseleave', function() {
+            this.style.transform = 'translateY(-2px)';
+        });
+    });
+});
+</script>
+{% endblock %}

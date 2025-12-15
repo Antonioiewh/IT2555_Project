@@ -1,0 +1,646 @@
+{% extends "UserBase.html" %}
+{% block title %}Account Security{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 800px; margin: 2rem auto; padding: 0 1rem;">
+    <!-- Header Section -->
+    <div class="security-header mb-4">
+        <h1 class="security-title">How you sign in to SimpleBook</h1>
+        <p class="security-subtitle">Make sure you can always access your SimpleBook Account by keeping this information up to date</p>
+    </div>
+
+    <!-- Security Options List -->
+    <div class="security-options">
+        
+        <!-- 2-Step Verification -->
+        <div class="security-card" onclick="toggle2FA()">
+            <div class="security-icon">
+                <i class="bi bi-shield-check"></i>
+            </div>
+            <div class="security-content">
+                <div class="security-label">2-Step Verification</div>
+                <div class="security-status {% if has_2fa %}status-on{% else %}status-off{% endif %}">
+                    {% if has_2fa %}
+                        <i class="bi bi-check-circle-fill"></i> On since {{ current_user.created_at.strftime('%b %d, %Y') }}
+                    {% else %}
+                        <i class="bi bi-x-circle"></i> Off
+                    {% endif %}
+                </div>
+            </div>
+            <div class="security-arrow">
+                <i class="bi bi-chevron-right"></i>
+            </div>
+        </div>
+
+        <!-- Passkeys Section -->
+        <div class="security-card" onclick="togglePasskeys()">
+            <div class="security-icon">
+                <i class="bi bi-key"></i>
+            </div>
+            <div class="security-content">
+                <div class="security-label">Passkeys and security keys</div>
+                <div class="security-status">
+                    {% if current_user.webauthn_credentials %}
+                        {{ current_user.webauthn_credentials|length }} passkey{% if current_user.webauthn_credentials|length != 1 %}s{% endif %}
+                    {% else %}
+                        No passkeys registered
+                    {% endif %}
+                </div>
+            </div>
+            <div class="security-arrow">
+                <i class="bi bi-chevron-right"></i>
+            </div>
+        </div>
+        <div class="security-card" onclick="changePassword()">
+            <div class="security-icon">
+                <i class="bi bi-shield-lock"></i>
+            </div>
+            <div class="security-content">
+                <div class="security-label">Change password</div>
+                <div class="security-status">
+                    Update your account password
+                </div>
+            </div>
+            <div class="security-arrow">
+                <i class="bi bi-chevron-right"></i>
+            </div>
+        </div>
+        <!-- Password Section -->
+        <div class="security-card" onclick="showPasswordInfo()">
+            <div class="security-icon">
+                <i class="bi bi-three-dots"></i>
+            </div>
+            <div class="security-content">
+                <div class="security-label">Password</div>
+                <div class="security-status">
+                    Last changed {{ current_user.updated_at.strftime('%b %d, %Y') }}
+                </div>
+            </div>
+            <div class="security-arrow">
+                <i class="bi bi-chevron-right"></i>
+            </div>
+        </div>
+        
+
+        <!-- Skip Password When Possible -->
+        <div class="security-card" onclick="toggleSkipPassword()">
+            <div class="security-icon">
+                <i class="bi bi-people"></i>
+            </div>
+            <div class="security-content">
+                <div class="security-label">Skip password when possible</div>
+                <div class="security-status status-on">
+                    <i class="bi bi-check-circle-fill"></i> Available when passkeys are set up
+                </div>
+            </div>
+            <div class="security-arrow">
+                <i class="bi bi-chevron-right"></i>
+            </div>
+        </div>
+
+        <!-- Recovery Information -->
+        <div class="security-card" onclick="showRecoveryInfo()">
+            <div class="security-icon">
+                <i class="bi bi-telephone"></i>
+            </div>
+            <div class="security-content">
+                <div class="security-label">Recovery phone</div>
+                <div class="security-status">
+                    {% if current_user.phone_number %}
+                        {{ current_user.phone_number }}
+                    {% else %}
+                        Not set
+                    {% endif %}
+                </div>
+            </div>
+            <div class="security-arrow">
+                <i class="bi bi-chevron-right"></i>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- 2FA Management Modal -->
+<div class="modal fade" id="twoFAModal" tabindex="-1" aria-labelledby="twoFAModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header border-0">
+                <h5 class="modal-title" id="twoFAModalLabel">
+                    <i class="bi bi-shield-check me-2"></i>2-Step Verification
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                {% if has_2fa %}
+                    <div class="alert alert-success d-flex align-items-center">
+                        <i class="bi bi-check-circle-fill me-2"></i>
+                        <div>2-Step verification is currently <strong>enabled</strong> on your account.</div>
+                    </div>
+                    <p class="text-muted">This adds an extra layer of security to your account by requiring a verification code in addition to your password.</p>
+                    
+                    <form method="POST" action="{{ url_for('disable_2fa') }}" class="mt-4">
+                        {{ form.hidden_tag() }}
+                        <button type="submit" class="btn btn-outline-danger">
+                            <i class="bi bi-shield-x me-2"></i>Turn off 2-Step Verification
+                        </button>
+                    </form>
+                {% else %}
+                    <div class="alert alert-warning d-flex align-items-center">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        <div>2-Step verification is currently <strong>disabled</strong>.</div>
+                    </div>
+                    <p class="text-muted mb-4">Protect your account with an extra layer of security. Once configured, you'll be required to enter both your password and a verification code from your authenticator app to sign in.</p>
+                    
+                    <div class="d-grid">
+                        <a href="{{ url_for('enable_2fa') }}" class="btn btn-primary btn-lg">
+                            <i class="bi bi-shield-plus me-2"></i>Get Started with 2-Step Verification
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Passkeys Management Modal -->
+<div class="modal fade" id="passkeysModal" tabindex="-1" aria-labelledby="passkeysModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header border-0">
+                <h5 class="modal-title" id="passkeysModalLabel">
+                    <i class="bi bi-key me-2"></i>Passkeys and security keys
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-4">Passkeys are a more secure and convenient alternative to passwords. Use your device's built-in security to sign in with just a touch or glance.</p>
+                
+                <div id="passkeys-container">
+                    {% if current_user.webauthn_credentials %}
+                        <div class="passkeys-list mb-4">
+                            <h6 class="mb-3">Your passkeys</h6>
+                            {% for cred in current_user.webauthn_credentials %}
+                                <div class="passkey-item d-flex justify-content-between align-items-center">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-key-fill text-primary me-3"></i>
+                                        <div>
+                                            <div class="fw-medium">{{ cred.nickname or 'Unnamed Passkey' }}</div>
+                                            <small class="text-muted">Added {{ cred.added_at.strftime('%b %d, %Y') }}</small>
+                                        </div>
+                                    </div>
+                                    <form method="POST" action="{{ url_for('remove_passkey', cred_id=cred.id) }}" style="display:inline;">
+                                        {{ form1.hidden_tag() }}
+                                        <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('Remove this passkey? You will no longer be able to use it to sign in.')">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="bi bi-key text-muted" style="font-size: 3rem;"></i>
+                            <h6 class="mt-3 text-muted">No passkeys registered</h6>
+                            <p class="text-muted small">Add a passkey to sign in more securely</p>
+                        </div>
+                    {% endif %}
+                </div>
+                
+                <div class="d-grid mt-4">
+                    <button id="add-passkey-btn" class="btn btn-primary">
+                        <i class="bi bi-plus-circle me-2"></i>Add a passkey
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Password Info Modal -->
+<div class="modal fade" id="passwordModal" tabindex="-1" aria-labelledby="passwordModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header border-0">
+                <h5 class="modal-title" id="passwordModalLabel">
+                    <i class="bi bi-three-dots me-2"></i>Password
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info d-flex align-items-center">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <div>Your password was last changed on {{ current_user.updated_at.strftime('%B %d, %Y') }}.</div>
+                </div>
+                <p class="text-muted">Password changes are currently managed by administrators. Contact support if you need to change your password.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Custom Styles -->
+<style>
+.security-header {
+    margin-bottom: 2rem;
+}
+
+.security-title {
+    font-size: 2rem;
+    font-weight: 400;
+    color: #202124;
+    margin-bottom: 0.5rem;
+}
+
+.security-subtitle {
+    font-size: 1rem;
+    color: #5f6368;
+    margin-bottom: 0;
+    line-height: 1.5;
+}
+
+.security-options {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background-color: #dadce0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.security-card {
+    background: white;
+    padding: 1.5rem;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    border: none;
+}
+
+.security-card:hover {
+    background-color: #f8f9fa;
+}
+
+.security-icon {
+    margin-right: 1rem;
+    width: 24px;
+    display: flex;
+    justify-content: center;
+}
+
+.security-icon i {
+    font-size: 1.25rem;
+    color: #5f6368;
+}
+
+.security-content {
+    flex-grow: 1;
+    min-width: 0;
+}
+
+.security-label {
+    font-size: 1rem;
+    font-weight: 400;
+    color: #202124;
+    margin-bottom: 0.25rem;
+}
+
+.security-status {
+    font-size: 0.875rem;
+    color: #5f6368;
+    display: flex;
+    align-items: center;
+}
+
+.security-status.status-on {
+    color: #137333;
+}
+
+.security-status.status-on i {
+    color: #137333;
+    margin-right: 0.5rem;
+}
+
+.security-status.status-off {
+    color: #d93025;
+}
+
+.security-status.status-off i {
+    color: #d93025;
+    margin-right: 0.5rem;
+}
+
+.security-arrow {
+    margin-left: 1rem;
+    color: #5f6368;
+}
+
+.security-arrow i {
+    font-size: 1rem;
+}
+
+.modal-content {
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+
+.modal-header {
+    padding: 2rem 2rem 1rem 2rem;
+}
+
+.modal-body {
+    padding: 0 2rem 2rem 2rem;
+}
+
+.modal-title {
+    font-size: 1.375rem;
+    font-weight: 400;
+    color: #202124;
+}
+
+.passkey-item {
+    background-color: #f8f9fa;
+    border: 1px solid #e8eaed !important;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+}
+
+.passkey-item:hover {
+    background-color: #f1f3f4;
+}
+
+@media (max-width: 768px) {
+    .container {
+        max-width: 100% !important;
+        margin: 1rem auto !important;
+        padding: 0 0.5rem !important;
+    }
+    
+    .security-title {
+        font-size: 1.5rem;
+    }
+    
+    .security-card {
+        padding: 1rem;
+    }
+    
+    .modal-header, .modal-body {
+        padding: 1.5rem;
+    }
+}
+
+.btn-primary {
+    background-color: #1a73e8;
+    border-color: #1a73e8;
+    border-radius: 4px;
+    font-weight: 500;
+    padding: 0.75rem 1.5rem;
+}
+
+.btn-primary:hover {
+    background-color: #1557b0;
+    border-color: #1557b0;
+}
+
+.btn-outline-danger {
+    color: #d93025;
+    border-color: #d93025;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.btn-outline-danger:hover {
+    background-color: #d93025;
+    border-color: #d93025;
+}
+
+/* Alert Customizations */
+.alert {
+    border-radius: 4px;
+    border: none;
+}
+
+.alert-success {
+    background-color: #e8f5e8;
+    color: #137333;
+}
+
+.alert-warning {
+    background-color: #fef7e0;
+    color: #f9ab00;
+}
+
+.alert-info {
+    background-color: #e8f0fe;
+    color: #1a73e8;
+}
+</style>
+
+
+<!-- JavaScript for Modal Management and Passkey Functionality -->
+<!-- JavaScript for Modal Management and Passkey Functionality -->
+<script>
+// Wait for DOM to be fully loaded before attaching event handlers
+document.addEventListener('DOMContentLoaded', function() {
+    
+    // Modal toggle functions
+    window.toggle2FA = function() {
+        const modal = new bootstrap.Modal(document.getElementById('twoFAModal'));
+        modal.show();
+    }
+
+    window.togglePasskeys = function() {
+        const modal = new bootstrap.Modal(document.getElementById('passkeysModal'));
+        modal.show();
+    }
+
+    window.showPasswordInfo = function() {
+        const modal = new bootstrap.Modal(document.getElementById('passwordModal'));
+        modal.show();
+    }
+
+    window.toggleSkipPassword = function() {
+        alert('Skip password setting is automatically enabled when passkeys are available.');
+    }
+
+    window.showRecoveryInfo = function() {
+        alert('Recovery information management will be available in a future update.');
+    }
+
+    // Show alert function for better UX
+    function showAlert(message, type) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+        alertDiv.innerHTML = `
+            <i class="bi bi-${type === 'success' ? 'check-circle-fill' : 'exclamation-triangle-fill'} me-2"></i>
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        const container = document.getElementById('passkeys-container');
+        if (container) {
+            container.insertBefore(alertDiv, container.firstChild);
+            
+            // Auto dismiss after 3 seconds
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.remove();
+                }
+            }, 3000);
+        }
+    }
+
+    // PASSKEY FUNCTIONALITY - Simplified version
+    const addPasskeyBtn = document.getElementById('add-passkey-btn');
+    if (addPasskeyBtn) {
+        addPasskeyBtn.onclick = async function() {
+            try {
+                // Show loading state
+                this.disabled = true;
+                this.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Creating passkey...';
+                
+                // Step 1: Get the response from server
+                const res = await fetch('/passkey/begin_register', {method: 'POST'});
+                const responseData = await res.json();
+                
+                //console.log('=== STEP 1: Server Response ===');
+                //console.log('responseData:', responseData);
+                //console.log('typeof responseData:', typeof responseData);
+                
+                if (responseData.error) {
+                    showAlert("Error: " + responseData.error, 'danger');
+                    return;
+                }
+
+                // Step 2: Extract publicKey - handle both possible structures
+                let publicKey;
+                if (responseData.publicKey) {
+                    // If wrapped in publicKey
+                    publicKey = responseData.publicKey;
+                    //console.log('=== Using nested publicKey structure ===');
+                } else {
+                    // If direct structure
+                    publicKey = responseData;
+                    //console.log('=== Using direct structure ===');
+                }
+                
+                //console.log('=== STEP 2: PublicKey Object ===');
+                //console.log('publicKey:', publicKey);
+                //console.log('typeof publicKey:', typeof publicKey);
+                
+                // Step 3: Validate structure
+                //console.log('=== STEP 3: Validation ===');
+                //console.log('publicKey.user exists:', !!publicKey.user);
+                //console.log('publicKey.user:', publicKey.user);
+                
+                if (publicKey.user) {
+                    //console.log('publicKey.user.id exists:', !!publicKey.user.id);
+                    //console.log('publicKey.user.id:', publicKey.user.id);
+                    //console.log('typeof publicKey.user.id:', typeof publicKey.user.id);
+                }
+                
+                //console.log('publicKey.challenge exists:', !!publicKey.challenge);
+                //console.log('publicKey.challenge:', publicKey.challenge);
+                //console.log('typeof publicKey.challenge:', typeof publicKey.challenge);
+                
+                // Basic validation
+                if (!publicKey.user || !publicKey.user.id || !publicKey.challenge) {
+                    //console.error('=== VALIDATION FAILED ===');
+                    //console.error('Missing required fields in publicKey');
+                    showAlert("Error: Invalid server response structure", 'danger');
+                    return;
+                }
+
+                // Step 4: Convert base64 to buffers
+                //console.log('=== STEP 4: Converting Base64 ===');
+                
+                function b64ToBuf(b64) {
+                    //console.log('Converting:', b64, 'type:', typeof b64);
+                    const result = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+                    //console.log('Result length:', result.length);
+                    return result;
+                }
+
+                // Create a copy to avoid modifying original
+                const passkeyOptions = {
+                    challenge: b64ToBuf(publicKey.challenge),
+                    user: {
+                        id: b64ToBuf(publicKey.user.id),
+                        name: publicKey.user.name,
+                        displayName: publicKey.user.displayName
+                    },
+                    rp: publicKey.rp,
+                    pubKeyCredParams: publicKey.pubKeyCredParams,
+                    authenticatorSelection: publicKey.authenticatorSelection,
+                    excludeCredentials: publicKey.excludeCredentials ? 
+                        publicKey.excludeCredentials.map(cred => ({
+                            ...cred,
+                            id: b64ToBuf(cred.id)
+                        })) : []
+                };
+                
+                //console.log('=== STEP 5: Final Options ===');
+                //console.log('passkeyOptions:', passkeyOptions);
+
+                // Step 5: Create credential
+                //console.log('=== STEP 6: Creating Credential ===');
+                const cred = await navigator.credentials.create({publicKey: passkeyOptions});
+                //console.log('Credential created:', cred);
+                
+                // Step 6: Send to server
+                const attestation = {
+                    id: cred.id,
+                    rawId: btoa(String.fromCharCode(...new Uint8Array(cred.rawId))),
+                    type: cred.type,
+                    response: {
+                        clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(cred.response.clientDataJSON))),
+                        attestationObject: btoa(String.fromCharCode(...new Uint8Array(cred.response.attestationObject))),
+                    },
+                    nickname: prompt("Give a name to this passkey:", "My Device") || "My Passkey"
+                };
+
+                console.log('=== STEP 7: Finishing Registration ===');
+                const finishRes = await fetch('/passkey/finish_register', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(attestation)
+                });
+                
+                const finishData = await finishRes.json();
+                console.log('Server finish response:', finishData);
+                
+                if (finishData.success) {
+                    showAlert('Passkey added successfully!', 'success');
+                    setTimeout(() => location.reload(), 2000);
+                } else {
+                    //showAlert('Failed to add passkey: ' + (finishData.error || 'Unknown error'), 'danger');
+                }
+                
+            } catch (error) {
+                console.error('=== ERROR ===');
+                console.error('Error creating passkey:', error);
+                console.error('Stack:', error.stack);
+                showAlert('Error creating passkey: ' + error.message, 'danger');
+            } finally {
+                // Reset button state
+                this.disabled = false;
+                this.innerHTML = '<i class="bi bi-plus-circle me-2"></i>Add a passkey';
+            }
+        };
+    }
+
+})
+
+window.changePassword = function() {
+    window.location.href = "{{ url_for('change_password') }}";
+};
+</script>
+
+{% endblock %}
+
+
+
+
+

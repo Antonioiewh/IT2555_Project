@@ -1,0 +1,154 @@
+{% extends "UserBase.html" %}
+{% block title %}Discover Friends Page{% endblock %}
+
+{% block head %}
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<style>
+:root{
+  --ink:#202124; --muted:#5f6368; --border:#e8eaed; --ring:0 0 0 3px rgba(26,115,232,0.18);
+  --gblue:#1a73e8; --surface:#fff; --bg:#f8f9fa;
+}
+.df-wrap{
+  font-family:'Google Sans', -apple-system, BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+  padding: 16px 12px;
+}
+.df-head{
+  display:flex; align-items:center; gap:16px; justify-content:space-between;
+  max-width:1100px; margin: 8px auto 18px;
+}
+.df-title{ display:flex; align-items:center; gap:10px; font-size:24px; font-weight:600; color:#1f2937; margin:0; }
+.df-title .material-icons{ color:var(--gblue); }
+.df-searchbar{
+  display:flex; gap:10px; width:100%; max-width:640px;
+}
+.df-input{
+  flex:1; border:1px solid var(--border); border-radius:24px; padding:12px 16px 12px 44px;
+  background:#f8f9fa; transition:all .15s; position:relative; outline:none;
+}
+.df-input:focus{ background:#fff; border-color:#c7d2fe; box-shadow:var(--ring); }
+.df-input-wrap{ position:relative; flex:1; }
+.df-input-wrap .material-icons{ position:absolute; left:14px; top:50%; transform:translateY(-50%); color:#9aa0a6; }
+.df-btn{ border:1px solid var(--border); background:#fff; border-radius:24px; padding:10px 16px; font-weight:500; }
+.df-btn:hover{ background:#f8f9fa; }
+
+.df-grid{
+  display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap:16px;
+  max-width:1100px; margin: 0 auto;
+}
+.df-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:16px; text-align:center;
+  padding:18px; box-shadow:0 1px 6px rgba(32,33,36,.12); transition:transform .15s, box-shadow .15s;
+  display:flex; flex-direction:column; align-items:center;
+}
+.df-card:hover{ transform:translateY(-2px); box-shadow:0 6px 18px rgba(32,33,36,.18); }
+
+.df-avatar{
+  width:88px; height:88px; border-radius:50%; overflow:hidden; margin:2px auto 10px; position:relative;
+  border: 3px solid transparent; background:
+   linear-gradient(#fff,#fff) padding-box,
+   conic-gradient(#1a73e8,#3b82f6,#60a5fa,#1a73e8) border-box; /* Instagram-like ring */
+}
+.df-avatar img{ width:100%; height:100%; object-fit:cover; border-radius:50%; }
+.df-name{ font-weight:600; color:#1f2937; margin-top:6px; }
+.df-bio{ font-size:13px; color:var(--muted); min-height:18px; margin-top:4px; text-wrap:balance; }
+
+.df-actions{ margin-top:12px; display:flex; gap:8px; width:100%; flex-wrap:wrap; justify-content:center; }
+.btn-g{ border:none; border-radius:20px; padding:8px 14px; font-size:14px; font-weight:500; cursor:pointer; transition:filter .15s; width:100%; }
+.btn-g:disabled{ opacity:.75; cursor:default; }
+.btn-primary-g{ background:var(--gblue); color:#fff; }
+.btn-primary-g:hover{ filter:brightness(.96); }
+.btn-secondary-g{ background:#fff; color:#3c4043; border:1px solid var(--border); }
+.btn-secondary-g:hover{ background:#f8f9fa; }
+.btn-outline-g{ background:#fff; color:var(--gblue); border:1px solid var(--border); }
+.btn-outline-g:hover{ background:#f1f3f4; }
+
+.df-empty{ grid-column:1/-1; text-align:center; color:var(--muted); padding:28px 8px; }
+.df-empty .material-icons{ font-size:56px; color:#dadce0; }
+</style>
+
+<div class="df-wrap">
+  <div class="df-head">
+    <h2 class="df-title"><span class="material-icons" aria-hidden="true">group_add</span>Discover Friends</h2>
+    <div class="df-searchbar">
+      <div class="df-input-wrap" style="width:100%;">
+        <span class="material-icons" aria-hidden="true">search</span>
+        <input id="search-bar" type="text" class="df-input" placeholder="Search users by username...">
+      </div>
+      <button class="df-btn" onclick="clearSearch()">
+        <span class="material-icons" style="vertical-align:-5px; margin-right:6px;">refresh</span> Show All
+      </button>
+    </div>
+  </div>
+
+  <div id="user-list">
+    {% include 'user_list.html' %}
+  </div>
+</div>
+
+<script>
+function getProfilePicUrl(user) {
+  if (user.profile_pic_url && user.profile_pic_url !== '') return `/static/uploads/${user.profile_pic_url}`;
+  return '/static/imgs/blank-profile-picture-973460_1280.webp';
+}
+function handleImageError(img){ img.src='/static/imgs/blank-profile-picture-973460_1280.webp'; img.onerror=null; }
+function clearSearch(){ document.getElementById('search-bar').value=''; location.reload(); }
+
+document.getElementById('search-bar').addEventListener('input', function () {
+  const query = this.value.trim();
+  if (query.length < 2) { if (query.length === 0) location.reload(); return; }
+
+  fetch(`/search_users?q=${encodeURIComponent(query)}`)
+    .then(r => r.json())
+    .then(users => {
+      const userList = document.getElementById('user-list');
+      if (!users.length){
+        userList.innerHTML = `<div class="df-grid"><div class="df-empty"><span class="material-icons">person_search</span><div>No users found for “${query}”.</div></div></div>`;
+        return;
+      }
+      userList.innerHTML = `
+        <div class="df-grid">
+          ${users.map(user => `
+            <div class="df-card">
+              <a href="/account/${user.user_id}" class="text-decoration-none">
+                <div class="df-avatar">
+                  <img src="${getProfilePicUrl(user)}" alt="${user.username}" onerror="handleImageError(this)">
+                </div>
+              </a>
+              <a href="/account/${user.user_id}" class="text-decoration-none">
+                <div class="df-name">${user.username}</div>
+              </a>
+              ${user.bio ? `<div class="df-bio">${user.bio.substring(0, 70)}${user.bio.length>70?'…':''}</div>` : `<div class="df-bio"></div>`}
+              <div class="df-actions">
+                ${user.pending ? `
+                  <button type="button" class="btn-g btn-secondary-g" disabled>
+                    <span class="material-icons" style="font-size:16px;vertical-align:-3px">hourglass_empty</span> Request Sent
+                  </button>
+                ` : `
+                  <form method="post" action="/send_friend_request/${user.user_id}" style="width:100%">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn-g btn-primary-g">
+                      <span class="material-icons" style="font-size:16px;vertical-align:-3px">person_add</span> Add Friend
+                    </button>
+                  </form>
+                `}
+                <a href="/account/${user.user_id}" class="btn-g btn-outline-g" style="text-align:center; text-decoration:none;">
+                  <span class="material-icons" style="font-size:16px;vertical-align:-3px">visibility</span> View Profile
+                </a>
+              </div>
+            </div>
+          `).join('')}
+        </div>`;
+    })
+    .catch(() => {
+      document.getElementById('user-list').innerHTML = `
+        <div class="df-grid"><div class="df-empty">Error loading users. Please try again.</div></div>
+      `;
+    });
+});
+</script>
+{% endblock %}

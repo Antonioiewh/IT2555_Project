@@ -1,0 +1,7 @@
+<ul class="list-group">
+  {% for notif in comment_notifs %}
+    <!-- comment notification display -->
+  {% else %}
+    <li class="list-group-item text-muted text-center">No comments.</li>
+  {% endfor %}
+</ul>

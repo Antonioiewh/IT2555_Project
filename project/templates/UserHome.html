@@ -1,0 +1,1246 @@
+{% extends "UserBase.html" %}
+
+{% block head %}
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<style>
+.timeline-container {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 0 24px;
+}
+.hero-banner {
+    background: {% if current_user.banner_url %}
+        linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.3)), 
+        url('{{ url_for('static', filename='uploads/' + current_user.banner_url) }}') center/cover no-repeat
+    {% else %}
+        linear-gradient(135deg, #667eea 0%, #764ba2 100%)
+    {% endif %};
+    border-radius: 20px;
+    padding: 40px 48px;
+    margin: 24px 0 40px 0;
+    box-shadow: 0 12px 48px rgba(0,0,0,0.15);
+    position: relative;
+    overflow: hidden;
+    min-height: 140px;
+}
+.hero-banner::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: {% if not current_user.banner_url %}
+        url('data:image/svg+xml,<svg width="80" height="80" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg"><g fill="none" fill-rule="evenodd"><g fill="%23ffffff" fill-opacity="0.05"><circle cx="40" cy="40" r="3"/></g></g></svg>')
+    {% else %}
+        rgba(0,0,0,0.1)
+    {% endif %};
+    pointer-events: none;
+}
+.hero-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    z-index: 1;
+}
+.hero-left {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+}
+.hero-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 5px solid rgba(255,255,255,0.2);
+    box-shadow: 0 6px 24px rgba(0,0,0,0.2);
+    transition: transform 0.3s ease;
+}
+.hero-avatar:hover { transform: scale(1.05); }
+.hero-user-info h2 {
+    margin: 0 0 8px 0;
+    color: white;
+    font-size: 36px;
+    font-weight: 600;
+    text-shadow: 0 3px 6px rgba(0,0,0,0.5);
+}
+.hero-user-info p {
+    margin: 0;
+    color: rgba(255,255,255,0.95);
+    font-size: 18px;
+    font-weight: 400;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+.hero-clock {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    color: white;
+}
+.digital-clock {
+    font-size: 42px;
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
+    text-shadow: 0 3px 6px rgba(0,0,0,0.5);
+    margin-bottom: 6px;
+    letter-spacing: 2px;
+}
+.clock-date {
+    font-size: 16px;
+    color: rgba(255,255,255,0.9);
+    font-weight: 500;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+/* NEW: Banner Customization Button */
+.banner-customize-btn {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.3);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(10px);
+    font-size: 14px;
+    z-index: 2;
+}
+.banner-customize-btn:hover {
+    background: rgba(255,255,255,0.3);
+    border-color: rgba(255,255,255,0.5);
+}
+.banner-customize-btn i {
+    margin-right: 6px;
+}
+
+.main-content {
+    display: grid;
+    grid-template-columns: 1fr 400px;
+    gap: 40px;
+    margin-top: 40px;
+}
+.timeline-feed { min-height: 100vh; }
+.sidebar-widget {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    padding: 32px;
+    height: fit-content;
+    position: sticky;
+    top: 20px;
+}
+.widget-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: #262626;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #f0f0f0;
+    padding-bottom: 12px;
+}
+.create-post-prompt {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 24px;
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    margin-bottom: 40px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 1px solid #f0f0f0;
+}
+.create-post-prompt:hover {
+    box-shadow: 0 6px 24px rgba(0,0,0,0.15);
+    transform: translateY(-3px);
+}
+.create-post-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #f0f0f0;
+}
+.create-post-input {
+    flex: 1;
+    padding: 18px 24px;
+    border: 1px solid #e0e0e0;
+    border-radius: 32px;
+    background: #fafafa;
+    font-size: 16px;
+    color: #8e8e8e;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.create-post-input:hover {
+    background: #f5f5f5;
+    border-color: #d0d0d0;
+}
+.create-post-icon {
+    color: #667eea;
+    font-size: 28px;
+    transition: transform 0.2s ease;
+}
+.create-post-prompt:hover .create-post-icon { transform: scale(1.1); }
+.timeline-post {
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    margin-bottom: 40px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    border: 1px solid #f0f0f0;
+}
+.timeline-post:hover {
+    box-shadow: 0 6px 24px rgba(0,0,0,0.15);
+    transform: translateY(-3px);
+}
+.post-header {
+    padding: 24px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #f0f0f0;
+}
+.post-user-info {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+.post-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #f0f0f0;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.12);
+}
+.post-user-details h4 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #262626;
+}
+.post-user-details .post-time {
+    font-size: 14px;
+    color: #8e8e8e;
+    margin: 6px 0 0 0;
+}
+.post-menu-btn {
+    background: none;
+    border: none;
+    padding: 12px;
+    cursor: pointer;
+    color: #8e8e8e;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+.post-menu-btn:hover {
+    background: #f5f5f5;
+    color: #262626;
+}
+.post-content {
+    padding: 24px 32px;
+}
+.post-text {
+    font-size: 16px;
+    line-height: 1.6;
+    color: #262626;
+    margin-bottom: 20px;
+    word-wrap: break-word;
+}
+.post-image-container {
+    position: relative;
+    width: 100%;
+    margin: 0 0 20px 0;
+    border-radius: 0;
+    overflow: hidden;
+}
+.post-image {
+    width: 100%;
+    max-height: 700px;
+    object-fit: cover;
+    display: block;
+}
+.post-actions {
+    padding: 20px 32px 24px;
+    border-top: 1px solid #f0f0f0;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+}
+.post-action-btn {
+    background: none;
+    border: none;
+    padding: 12px;
+    cursor: pointer;
+    border-radius: 12px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 16px;
+    color: #262626;
+}
+.post-action-btn:hover { background: #f8f8f8; }
+.post-action-btn.liked { color: #ed4956; }
+.post-action-btn i { font-size: 22px; }
+.like-count {
+    font-weight: 600;
+    font-size: 16px;
+    color: #262626;
+}
+.loading-container {
+    text-align: center;
+    padding: 50px 20px;
+}
+.loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #667eea;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 24px;
+}
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+.load-more-btn {
+    width: 100%;
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 16px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin: 32px 0;
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+}
+.load-more-btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 28px rgba(102, 126, 234, 0.4);
+}
+.load-more-btn:disabled {
+    background: #c7c7c7;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+.empty-timeline {
+    text-align: center;
+    padding: 100px 20px;
+    color: #8e8e8e;
+}
+.empty-timeline i {
+    font-size: 80px;
+    margin-bottom: 32px;
+    opacity: 0.5;
+    color: #667eea;
+}
+.empty-timeline h3 {
+    margin: 0 0 16px 0;
+    font-size: 28px;
+    color: #262626;
+}
+.empty-timeline p {
+    margin: 0;
+    font-size: 18px;
+}
+
+.banner-modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.8);
+    backdrop-filter: blur(5px);
+}
+.banner-modal-content {
+    background-color: white;
+    margin: 2% auto;
+    padding: 0;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 800px;
+    max-height: 90vh;
+    overflow-y: auto; 
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    display: flex;
+    flex-direction: column;
+}
+.banner-modal-header {
+    padding: 24px 32px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0; 
+}
+.banner-modal-header h3 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+}
+.banner-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: background 0.2s ease;
+}
+.banner-close:hover {
+    background: rgba(255,255,255,0.1);
+}
+.banner-modal-body {
+    padding: 32px;
+    flex: 1; /* ADDED: Allow body to expand */
+    overflow-y: auto; 
+}
+.banner-upload-area {
+    border: 2px dashed #667eea;
+    border-radius: 12px;
+    padding: 40px;
+    text-align: center;
+    background: #f8f9ff;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-bottom: 24px;
+}
+.banner-upload-area:hover {
+    border-color: #5a67d8;
+    background: #f0f2ff;
+}
+.banner-upload-area.dragover {
+    border-color: #4c51bf;
+    background: #e6e8ff;
+}
+.banner-upload-area i {
+    font-size: 48px;
+    color: #667eea;
+    margin-bottom: 16px;
+}
+.banner-upload-area h4 {
+    margin: 0 0 8px 0;
+    color: #2d3748;
+    font-size: 18px;
+}
+.banner-upload-area p {
+    margin: 0;
+    color: #718096;
+    font-size: 14px;
+}
+.banner-crop-container {
+    display: none;
+    margin-top: 24px;
+}
+.banner-preview-container {
+    width: 100%;
+    height: 250px; 
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 24px;
+    position: relative;
+}
+.banner-crop-controls {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-bottom: 24px;
+    flex-wrap: wrap; 
+}
+.banner-crop-btn {
+    padding: 8px 16px;
+    border: 1px solid #667eea;
+    background: white;
+    color: #667eea;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+}
+.banner-crop-btn:hover {
+    background: #667eea;
+    color: white;
+}
+.banner-modal-footer {
+    padding: 24px 32px;
+    background: #f7fafc;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between; 
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+    flex-wrap: wrap; 
+}
+.banner-footer-left {
+    flex: 1;
+}
+.banner-footer-right {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.banner-btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    font-size: 14px;
+    white-space: nowrap; /* ADDED: Prevent text wrapping */
+}
+.banner-btn-cancel {
+    background: #e2e8f0;
+    color: #4a5568;
+}
+.banner-btn-cancel:hover {
+    background: #cbd5e0;
+}
+.banner-btn-save {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+.banner-btn-save:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+.banner-btn-save:disabled {
+    background: #cbd5e0;
+    color: #9ca3af;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+.banner-btn-remove {
+    background: #e53e3e;
+    color: white;
+}
+.banner-btn-remove:hover {
+    background: #c53030;
+}
+
+@media (max-width: 1400px) {
+    .timeline-container { max-width: 1200px; }
+}
+@media (max-width: 1200px) {
+    .main-content {
+        grid-template-columns: 1fr;
+        gap: 32px;
+    }
+    .sidebar-widget { position: static; }
+}
+@media (max-width: 768px) {
+    .timeline-container { padding: 16px; }
+    .hero-banner { padding: 24px; margin: 16px 0 32px 0; }
+    .hero-content { flex-direction: column; gap: 20px; text-align: center; }
+    .hero-left { flex-direction: column; gap: 16px; }
+    .hero-avatar { width: 64px; height: 64px; }
+    .hero-user-info h2 { font-size: 28px; }
+    .digital-clock { font-size: 32px; }
+    .timeline-post, .create-post-prompt { border-radius: 12px; margin-left: 0; margin-right: 0; }
+    .post-image-container { margin: 0 0 20px 0; }
+    .banner-customize-btn { top: 10px; right: 10px; padding: 6px 10px; font-size: 12px; }
+    .banner-modal-content { 
+        width: 95%; 
+        margin: 5% auto; 
+        max-height: 85vh; /* REDUCED: More space on mobile */
+    }
+    .banner-modal-header, .banner-modal-body, .banner-modal-footer { padding: 20px; }
+    .banner-preview-container { height: 200px; } /* REDUCED: Smaller on mobile */
+    .banner-footer-right { width: 100%; justify-content: flex-end; }
+}
+.timeline-container::-webkit-scrollbar { width: 0px; background: transparent; }
+.widget-stats {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+.stat-item { text-align: center; }
+.stat-number {
+    font-size: 24px;
+    font-weight: 700;
+    color: #667eea;
+    display: block;
+}
+.stat-label {
+    font-size: 13px;
+    color: #8e8e8e;
+    text-transform: uppercase;
+}
+.quick-actions a {
+    display: block;
+    padding: 16px;
+    background: #f8f9fa;
+    border-radius: 12px;
+    text-decoration: none;
+    color: #667eea;
+    font-weight: 500;
+    margin-bottom: 12px;
+    transition: all 0.2s ease;
+    font-size: 15px;
+}
+.quick-actions a:hover {
+    background: #e9ecef;
+    transform: translateY(-1px);
+}
+.quick-actions a i {
+    margin-right: 12px;
+    font-size: 16px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="timeline-container">
+    <!-- Hero Banner with Customization -->
+    <div class="hero-banner">
+        <button class="banner-customize-btn" onclick="openBannerModal()">
+            <i class="bi bi-image"></i>Customize Banner
+        </button>
+        <div class="hero-content">
+            <div class="hero-left">
+                <img src="{{ url_for('static', filename='uploads/' + current_user.profile_pic_url) if current_user.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}" 
+                     alt="{{ current_user.username }}" class="hero-avatar">
+                <div class="hero-user-info">
+                    <h2>Welcome back, {{ current_user.username }}!</h2>
+                    <p>See what's happening in your network</p>
+                </div>
+            </div>
+            <div class="hero-clock">
+                <div class="digital-clock" id="digitalClock">--:--</div>
+                <div class="clock-date" id="clockDate">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rest of your existing content -->
+    <div class="main-content">
+        <div class="timeline-feed">
+            <div class="create-post-prompt" onclick="window.location.href='{{ url_for('create_post') }}'">
+                <img src="{{ url_for('static', filename='uploads/' + current_user.profile_pic_url) if current_user.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}" 
+                     alt="Your avatar" class="create-post-avatar">
+                <div class="create-post-input">What's on your mind, {{ current_user.username }}?</div>
+                <i class="bi bi-camera create-post-icon"></i>
+            </div>
+            <div id="timelinePosts">
+                {% if posts %}
+                    {% for post in posts %}
+                    <article class="timeline-post" data-post-id="{{ post.post_id }}">
+                        <div class="post-header">
+                            <div class="post-user-info">
+                                <img src="{{ post.user.profile_picture }}" alt="{{ post.user.username }}" class="post-avatar">
+                                <div class="post-user-details">
+                                    <h4>{{ post.user.username }}</h4>
+                                    <p class="post-time">{{ post.relative_date }}</p>
+                                </div>
+                            </div>
+                            {% if post.is_own_post %}
+                            <button class="post-menu-btn" onclick="openPostMenu({{ post.post_id }})">
+                                <i class="bi bi-three-dots"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                        <div class="post-content">
+                            {% if post.content %}
+                            <p class="post-text">{{ post.content }}</p>
+                            {% endif %}
+                            {% if post.image_url %}
+                            <div class="post-image-container">
+                                <img src="{{ post.image_url }}" alt="Post image" class="post-image" loading="lazy">
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="post-actions">
+                            <button class="post-action-btn {{ 'liked' if post.is_liked else '' }}" 
+                                    onclick="toggleLike({{ post.post_id }}, this)" 
+                                    data-post-id="{{ post.post_id }}">
+                                <i class="bi bi-heart{{ '-fill' if post.is_liked else '' }}"></i>
+                                <span class="like-count">{{ post.likes_count }}</span>
+                            </button>
+                        </div>
+                    </article>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty-timeline">
+                        <i class="bi bi-camera"></i>
+                        <h3>No posts yet</h3>
+                        <p>Start sharing your moments by creating your first post!</p>
+                    </div>
+                {% endif %}
+            </div>
+            {% if has_more %}
+            <button id="loadMoreBtn" class="load-more-btn" onclick="loadMorePosts()">
+                Load More Posts
+            </button>
+            {% endif %}
+            <div id="loadingIndicator" class="loading-container" style="display: none;">
+                <div class="loading-spinner"></div>
+                <p>Loading more posts...</p>
+            </div>
+        </div>
+        <div class="sidebar-widget">
+            <h3 class="widget-title">Your Activity</h3>
+            <div class="widget-stats">
+                <div class="stat-item">
+                    <span class="stat-number" id="user-post-count">{{ current_user_post_count }}</span>
+                    <span class="stat-label">Posts</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number" id="user-friend-count">{{ current_user_friend_count }}</span>
+                    <span class="stat-label">Friends</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number">{{ current_user.created_at.strftime('%b %Y') if current_user.created_at else 'N/A' }}</span>
+                    <span class="stat-label">Joined</span>
+                </div>
+            </div>
+            <div class="quick-actions" style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #f0f0f0;">
+                <h4 style="margin: 0 0 16px 0; font-size: 16px; color: #8e8e8e;">Quick Actions</h4>
+                <a href="{{ url_for('create_post') }}">
+                    <i class="bi bi-plus-circle"></i>Create Post
+                </a>
+                <a href="{{ url_for('view_profile', user_id=current_user.user_id) }}">
+                    <i class="bi bi-person-circle"></i>View Profile
+                </a>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+
+<div id="bannerModal" class="banner-modal">
+    <div class="banner-modal-content">
+        <div class="banner-modal-header">
+            <h3>Customize Your Banner</h3>
+            <button class="banner-close" onclick="closeBannerModal()">&times;</button>
+        </div>
+        <div class="banner-modal-body">
+            <div class="banner-upload-area" onclick="document.getElementById('bannerFileInput').click()">
+                <i class="bi bi-cloud-upload"></i>
+                <h4>Upload Banner Image</h4>
+                <p>Click here or drag and drop your banner image<br>
+                   Recommended: 1200x300px or larger (16:4 aspect ratio)</p>
+            </div>
+            <input type="file" id="bannerFileInput" accept="image/*" style="display: none;">
+            
+            <div id="bannerCropContainer" class="banner-crop-container">
+                <div class="banner-preview-container">
+                    <img id="bannerCropImage" style="max-width: 100%; max-height: 100%;">
+                </div>
+                <div class="banner-crop-controls">
+                    <button class="banner-crop-btn" onclick="rotateBannerImage(-90)">
+                        <i class="bi bi-arrow-counterclockwise"></i> Rotate Left
+                    </button>
+                    <button class="banner-crop-btn" onclick="rotateBannerImage(90)">
+                        <i class="bi bi-arrow-clockwise"></i> Rotate Right
+                    </button>
+                    <button class="banner-crop-btn" onclick="resetBannerCrop()">
+                        <i class="bi bi-arrow-clockwise"></i> Reset
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="banner-modal-footer">
+            <div class="banner-footer-left">
+                {% if current_user.banner_url %}
+                <button class="banner-btn banner-btn-remove" onclick="removeBanner()">
+                    <i class="bi bi-trash"></i> Remove Banner
+                </button>
+                {% endif %}
+            </div>
+            <div class="banner-footer-right">
+                <button class="banner-btn banner-btn-cancel" onclick="closeBannerModal()">Cancel</button>
+                <button class="banner-btn banner-btn-save" onclick="saveBanner()" id="saveBannerBtn" disabled>
+                    <i class="bi bi-check-lg"></i> Save Banner
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.css">
+
+<script>
+let currentPage = 1;
+let isLoading = false;
+let bannerCropper = null;
+let selectedBannerFile = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    initializeClock();
+    initializeInfiniteScroll();
+    initializeBannerUpload();
+});
+
+// Initialize banner upload functionality
+function initializeBannerUpload() {
+    const fileInput = document.getElementById('bannerFileInput');
+    const uploadArea = document.querySelector('.banner-upload-area');
+    
+    fileInput.addEventListener('change', handleBannerFileSelect);
+    
+    // Drag and drop functionality
+    uploadArea.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+    });
+    
+    uploadArea.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+    });
+    
+    uploadArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            const file = files[0];
+            if (file.type.startsWith('image/')) {
+                handleBannerFile(file);
+            }
+        }
+    });
+}
+
+function openBannerModal() {
+    document.getElementById('bannerModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeBannerModal() {
+    document.getElementById('bannerModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+    
+    // Clean up cropper
+    if (bannerCropper) {
+        bannerCropper.destroy();
+        bannerCropper = null;
+    }
+    
+    // Reset form
+    document.getElementById('bannerFileInput').value = '';
+    document.getElementById('bannerCropContainer').style.display = 'none';
+    document.getElementById('saveBannerBtn').disabled = true;
+    selectedBannerFile = null;
+}
+
+function handleBannerFileSelect(event) {
+    const file = event.target.files[0];
+    if (file) {
+        handleBannerFile(file);
+    }
+}
+
+function handleBannerFile(file) {
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+        alert('Please select an image file.');
+        return;
+    }
+    
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+        alert('File size must be less than 10MB.');
+        return;
+    }
+    
+    selectedBannerFile = file;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const img = document.getElementById('bannerCropImage');
+        img.src = e.target.result;
+        
+        document.getElementById('bannerCropContainer').style.display = 'block';
+        document.getElementById('saveBannerBtn').disabled = false;
+        
+        // Initialize cropper
+        if (bannerCropper) {
+            bannerCropper.destroy();
+        }
+        
+        bannerCropper = new Cropper(img, {
+            aspectRatio: 16 / 4, // Banner aspect ratio
+            viewMode: 2,
+            autoCropArea: 1,
+            responsive: true,
+            background: false,
+            cropBoxResizable: true,
+            cropBoxMovable: true,
+            toggleDragModeOnDblclick: false,
+            minContainerWidth: 300,
+            minContainerHeight: 150
+        });
+    };
+    reader.readAsDataURL(file);
+}
+
+function rotateBannerImage(degree) {
+    if (bannerCropper) {
+        bannerCropper.rotate(degree);
+    }
+}
+
+function resetBannerCrop() {
+    if (bannerCropper) {
+        bannerCropper.reset();
+    }
+}
+
+function saveBanner() {
+    if (!bannerCropper || !selectedBannerFile) {
+        alert('Please select and crop a banner image first.');
+        return;
+    }
+    
+    const canvas = bannerCropper.getCroppedCanvas({
+        width: 1200,
+        height: 300,
+        fillColor: '#fff',
+        imageSmoothingEnabled: true,
+        imageSmoothingQuality: 'high',
+    });
+    
+    canvas.toBlob(function(blob) {
+        const formData = new FormData();
+        formData.append('banner', blob, 'banner.jpg');
+        
+        // Add CSRF token
+        const csrfToken = document.querySelector('meta[name=csrf-token]').getAttribute('content');
+        formData.append('csrf_token', csrfToken);
+        
+        // Show loading state
+        const saveBtn = document.getElementById('saveBannerBtn');
+        const originalText = saveBtn.innerHTML;
+        saveBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Saving...';
+        saveBtn.disabled = true;
+        
+        fetch('/upload_banner', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update banner in real-time
+                updateBannerDisplay(data.banner_url);
+                closeBannerModal();
+                showNotification('Banner updated successfully!', 'success');
+            } else {
+                alert(data.error || 'Failed to upload banner. Please try again.');
+            }
+        })
+        .catch(error => {
+            console.error('Error uploading banner:', error);
+            alert('Failed to upload banner. Please try again.');
+        })
+        .finally(() => {
+            saveBtn.innerHTML = originalText;
+            saveBtn.disabled = false;
+        });
+    }, 'image/jpeg', 0.9);
+}
+
+function removeBanner() {
+    if (!confirm('Are you sure you want to remove your banner?')) {
+        return;
+    }
+    
+    const csrfToken = document.querySelector('meta[name=csrf-token]').getAttribute('content');
+    
+    fetch('/remove_banner', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Reset banner to default gradient
+            const banner = document.querySelector('.hero-banner');
+            banner.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+            
+            closeBannerModal();
+            showNotification('Banner removed successfully!', 'success');
+            
+            // Reload page to update the template
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        } else {
+            alert(data.error || 'Failed to remove banner. Please try again.');
+        }
+    })
+    .catch(error => {
+        console.error('Error removing banner:', error);
+        alert('Failed to remove banner. Please try again.');
+    });
+}
+
+function updateBannerDisplay(bannerUrl) {
+    const banner = document.querySelector('.hero-banner');
+    const fullUrl = `/static/uploads/${bannerUrl}`;
+    banner.style.background = `linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.3)), url('${fullUrl}') center/cover no-repeat`;
+}
+
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'success' ? '#48bb78' : '#667eea'};
+        color: white;
+        padding: 16px 24px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 10000;
+        font-weight: 500;
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+    `;
+    notification.textContent = message;
+    
+    document.body.appendChild(notification);
+    
+    // Trigger animation
+    setTimeout(() => {
+        notification.style.transform = 'translateX(0)';
+    }, 100);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        notification.style.transform = 'translateX(100%)';
+        setTimeout(() => {
+            document.body.removeChild(notification);
+        }, 300);
+    }, 3000);
+}
+
+// Digital Clock Functionality
+function initializeClock() {
+    function updateClock() {
+        const now = new Date();
+        let hours = now.getHours();
+        const minutes = now.getMinutes();
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12;
+        const timeString = `${hours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        const dateString = now.toLocaleDateString('en-US', options);
+        document.getElementById('digitalClock').textContent = timeString;
+        document.getElementById('clockDate').textContent = dateString;
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+}
+
+// Keep all your existing functions (toggleLike, loadMorePosts, etc.)
+function toggleLike(postId, button) {
+    if (isLoading) return;
+    const csrfToken = document.querySelector('meta[name=csrf-token]').getAttribute('content');
+    const likeIcon = button.querySelector('i');
+    const likeCount = button.querySelector('.like-count');
+    const currentCount = parseInt(likeCount.textContent);
+    const isLiked = button.classList.contains('liked');
+    if (isLiked) {
+        button.classList.remove('liked');
+        likeIcon.className = 'bi bi-heart';
+        likeCount.textContent = currentCount - 1;
+    } else {
+        button.classList.add('liked');
+        likeIcon.className = 'bi bi-heart-fill';
+        likeCount.textContent = currentCount + 1;
+    }
+    fetch(`/api/toggle_like/${postId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            likeCount.textContent = data.likes_count;
+            if (data.is_liked) {
+                button.classList.add('liked');
+                likeIcon.className = 'bi bi-heart-fill';
+            } else {
+                button.classList.remove('liked');
+                likeIcon.className = 'bi bi-heart';
+            }
+        } else {
+            if (!isLiked) {
+                button.classList.remove('liked');
+                likeIcon.className = 'bi bi-heart';
+                likeCount.textContent = currentCount;
+            } else {
+                button.classList.add('liked');
+                likeIcon.className = 'bi bi-heart-fill';
+                likeCount.textContent = currentCount;
+            }
+        }
+    })
+    .catch(error => {
+        if (!isLiked) {
+            button.classList.remove('liked');
+            likeIcon.className = 'bi bi-heart';
+            likeCount.textContent = currentCount;
+        } else {
+            button.classList.add('liked');
+            likeIcon.className = 'bi bi-heart-fill';
+            likeCount.textContent = currentCount;
+        }
+    });
+}
+
+function loadMorePosts() {
+    if (isLoading) return;
+    isLoading = true;
+    const loadMoreBtn = document.getElementById('loadMoreBtn');
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    loadMoreBtn.style.display = 'none';
+    loadingIndicator.style.display = 'block';
+    currentPage++;
+    fetch(`/api/load_more_posts?page=${currentPage}`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.posts && data.posts.length > 0) {
+            appendPosts(data.posts);
+            if (data.has_more) {
+                loadMoreBtn.style.display = 'block';
+            }
+        } else {
+            loadMoreBtn.style.display = 'none';
+        }
+        loadingIndicator.style.display = 'none';
+        isLoading = false;
+    })
+    .catch(error => {
+        loadingIndicator.style.display = 'none';
+        loadMoreBtn.style.display = 'block';
+        currentPage--;
+        isLoading = false;
+    });
+}
+
+function appendPosts(posts) {
+    const timelinePosts = document.getElementById('timelinePosts');
+    posts.forEach(post => {
+        const postElement = createPostElement(post);
+        timelinePosts.appendChild(postElement);
+    });
+}
+
+function createPostElement(post) {
+    const article = document.createElement('article');
+    article.className = 'timeline-post';
+    article.setAttribute('data-post-id', post.post_id);
+    article.innerHTML = `
+        <div class="post-header">
+            <div class="post-user-info">
+                <img src="${post.user.profile_picture}" alt="${post.user.username}" class="post-avatar">
+                <div class="post-user-details">
+                    <h4>${post.user.username}</h4>
+                    <p class="post-time">${post.relative_date}</p>
+                </div>
+            </div>
+            ${post.is_own_post ? `
+            <button class="post-menu-btn" onclick="openPostMenu(${post.post_id})">
+                <i class="bi bi-three-dots"></i>
+            </button>
+            ` : ''}
+        </div>
+        <div class="post-content">
+            ${post.content ? `<p class="post-text">${post.content}</p>` : ''}
+            ${post.image_url ? `
+            <div class="post-image-container">
+                <img src="${post.image_url}" alt="Post image" class="post-image" loading="lazy">
+            </div>
+            ` : ''}
+        </div>
+        <div class="post-actions">
+            <button class="post-action-btn ${post.is_liked ? 'liked' : ''}" 
+                    onclick="toggleLike(${post.post_id}, this)" 
+                    data-post-id="${post.post_id}">
+                <i class="bi bi-heart${post.is_liked ? '-fill' : ''}"></i>
+                <span class="like-count">${post.likes_count}</span>
+            </button>
+        </div>
+    `;
+    return article;
+}
+
+function initializeInfiniteScroll() {
+    window.addEventListener('scroll', function() {
+        if (isLoading) return;
+        const loadMoreBtn = document.getElementById('loadMoreBtn');
+        if (!loadMoreBtn || loadMoreBtn.style.display === 'none') return;
+        const scrollPosition = window.innerHeight + window.scrollY;
+        const documentHeight = document.documentElement.offsetHeight;
+        if (scrollPosition >= documentHeight - 200) {
+            loadMorePosts();
+        }
+    });
+}
+
+function openPostMenu(postId) {
+    console.log('Opening menu for post:', postId);
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('bannerModal');
+    if (event.target === modal) {
+        closeBannerModal();
+    }
+}
+
+const observerOptions = {
+    threshold: 0.1,
+    rootMargin: '0px 0px -50px 0px'
+};
+const observer = new IntersectionObserver(function(entries) {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            entry.target.style.opacity = '1';
+            entry.target.style.transform = 'translateY(0)';
+        }
+    });
+}, observerOptions);
+document.querySelectorAll('.timeline-post').forEach(post => {
+    post.style.opacity = '0';
+    post.style.transform = 'translateY(20px)';
+    post.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+    observer.observe(post);
+});
+</script>
+{% endblock %}

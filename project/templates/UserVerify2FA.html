@@ -1,0 +1,485 @@
+{% extends "UserBase.html" %}
+
+{% block title %}Two-Factor Authentication{% endblock %}
+{% from "includes/_formHelper.html" import render_field %}
+
+{% block head %}
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<style>
+.google-2fa-container {
+    min-height: 80vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f8f9fa;
+    padding: 20px;
+}
+
+.google-2fa-card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    padding: 40px 32px;
+    width: 100%;
+    max-width: 450px;
+    border: 1px solid #dadce0;
+}
+
+.google-2fa-header {
+    text-align: center;
+    margin-bottom: 32px;
+}
+
+.google-2fa-icon {
+    width: 48px;
+    height: 48px;
+    background: #1a73e8;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+    color: white;
+    font-size: 20px;
+}
+
+.google-2fa-title {
+    font-size: 24px;
+    font-weight: 400;
+    color: #3c4043;
+    margin: 0 0 8px 0;
+    letter-spacing: -0.5px;
+}
+
+.google-2fa-subtitle {
+    font-size: 16px;
+    color: #5f6368;
+    font-weight: 400;
+    margin: 0;
+    line-height: 1.4;
+}
+
+.google-form-group {
+    margin-bottom: 24px;
+}
+
+.google-form-label {
+    display: block;
+    font-size: 14px;
+    color: #3c4043;
+    font-weight: 500;
+    margin-bottom: 8px;
+    text-align: center;
+}
+
+.google-2fa-input {
+    width: 100%;
+    padding: 16px 20px;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    font-size: 24px;
+    color: #3c4043;
+    background: #fff;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    font-family: 'Courier New', monospace;
+    text-align: center;
+    letter-spacing: 8px;
+    box-sizing: border-box;
+    font-weight: 500;
+}
+
+.google-2fa-input:focus {
+    outline: none;
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+}
+
+.google-2fa-input.error {
+    border-color: #ea4335;
+}
+
+.google-2fa-input.error:focus {
+    border-color: #ea4335;
+    box-shadow: 0 0 0 2px rgba(234, 67, 53, 0.2);
+}
+
+.google-2fa-input::placeholder {
+    letter-spacing: 4px;
+    color: #9aa0a6;
+    font-weight: normal;
+}
+
+.google-btn {
+    width: 100%;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s, box-shadow 0.2s;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+}
+
+.google-btn-primary {
+    background: #1a73e8;
+    color: #fff;
+}
+
+.google-btn-primary:hover {
+    background: #1557b0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.google-btn-primary:disabled {
+    background: #94a3b8;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.google-btn-icon {
+    margin-right: 8px;
+    font-size: 16px;
+}
+
+.google-link-section {
+    text-align: center;
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid #dadce0;
+}
+
+.google-link-text {
+    font-size: 14px;
+    color: #5f6368;
+    margin: 0;
+}
+
+.google-link {
+    color: #1a73e8;
+    text-decoration: none;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+}
+
+.google-link:hover {
+    text-decoration: underline;
+    color: #1557b0;
+}
+
+.google-error-text {
+    color: #ea4335;
+    font-size: 12px;
+    margin-top: 4px;
+    display: block;
+    text-align: center;
+}
+
+/* Alert styling to match Google design */
+.google-alert {
+    background: #e8f0fe;
+    border: 1px solid #1a73e8;
+    border-radius: 4px;
+    padding: 16px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: flex-start;
+    font-family: 'Google Sans', sans-serif;
+}
+
+.google-alert-info {
+    background: #e8f0fe;
+    border-color: #1a73e8;
+}
+
+.google-alert-success {
+    background: #e6f4ea;
+    border-color: #34a853;
+}
+
+.google-alert-warning {
+    background: #fef7e0;
+    border-color: #fbbc04;
+}
+
+.google-alert-danger {
+    background: #fce8e6;
+    border-color: #ea4335;
+}
+
+.google-alert-icon {
+    margin-right: 12px;
+    font-size: 16px;
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+
+.google-alert-info .google-alert-icon {
+    color: #1a73e8;
+}
+
+.google-alert-success .google-alert-icon {
+    color: #34a853;
+}
+
+.google-alert-warning .google-alert-icon {
+    color: #f9ab00;
+}
+
+.google-alert-danger .google-alert-icon {
+    color: #ea4335;
+}
+
+.google-alert-content {
+    flex: 1;
+    font-size: 14px;
+    color: #3c4043;
+    line-height: 1.4;
+}
+
+.loading-dots {
+    display: inline-block;
+}
+
+.loading-dots:after {
+    content: '.';
+    animation: dots 1.5s steps(5, end) infinite;
+}
+
+@keyframes dots {
+    0%, 20% {
+        color: rgba(0,0,0,0);
+        text-shadow:
+            .25em 0 0 rgba(0,0,0,0),
+            .5em 0 0 rgba(0,0,0,0);
+    }
+    40% {
+        color: #3c4043;
+        text-shadow:
+            .25em 0 0 rgba(0,0,0,0),
+            .5em 0 0 rgba(0,0,0,0);
+    }
+    60% {
+        text-shadow:
+            .25em 0 0 #3c4043,
+            .5em 0 0 rgba(0,0,0,0);
+    }
+    80%, 100% {
+        text-shadow:
+            .25em 0 0 #3c4043,
+            .5em 0 0 #3c4043;
+    }
+}
+
+@media (max-width: 768px) {
+    .google-2fa-card {
+        padding: 32px 24px;
+        margin: 0 16px;
+    }
+    
+    .google-2fa-input {
+        font-size: 20px;
+        letter-spacing: 6px;
+        padding: 14px 16px;
+    }
+    
+    .google-2fa-input::placeholder {
+        letter-spacing: 3px;
+    }
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.3);
+    }
+    50% {
+        box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.1);
+    }
+    100% {
+        box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.3);
+    }
+}
+
+.google-2fa-input:focus {
+    animation: pulse 2s infinite;
+}
+</style>
+
+<div class="google-2fa-container">
+    <div class="google-2fa-card">
+        <div class="google-2fa-header">
+            <div class="google-2fa-icon">
+                <i class="bi bi-shield-lock"></i>
+            </div>
+            <h1 class="google-2fa-title">2-Step Verification</h1>
+            <p class="google-2fa-subtitle">
+                Enter the 6-digit code from your authenticator app to continue
+            </p>
+        </div>
+
+        {% if session.get('login_method') == 'password_fallback_from_passkey' %}
+        <div class="google-alert google-alert-info">
+            <i class="bi bi-info-circle google-alert-icon"></i>
+            <div class="google-alert-content">
+                Passkey authentication unavailable. Please complete 2-step verification to continue.
+            </div>
+        </div>
+        {% endif %}
+
+        <form method="POST" action="" enctype="multipart/form-data" id="verify2faForm">
+            {{ form.hidden_tag() }}
+
+            <div class="google-form-group">
+                <label for="totp_code" class="google-form-label">Verification Code</label>
+                {{ form.totp_code(
+                    class="google-2fa-input", 
+                    id="totp_code", 
+                    placeholder="000000", 
+                    maxlength="6",
+                    pattern="[0-9]{6}",
+                    inputmode="numeric",
+                    autocomplete="one-time-code"
+                ) }}
+                {% if form.totp_code.errors %}
+                    {% for error in form.totp_code.errors %}
+                        <span class="google-error-text">{{ error }}</span>
+                    {% endfor %}
+                {% endif %}
+            </div>
+
+            <button type="submit" class="google-btn google-btn-primary" id="verifyBtn">
+                <i class="bi bi-shield-check google-btn-icon"></i>
+                <span id="verifyBtnText">Verify</span>
+            </button>
+        </form>
+
+        <div class="google-link-section">
+            <p class="google-link-text">
+                <a href="{{ url_for('login') }}" class="google-link">
+                    <i class="bi bi-arrow-left" style="margin-right: 4px; font-size: 12px;"></i>
+                    Back to Sign in
+                </a>
+            </p>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('verify2faForm');
+    const codeInput = document.getElementById('totp_code');
+    const verifyBtn = document.getElementById('verifyBtn');
+    const verifyBtnText = document.getElementById('verifyBtnText');
+    
+    // Auto-focus on the input field
+    codeInput.focus();
+    
+    // Format input as user types (add spaces for better readability)
+    codeInput.addEventListener('input', function(e) {
+        let value = e.target.value.replace(/\D/g, ''); // Remove non-digits
+        
+        // Limit to 6 digits
+        if (value.length > 6) {
+            value = value.substring(0, 6);
+        }
+        
+        e.target.value = value;
+        
+        // Auto-submit when 6 digits are entered
+        if (value.length === 6) {
+            // Add a small delay for better UX
+            setTimeout(() => {
+                form.submit();
+            }, 300);
+        }
+        
+        // Clear any previous error states
+        codeInput.classList.remove('error');
+        const errorSpan = codeInput.parentNode.querySelector('.google-error-text');
+        if (errorSpan && !form.totp_code.errors) {
+            errorSpan.remove();
+        }
+    });
+    
+    // Only allow numeric input
+    codeInput.addEventListener('keypress', function(e) {
+        if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'Tab', 'Enter'].includes(e.key)) {
+            e.preventDefault();
+        }
+    });
+    
+    // Handle paste events
+    codeInput.addEventListener('paste', function(e) {
+        e.preventDefault();
+        const paste = (e.clipboardData || window.clipboardData).getData('text');
+        const numbers = paste.replace(/\D/g, '').substring(0, 6);
+        codeInput.value = numbers;
+        
+        // Trigger input event to handle auto-submit
+        codeInput.dispatchEvent(new Event('input'));
+    });
+    
+    // Form submission with loading state
+    form.addEventListener('submit', function(e) {
+        const code = codeInput.value.trim();
+        
+        if (code.length !== 6) {
+            e.preventDefault();
+            codeInput.classList.add('error');
+            
+            // Add error message if not already present
+            let errorSpan = codeInput.parentNode.querySelector('.google-error-text');
+            if (!errorSpan) {
+                errorSpan = document.createElement('span');
+                errorSpan.className = 'google-error-text';
+                errorSpan.textContent = 'Please enter a complete 6-digit code';
+                codeInput.parentNode.appendChild(errorSpan);
+            }
+            
+            codeInput.focus();
+            return;
+        }
+        
+        // Show loading state
+        verifyBtn.disabled = true;
+        verifyBtnText.innerHTML = '<span class="loading-dots">Verifying</span>';
+        codeInput.disabled = true;
+    });
+    
+    // Handle form validation errors
+    if (codeInput.value && form.querySelector('.google-error-text')) {
+        codeInput.classList.add('error');
+        codeInput.focus();
+        codeInput.select(); // Select all text for easy replacement
+    }
+    
+    // Add visual feedback for successful input
+    codeInput.addEventListener('input', function() {
+        if (this.value.length === 6) {
+            this.style.borderColor = '#34a853';
+            this.style.boxShadow = '0 0 0 2px rgba(52, 168, 83, 0.2)';
+        } else {
+            this.style.borderColor = '';
+            this.style.boxShadow = '';
+        }
+    });
+    
+    // Keyboard navigation
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            window.location.href = "{{ url_for('login') }}";
+        }
+    });
+});
+</script>
+{% endblock %}

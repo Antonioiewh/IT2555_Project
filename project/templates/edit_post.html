@@ -1,0 +1,346 @@
+{% extends "UserBase.html" %}
+
+{% block head %}
+<style>
+.google-container {
+    max-width: 600px;
+    margin: 40px auto;
+    padding: 0 24px;
+}
+
+.google-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(60,64,67,0.3), 0 4px 8px 3px rgba(60,64,67,0.15);
+    padding: 0;
+    overflow: hidden;
+}
+
+.google-header {
+    background: #f8f9fa;
+    padding: 24px 32px 16px;
+    border-bottom: 1px solid #e8eaed;
+}
+
+.google-title {
+    font-family: 'Google Sans', sans-serif;
+    font-size: 22px;
+    font-weight: 400;
+    color: #3c4043;
+    margin: 0;
+    text-align: center;
+}
+
+.google-body {
+    padding: 24px 32px 32px;
+}
+
+.google-form-group {
+    margin-bottom: 24px;
+    position: relative;
+}
+
+.google-form-label {
+    display: block;
+    font-family: 'Google Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: #5f6368;
+    margin-bottom: 8px;
+}
+
+.google-textarea-container {
+    position: relative;
+    border: 1px solid #dadce0;
+    border-radius: 8px;
+    background: #fff;
+    transition: all 0.2s ease;
+}
+
+.google-textarea-container:focus-within {
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 1px #1a73e8;
+}
+
+.google-textarea {
+    width: 100%;
+    min-height: 120px;
+    padding: 16px;
+    border: none;
+    outline: none;
+    font-family: 'Roboto', sans-serif;
+    font-size: 16px;
+    color: #3c4043;
+    background: transparent;
+    resize: vertical;
+    box-sizing: border-box;
+    line-height: 1.5;
+}
+
+.char-counter {
+    position: absolute;
+    bottom: 8px;
+    right: 12px;
+    font-size: 12px;
+    color: #5f6368;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Roboto', sans-serif;
+}
+
+.char-counter.warning {
+    color: #f9ab00;
+    font-weight: 500;
+}
+
+.char-counter.danger {
+    color: #ea4335;
+    font-weight: 600;
+}
+
+.google-button-group {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid #e8eaed;
+}
+
+.google-btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 24px;
+    font-family: 'Google Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 80px;
+    height: 40px;
+}
+
+.google-btn-primary {
+    background-color: #1a73e8;
+    color: white;
+    box-shadow: 0 1px 2px rgba(60,64,67,0.3);
+}
+
+.google-btn-primary:hover {
+    background-color: #1557b0;
+    box-shadow: 0 2px 3px rgba(60,64,67,0.3);
+}
+
+.google-btn-secondary {
+    background-color: transparent;
+    color: #1a73e8;
+    border: 1px solid #dadce0;
+}
+
+.google-btn-secondary:hover {
+    background-color: #f8f9fa;
+    border-color: #1a73e8;
+}
+
+.validation-message {
+    background: #fef7e0;
+    border: 1px solid #fdd663;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    color: #b06000;
+    font-family: 'Roboto', sans-serif;
+}
+
+.validation-message.error {
+    background: #fce8e6;
+    border-color: #f28b82;
+    color: #d93025;
+}
+
+@media (max-width: 768px) {
+    .google-container {
+        margin: 20px auto;
+        padding: 0 16px;
+    }
+    
+    .google-header, .google-body {
+        padding: 20px 24px;
+    }
+    
+    .google-button-group {
+        flex-direction: column-reverse;
+    }
+    
+    .google-btn {
+        width: 100%;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="google-container">
+    <div class="google-card">
+        <div class="google-header">
+            <h1 class="google-title">Edit Post</h1>
+        </div>
+        
+        <div class="google-body">
+            <!-- Show flash messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="validation-message {{ 'error' if category == 'error' else category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            
+            <form action="{{ url_for('edit_post', post_id=post.post_id) }}" method="POST" id="editPostForm">
+                <!-- CSRF Token -->
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                
+                <!-- Content Field -->
+                <div class="google-form-group">
+                    <label for="post_content" class="google-form-label">Edit your post</label>
+                    <div class="google-textarea-container">
+                        <textarea 
+                            name="post_content" 
+                            id="post_content" 
+                            class="google-textarea" 
+                            maxlength="250" 
+                            required
+                            placeholder="What's on your mind?"
+                        >{{ post.post_content }}</textarea>
+                        <div class="char-counter" id="charCounter">{{ post.post_content|length }}/250</div>
+                    </div>
+                </div>
+                
+                <!-- Buttons -->
+                <div class="google-button-group">
+                    <a href="{{ url_for('account') }}" class="google-btn google-btn-secondary">Cancel</a>
+                    <button type="submit" class="google-btn google-btn-primary" id="saveBtn">
+                        Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const textArea = document.getElementById('post_content');
+    const charCounter = document.getElementById('charCounter');
+    const saveBtn = document.getElementById('saveBtn');
+    const maxChars = 250;
+
+    // Sanitize input function
+    function sanitizeInput(input) {
+        return input.replace(/<[^>]*>/g, '');
+    }
+
+    // Update character counter
+    function updateCounter() {
+        const currentLength = textArea.value.length;
+        charCounter.textContent = `${currentLength}/${maxChars}`;
+        
+        // Update styling
+        charCounter.className = 'char-counter';
+        if (currentLength >= 240) {
+            charCounter.classList.add('danger');
+        } else if (currentLength >= 200) {
+            charCounter.classList.add('warning');
+        }
+        
+        // Enable/disable save button
+        saveBtn.disabled = currentLength === 0 || currentLength > maxChars;
+    }
+
+    // Auto-resize textarea
+    function autoResize() {
+        textArea.style.height = 'auto';
+        textArea.style.height = Math.max(120, textArea.scrollHeight) + 'px';
+    }
+
+    // Text area input handling
+    textArea.addEventListener('input', function(e) {
+        // Sanitize input
+        this.value = sanitizeInput(this.value);
+        
+        // Enforce character limit
+        if (this.value.length > maxChars) {
+            this.value = this.value.substring(0, maxChars);
+        }
+        
+        updateCounter();
+        autoResize();
+    });
+
+    // Paste event handling
+    textArea.addEventListener('paste', function(e) {
+        e.preventDefault();
+        const text = sanitizeInput((e.clipboardData || window.clipboardData).getData('text'));
+        
+        // Insert text at cursor position
+        const start = this.selectionStart;
+        const end = this.selectionEnd;
+        const currentValue = this.value;
+        
+        // Calculate available space
+        const availableSpace = maxChars - (currentValue.length - (end - start));
+        const textToInsert = text.substring(0, availableSpace);
+        
+        // Insert text
+        this.value = currentValue.substring(0, start) + textToInsert + currentValue.substring(end);
+        
+        // Set cursor position
+        const newPosition = start + textToInsert.length;
+        this.setSelectionRange(newPosition, newPosition);
+        
+        // Update counter and resize
+        updateCounter();
+        autoResize();
+    });
+
+    // Form submission handling
+    document.getElementById('editPostForm').addEventListener('submit', function(e) {
+        const content = textArea.value.trim();
+        
+        if (!content) {
+            e.preventDefault();
+            alert('Post content cannot be empty.');
+            return false;
+        }
+        
+        if (content.length > maxChars) {
+            e.preventDefault();
+            alert(`Post content must be ${maxChars} characters or less.`);
+            return false;
+        }
+        
+        // Show loading state
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+        
+        return true;
+    });
+
+    // Initialize
+    updateCounter();
+    autoResize();
+    
+    // Focus the textarea
+    textArea.focus();
+    textArea.setSelectionRange(textArea.value.length, textArea.value.length);
+});
+</script>
+{% endblock %}

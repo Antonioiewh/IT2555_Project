@@ -1,0 +1,746 @@
+{% extends "UserBase.html" %}
+
+{% block title %}Sign in{% endblock %}
+{% from "includes/_formHelper.html" import render_field %}
+
+{% block head %}
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<style>
+.google-login-container {
+    min-height: 80vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f8f9fa;
+    padding: 20px;
+}
+
+.google-login-card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    padding: 40px 32px;
+    width: 100%;
+    max-width: 450px;
+    border: 1px solid #dadce0;
+}
+
+.google-login-header {
+    text-align: center;
+    margin-bottom: 32px;
+}
+
+.google-login-title {
+    font-size: 24px;
+    font-weight: 400;
+    color: #3c4043;
+    margin: 0 0 8px 0;
+    letter-spacing: -0.5px;
+}
+
+.google-login-subtitle {
+    font-size: 16px;
+    color: #5f6368;
+    font-weight: 400;
+    margin: 0;
+}
+
+.google-form-group {
+    margin-bottom: 24px;
+}
+
+.google-form-label {
+    display: block;
+    font-size: 14px;
+    color: #3c4043;
+    font-weight: 500;
+    margin-bottom: 8px;
+}
+
+.google-form-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    font-size: 16px;
+    color: #3c4043;
+    background: #fff;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+
+.google-form-input:focus {
+    outline: none;
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+}
+
+.google-form-input.error {
+    border-color: #ea4335;
+}
+
+.google-form-input.error:focus {
+    border-color: #ea4335;
+    box-shadow: 0 0 0 2px rgba(234, 67, 53, 0.2);
+}
+
+.google-btn {
+    width: 100%;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s, box-shadow 0.2s;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+}
+
+.google-btn-primary {
+    background: #1a73e8;
+    color: #fff;
+}
+
+.google-btn-primary:hover {
+    background: #1557b0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.google-btn-primary:disabled {
+    background: #94a3b8;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.google-btn-secondary {
+    background: #fff;
+    color: #1a73e8;
+    border: 1px solid #dadce0;
+}
+
+.google-btn-secondary:hover {
+    background: #f8f9fa;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.google-btn-success {
+    background: #34a853;
+    color: #fff;
+    margin-top: 12px;
+}
+
+.google-btn-success:hover {
+    background: #2d8f47;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.google-btn-success:disabled {
+    background: #94a3b8;
+    cursor: not-allowed;
+}
+
+.google-btn-icon {
+    margin-right: 8px;
+    font-size: 16px;
+}
+
+.google-link-section {
+    text-align: center;
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid #dadce0;
+}
+
+.google-link-text {
+    font-size: 14px;
+    color: #5f6368;
+    margin: 0;
+}
+
+.google-link {
+    color: #1a73e8;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.google-link:hover {
+    text-decoration: underline;
+    color: #1557b0;
+}
+
+.google-divider {
+    height: 1px;
+    background: #dadce0;
+    margin: 20px 0;
+}
+
+.google-error-text {
+    color: #ea4335;
+    font-size: 12px;
+    margin-top: 4px;
+    display: block;
+}
+
+.google-alert {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    max-width: 400px;
+    min-width: 300px;
+}
+
+.google-alert-item {
+    background: #fff;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    padding: 16px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: flex-start;
+    font-family: 'Google Sans', sans-serif;
+}
+
+.google-alert-success {
+    border-left: 4px solid #34a853;
+}
+
+.google-alert-danger {
+    border-left: 4px solid #ea4335;
+}
+
+.google-alert-warning {
+    border-left: 4px solid #fbbc04;
+}
+
+.google-alert-icon {
+    margin-right: 12px;
+    font-size: 16px;
+    margin-top: 2px;
+}
+
+.google-alert-success .google-alert-icon {
+    color: #34a853;
+}
+
+.google-alert-danger .google-alert-icon {
+    color: #ea4335;
+}
+
+.google-alert-warning .google-alert-icon {
+    color: #fbbc04;
+}
+
+.google-alert-content {
+    flex: 1;
+    font-size: 14px;
+    color: #3c4043;
+}
+
+.google-alert-close {
+    background: none;
+    border: none;
+    color: #5f6368;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0;
+    margin-left: 12px;
+}
+
+.google-alert-close:hover {
+    color: #3c4043;
+}
+
+@media (max-width: 768px) {
+    .google-login-card {
+        padding: 32px 24px;
+        margin: 0 16px;
+    }
+    
+    .google-alert {
+        right: 16px;
+        left: 16px;
+        max-width: none;
+    }
+}
+
+.g-recaptcha {
+    margin: 20px 0;
+    display: flex;
+    justify-content: center;
+}
+
+.form-control.is-invalid {
+    border-color: #ea4335;
+}
+
+.form-control.is-invalid:focus {
+    border-color: #ea4335;
+    box-shadow: 0 0 0 2px rgba(234, 67, 53, 0.2);
+}
+
+.invalid-feedback {
+    color: #ea4335;
+    font-size: 12px;
+    margin-top: 4px;
+    display: block;
+}
+/* Password toggle styling */
+.password-input-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-toggle-btn {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #5f6368;
+    font-size: 16px;
+    padding: 4px;
+    border-radius: 4px;
+    transition: color 0.2s, background-color 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+}
+
+.password-toggle-btn:hover {
+    color: #1a73e8;
+    background-color: #f8f9fa;
+}
+
+.password-toggle-btn:focus {
+    outline: 2px solid #1a73e8;
+    outline-offset: 2px;
+}
+
+.password-input-container .google-form-input {
+    padding-right: 48px; /* Make room for the toggle button */
+}
+</style>
+
+<div class="google-login-container">
+    <div class="google-login-card">
+        <div class="google-login-header">
+            <h1 class="google-login-title">Sign in</h1>
+            <p class="google-login-subtitle">to continue to SimpleBook</p>
+        </div>
+
+        <form method="POST" action="" enctype="multipart/form-data" id="loginForm">
+            {{ form.hidden_tag() }}
+
+            <div class="google-form-group">
+                <label for="username" class="google-form-label">Username</label>
+                {{ form.username(class="google-form-input", id="username", placeholder="Enter your username") }}
+                {% if form.username.errors %}
+                    {% for error in form.username.errors %}
+                        <span class="google-error-text">{{ error }}</span>
+                    {% endfor %}
+                {% endif %}
+            </div>
+
+            <div class="google-form-group">
+                <label for="password" class="google-form-label">Password</label>
+                <div class="password-input-container">
+                    {{ form.password(class="google-form-input", id="password", placeholder="Enter your password") }}
+                    <button type="button" class="password-toggle-btn" id="passwordToggle">
+                        <i class="bi bi-eye" id="passwordToggleIcon"></i>
+                    </button>
+                </div>
+                {% if form.password.errors %}
+                    {% for error in form.password.errors %}
+                        <span class="google-error-text">{{ error }}</span>
+                    {% endfor %}
+                {% endif %}
+            </div>
+
+            {% if form.recaptcha %}
+            <div class="google-form-group">
+                {{ form.recaptcha }}
+                {% if form.recaptcha.errors %}
+                    {% for error in form.recaptcha.errors %}
+                        <span class="google-error-text">{{ error }}</span>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <button type="submit" class="google-btn google-btn-primary">
+                <i class="bi bi-box-arrow-in-right google-btn-icon"></i>
+                Sign in
+            </button>
+
+            <!-- Passkey option (only show if user has both 2FA and passkeys) -->
+            <div id="passkeyOption" style="display: none;">
+                <div class="google-divider"></div>
+                <button type="button" id="passkeyLoginBtn" class="google-btn google-btn-success">
+                    <i class="bi bi-fingerprint google-btn-icon"></i>
+                    Use Passkey Instead
+                </button>
+            </div>
+        </form>
+
+        <div class="google-link-section">
+            <p class="google-link-text">
+                Don't have an account? 
+                <a href="/signup" class="google-link">Create account</a>
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- Alert container with Google styling -->
+<div id="alertContainer" class="google-alert"></div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('loginForm');
+    const usernameField = document.querySelector('input[name="username"]');
+    const passkeyOption = document.getElementById('passkeyOption');
+    const passkeyLoginBtn = document.getElementById('passkeyLoginBtn');
+    
+    console.log('Login page loaded');
+    
+    // Show alert function with Google styling
+    function showAlert(message, type = 'danger') {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `google-alert-item google-alert-${type}`;
+        
+        const iconMap = {
+            success: 'check-circle-fill',
+            danger: 'exclamation-triangle-fill',
+            warning: 'exclamation-triangle-fill'
+        };
+        
+        alertDiv.innerHTML = `
+            <i class="bi bi-${iconMap[type]} google-alert-icon"></i>
+            <div class="google-alert-content">${message}</div>
+            <button type="button" class="google-alert-close" onclick="this.parentElement.remove()">
+                <i class="bi bi-x"></i>
+            </button>
+        `;
+        
+        const container = document.getElementById('alertContainer');
+        container.appendChild(alertDiv);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.remove();
+            }
+        }, 5000);
+    }
+
+    // Form validation styling
+    function updateFieldValidation(field, isValid, message = '') {
+        if (isValid) {
+            field.classList.remove('error');
+            const errorSpan = field.parentNode.querySelector('.google-error-text');
+            if (errorSpan) errorSpan.remove();
+        } else {
+            field.classList.add('error');
+            let errorSpan = field.parentNode.querySelector('.google-error-text');
+            if (!errorSpan && message) {
+                errorSpan = document.createElement('span');
+                errorSpan.className = 'google-error-text';
+                errorSpan.textContent = message;
+                field.parentNode.appendChild(errorSpan);
+            } else if (errorSpan && message) {
+                errorSpan.textContent = message;
+            }
+        }
+    }
+
+    // Check if user has passkeys when they enter username
+    if (usernameField) {
+        usernameField.addEventListener('blur', async function() {
+            const username = this.value.trim();
+            console.log('Username blur event, username:', username);
+            
+            if (username) {
+                updateFieldValidation(this, true);
+                
+                try {
+                    const response = await fetch('/check_user_auth_methods', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({username: username})
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        console.log('Auth methods response:', data);
+                        
+                        // Show passkey option only if user has both 2FA and passkeys
+                        if (data.has_2fa && data.has_passkeys) {
+                            passkeyOption.style.display = 'block';
+                        } else {
+                            passkeyOption.style.display = 'none';
+                        }
+                    } else {
+                        console.error('Failed to check auth methods:', response.status);
+                        passkeyOption.style.display = 'none';
+                    }
+                } catch (error) {
+                    console.error('Error checking user auth methods:', error);
+                    passkeyOption.style.display = 'none';
+                }
+            } else {
+                passkeyOption.style.display = 'none';
+            }
+        });
+    }
+
+    // Base64 conversion function with better error handling
+    function b64ToBuf(b64) {
+        console.log('Converting base64:', b64, 'type:', typeof b64);
+        
+        if (b64 === null || b64 === undefined) {
+            throw new Error('Base64 string is null or undefined');
+        }
+        
+        if (typeof b64 !== 'string') {
+            console.warn('Converting non-string to string:', b64);
+            b64 = String(b64);
+        }
+        
+        if (!b64 || b64.length === 0) {
+            throw new Error('Base64 string is empty');
+        }
+        
+        // Basic base64 pattern check
+        if (!/^[A-Za-z0-9+/]*={0,2}$/.test(b64)) {
+            throw new Error('Invalid base64 string format: ' + b64.substring(0, 50));
+        }
+        
+        try {
+            const decoded = atob(b64);
+            const result = Uint8Array.from(decoded, c => c.charCodeAt(0));
+            console.log('Base64 conversion successful, result length:', result.length);
+            return result;
+        } catch (error) {
+            console.error('Base64 conversion failed:', error);
+            throw new Error('Failed to decode base64: ' + error.message);
+        }
+    }
+
+    // Passkey login functionality
+    if (passkeyLoginBtn) {
+        passkeyLoginBtn.addEventListener('click', async function() {
+            const username = usernameField.value.trim();
+            if (!username) {
+                showAlert('Please enter your username first', 'warning');
+                usernameField.focus();
+                return;
+            }
+
+            try {
+                this.disabled = true;
+                this.innerHTML = '<i class="bi bi-hourglass-split google-btn-icon"></i>Authenticating...';
+                
+                console.log('=== STARTING PASSKEY LOGIN ===');
+                console.log('Username:', username);
+                
+                // Begin passkey authentication
+                const beginResponse = await fetch('/passkey/begin_login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({username: username})
+                });
+                
+                console.log('Begin response status:', beginResponse.status);
+                
+                if (!beginResponse.ok) {
+                    const errorText = await beginResponse.text();
+                    console.error('Begin response error:', errorText);
+                    throw new Error(`Server error: ${beginResponse.status}`);
+                }
+                
+                const serverResponse = await beginResponse.json();
+                console.log('Server response received:', serverResponse);
+                
+                if (serverResponse.error) {
+                    throw new Error(serverResponse.error);
+                }
+                
+                // The server should return WebAuthn options directly
+                const publicKey = serverResponse;
+                console.log('Using server response as publicKey:', publicKey);
+                
+                // Validate the response format
+                if (!publicKey.challenge) {
+                    console.error('Missing challenge in response:', publicKey);
+                    throw new Error('Server response missing challenge - invalid format');
+                }
+                
+                if (!publicKey.allowCredentials || !Array.isArray(publicKey.allowCredentials)) {
+                    console.error('Missing or invalid allowCredentials in response:', publicKey);
+                    throw new Error('Server response missing allowCredentials - invalid format');
+                }
+
+                // Convert base64 to buffers
+                console.log('=== CONVERTING BASE64 DATA ===');
+                console.log('Challenge before conversion:', publicKey.challenge);
+                publicKey.challenge = b64ToBuf(publicKey.challenge);
+                console.log('Challenge after conversion, length:', publicKey.challenge.length);
+                
+                console.log('Converting allowCredentials, count:', publicKey.allowCredentials.length);
+                publicKey.allowCredentials = publicKey.allowCredentials.map((cred, index) => {
+                    console.log(`Converting credential ${index}:`, cred.id);
+                    return {
+                        ...cred,
+                        id: b64ToBuf(cred.id)
+                    };
+                });
+                
+                console.log('=== FINAL PUBLICKEY OBJECT ===');
+                console.log('Challenge length:', publicKey.challenge.length);
+                console.log('AllowCredentials count:', publicKey.allowCredentials.length);
+                console.log('RpId:', publicKey.rpId);
+                console.log('UserVerification:', publicKey.userVerification);
+
+                console.log('=== REQUESTING CREDENTIAL FROM AUTHENTICATOR ===');
+                
+                // Get credential from authenticator
+                const credential = await navigator.credentials.get({publicKey});
+                console.log('Credential received:', credential);
+
+                // Send response to server
+                console.log('=== SENDING RESPONSE TO SERVER ===');
+                const assertion = {
+                    id: credential.id,
+                    type: credential.type,
+                    response: {
+                        clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(credential.response.clientDataJSON))),
+                        authenticatorData: btoa(String.fromCharCode(...new Uint8Array(credential.response.authenticatorData))),
+                        signature: btoa(String.fromCharCode(...new Uint8Array(credential.response.signature))),
+                        userHandle: credential.response.userHandle ? btoa(String.fromCharCode(...new Uint8Array(credential.response.userHandle))) : null
+                    }
+                };
+
+                console.log('Assertion object created:', assertion);
+
+                const finishResponse = await fetch('/passkey/finish_login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(assertion)
+                });
+
+                const finishData = await finishResponse.json();
+                console.log('Server finish response:', finishData);
+
+                if (finishData.success) {
+                    showAlert('Sign in successful! Redirecting...', 'success');
+                    setTimeout(() => {
+                        window.location.href = finishData.redirect;
+                    }, 1000);
+                } else {
+                    throw new Error(finishData.error || 'Passkey authentication failed');
+                }
+
+            } catch (error) {
+                console.error('=== PASSKEY ERROR ===', error);
+                
+                if (error.name === 'NotAllowedError') {
+                    showAlert('Passkey authentication was cancelled. Please use your password.', 'warning');
+                } else if (error.name === 'NotSupportedError') {
+                    showAlert('Passkeys are not supported on this device. Please use your password.', 'warning');
+                } else if (error.message.includes('null or undefined')) {
+                    showAlert('Server error: Invalid passkey data. Please try again or use password.', 'warning');
+                } else if (error.message.includes('invalid format')) {
+                    showAlert('Server configuration error. Please use password login.', 'warning');
+                } else {
+                    showAlert('Passkey failed: ' + error.message + '. Please use your password.', 'warning');
+                }
+                
+                // Focus on password field after error
+                setTimeout(() => {
+                    const passwordField = document.querySelector('input[name="password"]');
+                    if (passwordField) passwordField.focus();
+                }, 1000);
+                
+            } finally {
+                this.disabled = false;
+                this.innerHTML = '<i class="bi bi-fingerprint google-btn-icon"></i>Use Passkey Instead';
+            }
+        });
+    }
+
+    // Form submission with basic validation
+    form.addEventListener('submit', function(e) {
+        let isValid = true;
+        
+        // Username validation
+        if (!usernameField.value.trim()) {
+            updateFieldValidation(usernameField, false, 'Please enter your username');
+            isValid = false;
+        } else {
+            updateFieldValidation(usernameField, true);
+        }
+        
+        // Password validation (if not using passkey)
+        const passwordField = document.querySelector('input[name="password"]');
+        if (passwordField && !passwordField.value.trim()) {
+            updateFieldValidation(passwordField, false, 'Please enter your password');
+            isValid = false;
+        } else if (passwordField) {
+            updateFieldValidation(passwordField, true);
+        }
+        
+        if (!isValid) {
+            e.preventDefault();
+        }
+    });
+
+    const passwordField = document.getElementById('password');
+    const passwordToggle = document.getElementById('passwordToggle');
+    const passwordToggleIcon = document.getElementById('passwordToggleIcon');
+
+    if (passwordToggle && passwordField && passwordToggleIcon) {
+        passwordToggle.addEventListener('click', function() {
+            // Toggle password visibility
+            if (passwordField.type === 'password') {
+                passwordField.type = 'text';
+                passwordToggleIcon.className = 'bi bi-eye-slash';
+                passwordToggle.setAttribute('aria-label', 'Hide password');
+            } else {
+                passwordField.type = 'password';
+                passwordToggleIcon.className = 'bi bi-eye';
+                passwordToggle.setAttribute('aria-label', 'Show password');
+            }
+        });
+
+        // Set initial aria-label
+        passwordToggle.setAttribute('aria-label', 'Show password');
+    }
+}
+
+);
+</script>
+
+{% endblock %}

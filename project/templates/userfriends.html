@@ -1,0 +1,209 @@
+{% extends "UserBase.html" %}
+{% block title %}Friends Page{% endblock %}
+
+{% block content %}
+<style>
+:root{
+  --bg:#f8f9fa; --surface:#fff; --ink:#202124; --muted:#5f6368; --border:#e8eaed;
+  --ring:0 0 0 3px rgba(26,115,232,0.18); --gblue:#1a73e8;
+}
+.friends-wrap{
+  max-width: 920px; margin: 80px auto 24px; padding: 0 12px;
+  font-family:'Google Sans', -apple-system, BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif; color:var(--ink);
+}
+.friends-header{
+  background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px 16px;
+  box-shadow:0 8px 24px rgba(18,22,33,.06); margin-bottom:16px; display:flex; align-items:center; gap:12px; justify-content:space-between;
+}
+.friends-header h2{ margin:0; font-weight:600; display:flex; align-items:center; gap:8px; }
+.friends-header h2 .material-icons{ color:var(--gblue); }
+#search-bar{
+  border:1px solid var(--border); border-radius:24px; padding:10px 14px; width:50%;
+}
+#search-bar:focus{ border-color:#c7d2fe; box-shadow:var(--ring); outline:none; }
+
+.friend-row{
+  background:#fff; border:1px solid var(--border); border-radius:16px; margin-bottom:12px;
+  display:flex; align-items:center; padding:12px; position:relative;
+  box-shadow:0 8px 24px rgba(18,22,33,.06); transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+.friend-row:hover{ transform: translateY(-2px); box-shadow:0 16px 30px rgba(18,22,33,.10); }
+
+.avatar-ring{ width:60px; height:60px; border-radius:50%; padding:3px;
+  background: conic-gradient(#1a73e8,#3b82f6,#60a5fa,#1a73e8); margin-right:12px; flex-shrink:0;
+}
+.avatar-ring img.friend-profile{ width:100%; height:100%; border-radius:50%; object-fit:cover; background:#fff; }
+
+.friend-name{ font-weight:600; color:#1f2937; }
+.friend-actions{ margin-left:auto; display:flex; align-items:center; gap:8px; }
+.btn{ border-radius:20px; }
+.btn-outline-primary{ background:#fff; color:#1a73e8; border:1px solid var(--border); }
+.btn-outline-primary:hover{ background:#f1f3f4; border-color:#dadce0; color:#1557b0; }
+.btn-secondary{ background:#fff; color:#3c4043; border:1px solid var(--border); }
+.btn-secondary:hover{ background:#f8f9fa; }
+.btn-danger{ background:#ea4335; border:none; }
+.btn-danger:hover{ background:#c5221f; }
+.btn-success{ background:#1a73e8; border:none; }
+.btn-success:hover{ background:#1557b0; }
+
+/* Status bar at left */
+.status-indicator{ position:absolute; left:10px; top:50%; transform:translateY(-50%); width:8px; height:36px; border-radius:8px; background:#bdc1c6; }
+.friend-row{ padding-left: 26px; }
+.friend-row.status-online .status-indicator{ background:#34a853; }
+.friend-row.status-offline .status-indicator{ background:#9aa0a6; }
+.friend-row.status-blocked .status-indicator{ background:#ea4335; }
+.friend-row.status-blocked{ background:#fff6f6; border-color:#fadde1; }
+
+/* Dropdown polish */
+.dropdown-menu{ border:1px solid var(--border); border-radius:12px; box-shadow:0 12px 28px rgba(0,0,0,.12); padding:8px; }
+.dropdown-item{ border-radius:8px; } .dropdown-item:hover{ background:#f1f3f4; }
+
+/* Alerts */
+.alert{ display:flex; align-items:center; gap:12px; padding:12px 16px; border-radius:8px; background:#fff; color:#202124;
+  box-shadow:0 1px 3px rgba(60,64,67,.12), 0 4px 8px rgba(60,64,67,.08); margin-bottom:12px; border-left:6px solid transparent; font-size:14px; }
+.alert-success{ border-left-color:#34a853; } .alert-danger{ border-left-color:#ea4335; } .alert-info{ border-left-color:#1a73e8; } .alert-warning{ border-left-color:#fbbc04; }
+</style>
+
+<div class="friends-wrap">
+  <div class="friends-header">
+    <h2><span class="material-icons" aria-hidden="true">people</span>Friends</h2>
+    <input id="search-bar" type="text" class="form-control form-control-lg" placeholder="Search Friends">
+  </div>
+
+  <div id="friend-list">
+    {% for friend in friends %}
+    <div class="friend-row">
+      <div class="avatar-ring">
+        <a href="{{ url_for('view_profile', user_id=friend.user_id) }}" class="text-decoration-none">
+          {% if friend.profile_pic_url %}
+            <img src="{{ url_for('static', filename='uploads/' + friend.profile_pic_url) }}"
+          {% else %}
+            <img src="{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
+          {% endif %}
+               alt="{{ friend.username }} Profile Picture"
+               class="friend-profile"
+               width="64" height="64"
+               onerror="this.src='{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}'">
+        </a>
+      </div>
+
+      <div class="friend-info">
+        <div class="friend-name">
+          <a href="{{ url_for('view_profile', user_id=friend.user_id) }}" class="text-decoration-none text-dark">{{ friend.username }}</a>
+        </div>
+        {% if friend.status == 'blocked' %}
+          <span class="badge bg-warning text-dark">Blocked</span>
+        {% endif %}
+      </div>
+
+      <div class="friend-actions">
+        {% if friend.status == 'accepted' %}
+          <a href="{{ url_for('view_profile', user_id=friend.user_id) }}" class="btn btn-outline-primary btn-sm me-2">
+            <i class="bi bi-person"></i> Profile
+          </a>
+          <button type="button" class="btn btn-outline-primary btn-sm me-2" onclick="window.location.href='{{ url_for('messages') }}?friend_id={{ friend.user_id }}'">
+            <i class="bi bi-chat"></i> Message
+          </button>
+          <div class="dropdown">
+            <button class="btn btn-secondary btn-sm dropdown-toggle" type="button" id="dropdownMenuButton-{{ friend.user_id }}" data-bs-toggle="dropdown" aria-expanded="false">
+              <i class="bi bi-three-dots-vertical"></i>
+            </button>
+            <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton-{{ friend.user_id }}">
+              <li>
+                <button class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#unfriendModal-{{ friend.user_id }}">
+                  <i class="bi bi-person-x"></i> Unfriend
+                </button>
+              </li>
+              <li>
+                <button class="dropdown-item text-warning" onclick="showBlockConfirm({{ friend.user_id }}, '{{ friend.username }}')">
+                  <i class="bi bi-slash-circle"></i> Block
+                </button>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Unfriend Modal (unchanged functionality) -->
+          <div class="modal fade" id="unfriendModal-{{ friend.user_id }}" tabindex="-1" aria-labelledby="unfriendModalLabel-{{ friend.user_id }}" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h5 class="modal-title" id="unfriendModalLabel-{{ friend.user_id }}">Confirm Unfriend</h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                  Are you sure you want to unfriend <strong>{{ friend.username }}</strong>?
+                  <br><small class="text-muted">This action will remove them from your friends list and delete your chat history.</small>
+                </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                  <form method="post" action="{{ url_for('unfriend', friendship_id=friend.friendship_id) }}" style="display:inline;">
+                    {{ form.hidden_tag() }}
+                    <button type="submit" class="btn btn-danger">
+                      <i class="bi bi-person-x"></i> Unfriend
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        {% elif friend.status == 'blocked' %}
+          <form method="post" action="{{ url_for('unblock_user_friend', friend_id=friend.user_id) }}" style="display:inline;">
+            {{ form.hidden_tag() }}
+            <button type="submit" class="btn btn-success btn-sm">
+              <i class="bi bi-check-circle"></i> Unblock
+            </button>
+          </form>
+        {% endif %}
+      </div>
+
+      <div class="status-indicator{% if friend.is_online %} online{% endif %}"></div>
+    </div>
+    {% else %}
+      <div class="alert alert-info text-center">
+        <i class="bi bi-people"></i>
+        <h5>No friends found</h5>
+        <p>Start by <a href="{{ url_for('discover_friends') }}" class="text-decoration-none">discovering new friends</a>!</p>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+// Keep existing functionality
+document.getElementById('search-bar').addEventListener('input', function(){
+  const q = this.value.toLowerCase();
+  document.querySelectorAll('#friend-list .friend-row').forEach(row => {
+    const name = row.querySelector('.friend-name').textContent.toLowerCase();
+    row.style.display = name.includes(q) ? '' : 'none';
+  });
+});
+function showBlockConfirm(friendId, friendName){
+  const modal = document.getElementById('confirm-modal');
+  document.getElementById('confirm-modal-message').innerHTML = `
+    Are you sure you want to block <strong>${friendName}</strong>?
+    <br><small class="text-muted">This will remove them from your friends list and prevent future contact.</small>
+  `;
+  modal.style.display='flex';
+  document.getElementById('confirm-modal-yes').onclick = function(){
+    modal.style.display='none';
+    fetch('/block_user/'+friendId,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token() }}'}})
+      .then(r=>{ if(r.ok) location.reload(); else throw 0; })
+      .catch(()=>alert('Failed to block user. Try again.'));
+  };
+  document.getElementById('confirm-modal-no').onclick = function(){ modal.style.display='none'; };
+}
+document.getElementById('confirm-modal')?.addEventListener('click',e=>{ if(e.target===e.currentTarget) e.currentTarget.style.display='none'; });
+</script>
+
+<!-- Existing lightweight confirm modal (kept) -->
+<div id="confirm-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.5); z-index:2000; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:12px; padding:2rem; min-width:320px; max-width:90vw; box-shadow:0 4px 32px rgba(44,62,80,0.15); text-align:center;">
+    <div id="confirm-modal-message" style="margin-bottom:1.5rem; font-size:1.1rem;"></div>
+    <button id="confirm-modal-yes" class="btn btn-warning me-2">
+      <i class="bi bi-slash-circle"></i> Block User
+    </button>
+    <button id="confirm-modal-no" class="btn btn-secondary">Cancel</button>
+  </div>
+</div>
+{% endblock %}

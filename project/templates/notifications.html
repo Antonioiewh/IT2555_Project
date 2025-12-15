@@ -1,0 +1,1281 @@
+{% extends "UserBase.html" %}
+{% block title %}Notifications{% endblock %}
+
+{% block head %}
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<style>
+.google-container {
+    font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: #f8f9fa;
+    min-height: 100vh;
+    padding: 0;
+}
+
+.google-header {
+    background: #fff;
+    border-bottom: 1px solid #e8eaed;
+    padding: 24px 40px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.google-header-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.google-title {
+    font-size: 28px;
+    font-weight: 400;
+    color: #202124;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 0;
+}
+
+.google-title-icon {
+    color: #4285f4;
+    font-size: 28px;
+}
+
+.google-main {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 32px 40px;
+}
+
+.google-content-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 6px rgba(32,33,36,0.28);
+    border: 1px solid #dadce0;
+    min-height: 500px;
+    transition: box-shadow 0.15s;
+}
+
+.google-content-card:hover {
+    box-shadow: 0 2px 10px rgba(32,33,36,0.32);
+}
+
+.google-content-header {
+    padding: 32px;
+    border-bottom: 1px solid #e8eaed;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.google-content-title-section {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.google-content-title {
+    font-size: 24px;
+    font-weight: 500;
+    color: #3c4043;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.google-notification-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.google-dropdown-button {
+    background: #fff;
+    border: 1px solid #dadce0;
+    border-radius: 8px;
+    padding: 12px 20px;
+    font-size: 15px;
+    font-weight: 500;
+    color: #3c4043;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.15s;
+    min-width: 280px;
+    justify-content: space-between;
+}
+
+.google-dropdown-button:hover {
+    background: #f8f9fa;
+    border-color: #4285f4;
+    box-shadow: 0 1px 2px rgba(32,33,36,0.1);
+}
+
+.google-dropdown-button.active {
+    border-color: #4285f4;
+    box-shadow: 0 0 0 2px rgba(66,133,244,0.2);
+}
+
+.google-dropdown-current {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.google-dropdown-icon {
+    font-size: 20px;
+    color: #5f6368;
+}
+
+.google-dropdown-count {
+    background: #e8eaed;
+    color: #3c4043;
+    border-radius: 12px;
+    padding: 3px 10px;
+    font-size: 13px;
+    font-weight: 500;
+    min-width: 24px;
+    text-align: center;
+}
+
+.google-dropdown-arrow {
+    font-size: 22px;
+    color: #5f6368;
+    transition: transform 0.2s;
+}
+
+.google-dropdown-button.active .google-dropdown-arrow {
+    transform: rotate(180deg);
+}
+
+.google-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid #dadce0;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(32,33,36,0.28);
+    z-index: 1000;
+    margin-top: 4px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-8px);
+    transition: all 0.2s ease;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.google-dropdown-menu.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.google-dropdown-item {
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-bottom: 1px solid #f0f0f0;
+    justify-content: space-between;
+}
+
+.google-dropdown-item:last-child {
+    border-bottom: none;
+}
+
+.google-dropdown-item:hover {
+    background: #f8f9fa;
+}
+
+.google-dropdown-item.active {
+    background: #e8f0fe;
+    color: #1967d2;
+}
+
+.google-dropdown-item-content {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 1;
+}
+
+.google-dropdown-item-icon {
+    font-size: 20px;
+    color: #5f6368;
+}
+
+.google-dropdown-item.active .google-dropdown-item-icon {
+    color: #4285f4;
+}
+
+.google-dropdown-item-text {
+    font-size: 15px;
+    font-weight: 500;
+}
+
+.google-dropdown-item-count {
+    background: #e8eaed;
+    color: #3c4043;
+    border-radius: 12px;
+    padding: 3px 10px;
+    font-size: 13px;
+    font-weight: 500;
+    min-width: 24px;
+    text-align: center;
+}
+
+.google-dropdown-item.active .google-dropdown-item-count {
+    background: #4285f4;
+    color: #fff;
+}
+
+.google-content-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.google-btn {
+    border: none;
+    border-radius: 4px;
+    font-size: 15px;
+    font-weight: 500;
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+}
+
+.google-btn-secondary {
+    background: #fff;
+    color: #5f6368;
+    border: 1px solid #dadce0;
+}
+
+.google-btn-secondary:hover {
+    background: #f8f9fa;
+    color: #5f6368;
+    text-decoration: none;
+    box-shadow: 0 1px 1px 0 rgba(65,69,73,0.3);
+}
+
+.google-btn-primary {
+    background: #4285f4;
+    color: #fff;
+    box-shadow: 0 1px 2px 0 rgba(66,133,244,0.3);
+}
+
+.google-btn-primary:hover {
+    background: #3367d6;
+    color: #fff;
+    text-decoration: none;
+    box-shadow: 0 1px 3px 0 rgba(66,133,244,0.5);
+}
+
+.google-btn-danger {
+    background: #ea4335;
+    color: #fff;
+    box-shadow: 0 1px 2px 0 rgba(234,67,53,0.3);
+}
+
+.google-btn-danger:hover {
+    background: #d33b2c;
+    color: #fff;
+    text-decoration: none;
+    box-shadow: 0 1px 3px 0 rgba(234,67,53,0.5);
+}
+
+.google-content-body {
+    padding: 0;
+}
+
+.google-notification-item {
+    padding: 24px 32px;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    transition: all 0.15s;
+    position: relative;
+}
+
+.google-notification-item:hover {
+    background: #f8f9fa;
+}
+
+.google-notification-item:last-child {
+    border-bottom: none;
+}
+
+.google-notification-item.unread {
+    background: #f8f9ff;
+}
+
+.google-notification-item.unread::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: #4285f4;
+}
+
+.google-notification-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: #4285f4;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 500;
+    font-size: 18px;
+    flex-shrink: 0;
+    transition: transform 0.15s;
+}
+
+.google-notification-item:hover .google-notification-avatar {
+    transform: scale(1.05);
+}
+
+.google-notification-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: #f8f9fa;
+    color: #5f6368;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+    transition: transform 0.15s;
+}
+
+.google-notification-item:hover .google-notification-icon {
+    transform: scale(1.05);
+}
+
+.google-notification-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.google-notification-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: #3c4043;
+    margin-bottom: 6px;
+    line-height: 1.4;
+}
+
+.google-notification-message {
+    font-size: 15px;
+    color: #5f6368;
+    margin-bottom: 10px;
+    line-height: 1.4;
+}
+
+.google-notification-meta {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 13px;
+    color: #9aa0a6;
+    flex-wrap: wrap;
+}
+
+.google-notification-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+}
+
+.google-btn-small {
+    font-size: 13px;
+    padding: 8px 16px;
+    min-height: 36px;
+}
+
+.google-btn-outline {
+    background: #fff;
+    color: #5f6368;
+    border: 1px solid #dadce0;
+}
+
+.google-btn-outline:hover {
+    background: #f8f9fa;
+    color: #5f6368;
+    text-decoration: none;
+}
+
+.google-btn-delete {
+    background: #fff;
+    color: #ea4335;
+    border: 1px solid #ea4335;
+}
+
+.google-btn-delete:hover {
+    background: #fce8e6;
+    color: #ea4335;
+    text-decoration: none;
+}
+
+.google-empty-state {
+    text-align: center;
+    padding: 100px 32px;
+    color: #5f6368;
+}
+
+.google-empty-icon {
+    font-size: 72px;
+    color: #dadce0;
+    margin-bottom: 32px;
+    opacity: 0.8;
+}
+
+.google-empty-title {
+    font-size: 22px;
+    font-weight: 400;
+    color: #3c4043;
+    margin-bottom: 16px;
+}
+
+.google-empty-subtitle {
+    font-size: 16px;
+    color: #5f6368;
+}
+
+.google-tab-content {
+    display: none;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s ease;
+}
+
+.google-tab-content.active {
+    display: block !important;
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Standardized Type-specific styling */
+.notification-friend-request {
+    color: #4285f4;
+}
+
+.notification-event-notification {
+    color: #ea4335;
+}
+
+.notification-message {
+    color: #34a853;
+}
+
+.notification-post-activity {
+    color: #fbbc04;
+}
+
+.notification-report-status {
+    color: #ff9800;
+}
+
+.google-notification-item.notification-friend-request .google-notification-icon {
+    background: #e8f0fe;
+    color: #4285f4;
+}
+
+.google-notification-item.notification-event-notification .google-notification-icon {
+    background: #fce8e6;
+    color: #ea4335;
+}
+
+.google-notification-item.notification-message .google-notification-icon {
+    background: #e6f4ea;
+    color: #34a853;
+}
+
+.google-notification-item.notification-post-activity .google-notification-icon {
+    background: #fff3e0;
+    color: #fbbc04;
+}
+
+.google-notification-item.notification-report-status .google-notification-icon {
+    background: #fff3e0;
+    color: #ff9800;
+}
+
+@media (max-width: 768px) {
+    .google-main {
+        padding: 20px 16px;
+        max-width: 100%;
+    }
+    
+    .google-content-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 16px;
+        padding: 24px 20px;
+    }
+    
+    .google-content-title-section {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+    
+    .google-dropdown-button {
+        width: 100%;
+        min-width: auto;
+    }
+    
+    .google-content-actions {
+        justify-content: stretch;
+    }
+    
+    .google-btn {
+        flex: 1;
+        justify-content: center;
+    }
+    
+    .google-notification-item {
+        padding: 20px 16px;
+        gap: 16px;
+    }
+    
+    .google-notification-avatar,
+    .google-notification-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 16px;
+    }
+    
+    .google-notification-icon {
+        font-size: 18px;
+    }
+    
+    .google-header {
+        padding: 16px 20px;
+    }
+    
+    .google-title {
+        font-size: 24px;
+    }
+    
+    .google-header-content,
+    .google-main {
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .google-main {
+        padding: 16px 12px;
+    }
+    
+    .google-content-header {
+        padding: 20px 16px;
+    }
+    
+    .google-notification-item {
+        padding: 16px 12px;
+    }
+    
+    .google-empty-state {
+        padding: 60px 20px;
+    }
+}
+
+
+
+</style>
+
+<div class="google-container">
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div style="max-width: 1400px; margin: 0 auto; padding: 16px 40px 0;">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Header -->
+    <div class="google-header">
+        <div class="google-header-content">
+            <h1 class="google-title">
+                <span class="material-icons google-title-icon">notifications</span>
+                Notifications
+            </h1>
+        </div>
+    </div>
+
+    <div class="google-main">
+        <div class="google-content-card">
+            <div class="google-content-header">
+                <div class="google-content-title-section">
+                    <h2 class="google-content-title">
+                        <span class="material-icons" id="current-tab-icon">person_add</span>
+                        <span id="current-tab-title">Friend Requests</span>
+                    </h2>
+                    
+                    <!-- Standardized Notification Type Dropdown -->
+                    <div class="google-notification-dropdown">
+                        <button class="google-dropdown-button" onclick="toggleDropdown()" id="dropdownButton">
+                            <div class="google-dropdown-current">
+                                <span class="material-icons google-dropdown-icon notification-friend-request">person_add</span>
+                                <span id="dropdown-current-text">Friend Requests</span>
+                                <span class="google-dropdown-count" id="dropdown-current-count">0</span>
+                            </div>
+                            <span class="material-icons google-dropdown-arrow">keyboard_arrow_down</span>
+                        </button>
+                        
+                        <div class="google-dropdown-menu" id="dropdownMenu">
+                            <div class="google-dropdown-item active" onclick="selectNotificationType('friend_request', 'Friend Requests', 'person_add', 0)" data-type="friend_request">
+                                <div class="google-dropdown-item-content">
+                                    <span class="material-icons google-dropdown-item-icon notification-friend-request">person_add</span>
+                                    <span class="google-dropdown-item-text">Friend Requests</span>
+                                </div>
+                                <span class="google-dropdown-item-count">{{ friend_request_notifs|length if friend_request_notifs else 0 }}</span>
+                            </div>
+                            
+                            <div class="google-dropdown-item" onclick="selectNotificationType('event_notification', 'Event Notifications', 'event', 0)" data-type="event_notification">
+                                <div class="google-dropdown-item-content">
+                                    <span class="material-icons google-dropdown-item-icon notification-event-notification">event</span>
+                                    <span class="google-dropdown-item-text">Event Notifications</span>
+                                </div>
+                                <span class="google-dropdown-item-count">{{ event_notifs|length if event_notifs else 0 }}</span>
+                            </div>
+                            
+                            <div class="google-dropdown-item" onclick="selectNotificationType('message', 'Messages', 'message', 0)" data-type="message">
+                                <div class="google-dropdown-item-content">
+                                    <span class="material-icons google-dropdown-item-icon notification-message">message</span>
+                                    <span class="google-dropdown-item-text">Messages</span>
+                                </div>
+                                <span class="google-dropdown-item-count">{{ message_unread_count or 0 }}</span>
+                            </div>
+                            
+                            <div class="google-dropdown-item" onclick="selectNotificationType('post_activity', 'Post Activity', 'favorite', 0)" data-type="post_activity">
+                                <div class="google-dropdown-item-content">
+                                    <span class="material-icons google-dropdown-item-icon notification-post-activity">favorite</span>
+                                    <span class="google-dropdown-item-text">Post Activity</span>
+                                </div>
+                                <span class="google-dropdown-item-count">{{ post_activity_notifs|length if post_activity_notifs else 0 }}</span>
+                            </div>
+                            
+                            <div class="google-dropdown-item" onclick="selectNotificationType('report_status', 'Report Status', 'report', 0)" data-type="report_status">
+                                <div class="google-dropdown-item-content">
+                                    <span class="material-icons google-dropdown-item-icon notification-report-status">report</span>
+                                    <span class="google-dropdown-item-text">Report Status</span>
+                                </div>
+                                <span class="google-dropdown-item-count">{{ report_status_notifs|length if report_status_notifs else 0 }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="google-content-actions">
+                    <button class="google-btn google-btn-secondary" onclick="refreshNotifications()">
+                        <span class="material-icons" style="font-size: 18px;">refresh</span>
+                        Refresh
+                    </button>
+                    <button class="google-btn google-btn-primary" onclick="markAllAsRead()" style="display: none;" id="markAllReadBtn">
+                        <span class="material-icons" style="font-size: 18px;">done_all</span>
+                        Mark All Read
+                    </button>
+                    <button class="google-btn google-btn-danger" onclick="deleteAllNotifications()" style="display: none;" id="deleteAllBtn">
+                        <span class="material-icons" style="font-size: 18px;">delete</span>
+                        Delete All
+                    </button>
+                </div>
+            </div>
+            
+            <div class="google-content-body">
+                <!-- Friend Requests Tab -->
+                <div id="tab-friend_request" class="google-tab-content active">
+                    {% if friend_request_notifs %}
+                        {% for notification, sender_user in friend_request_notifs %}
+                            <div class="google-notification-item notification-friend-request {% if not notification.is_read %}unread{% endif %}" 
+                                 data-notification-id="{{ notification.notification_id }}">
+                                <div class="google-notification-avatar">
+                                    {{ sender_user.username[0].upper() }}
+                                </div>
+                                <div class="google-notification-content">
+                                    <div class="google-notification-title">
+                                        New friend request from {{ sender_user.username }}
+                                    </div>
+                                    <div class="google-notification-message">
+                                        {{ notification.message }}
+                                    </div>
+                                    <div class="google-notification-meta">
+                                        <span>{{ notification.created_at.strftime('%B %d, %Y at %I:%M %p') }}</span>
+                                        {% if not notification.is_read %}
+                                            <span style="color: #4285f4; font-weight: 500;">• New</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="google-notification-actions">
+                                        <form method="POST" action="{{ url_for('respond_friend_request', friendship_id=notification.source_id, action='accept') }}" class="d-inline">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                            <button type="submit" class="google-btn google-btn-primary google-btn-small">
+                                                <span class="material-icons" style="font-size: 16px;">check</span>
+                                                Accept
+                                            </button>
+                                        </form>
+                                        <form method="POST" action="{{ url_for('respond_friend_request', friendship_id=notification.source_id, action='decline') }}" class="d-inline">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                            <button type="submit" class="google-btn google-btn-outline google-btn-small">
+                                                <span class="material-icons" style="font-size: 16px;">close</span>
+                                                Decline
+                                            </button>
+                                        </form>
+                                        <button onclick="deleteNotification({{ notification.notification_id }})" class="google-btn google-btn-delete google-btn-small">
+                                            <span class="material-icons" style="font-size: 16px;">delete</span>
+                                            Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="google-empty-state">
+                            <div class="google-empty-icon">
+                                <span class="material-icons" style="font-size: inherit;">person_add_disabled</span>
+                            </div>
+                            <h3 class="google-empty-title">No friend requests</h3>
+                            <p class="google-empty-subtitle">When someone sends you a friend request, it will appear here.</p>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Event Notifications Tab -->
+                <div id="tab-event_notification" class="google-tab-content">
+                    {% if event_notifs %}
+                        {% for notification, event in event_notifs %}
+                            <div class="google-notification-item notification-event-notification {% if not notification.is_read %}unread{% endif %}" 
+                                 data-notification-id="{{ notification.notification_id }}">
+                                <div class="google-notification-icon">
+                                    {% if 'joined' in notification.message %}
+                                        <span class="material-icons">event_available</span>
+                                    {% elif 'cancelled' in notification.message %}
+                                        <span class="material-icons">event_busy</span>
+                                    {% else %}
+                                        <span class="material-icons">event</span>
+                                    {% endif %}
+                                </div>
+                                <div class="google-notification-content">
+                                    <div class="google-notification-title">
+                                        {% if 'joined' in notification.message %}
+                                            Event Join Notification
+                                        {% elif 'cancelled' in notification.message %}
+                                            Event Cancelled
+                                        {% else %}
+                                            Event Reminder
+                                        {% endif %}
+                                    </div>
+                                    <div class="google-notification-message">
+                                        {{ notification.message }}
+                                    </div>
+                                    <div class="google-notification-meta">
+                                        {% if event %}
+                                            <span>Event: {{ event.title }}</span>
+                                            <span>{{ event.event_datetime.strftime('%B %d, %Y at %I:%M %p') if event.event_datetime }}</span>
+                                        {% endif %}
+                                        <span>{{ notification.created_at.strftime('%B %d, %Y at %I:%M %p') }}</span>
+                                        {% if not notification.is_read %}
+                                            <span style="color: #ea4335; font-weight: 500;">• New</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="google-notification-actions">
+                                        <button onclick="deleteNotification({{ notification.notification_id }})" class="google-btn google-btn-delete google-btn-small">
+                                            <span class="material-icons" style="font-size: 16px;">delete</span>
+                                            Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="google-empty-state">
+                            <div class="google-empty-icon">
+                                <span class="material-icons" style="font-size: inherit;">event_busy</span>
+                            </div>
+                            <h3 class="google-empty-title">No event notifications</h3>
+                            <p class="google-empty-subtitle">Event updates, reminders, and join notifications will appear here.</p>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Message Notifications Tab -->
+                <div id="tab-message" class="google-tab-content">
+                    {% if message_stacks %}
+                        {% for it in message_stacks %}
+                            <div class="google-notification-item notification-message unread">
+                                <div class="google-notification-icon"><span class="material-icons">message</span></div>
+                                <div class="google-notification-content">
+                                    <div class="google-notification-title">
+                                        {{ it.sender_username }}
+                                        <span class="google-dropdown-count" style="margin-left:8px;">{{ it.count }}</span>
+                                    </div>
+                                    <div class="google-notification-message">{{ it.latest_message or 'New message' }}</div>
+                                    <div class="google-notification-meta">
+                                        <span>{{ it.latest_created_at }}</span>
+                                        <span style="color:#34a853;font-weight:500;">• New</span>
+                                    </div>
+                                    <div class="google-notification-actions">
+                                        <a href="{{ url_for('messages') }}?friend_id={{ it.sender_user_id }}" class="google-btn google-btn-primary google-btn-small">
+                                            <span class="material-icons" style="font-size:16px;">chat</span>
+                                            Open chat
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="google-empty-state">
+                            <div class="google-empty-icon"><span class="material-icons" style="font-size: inherit;">message</span></div>
+                            <h3 class="google-empty-title">No message notifications</h3>
+                            <p class="google-empty-subtitle">Messages will appear here.</p>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Post Activity Tab -->
+                <div id="tab-post_activity" class="google-tab-content">
+                    {% if post_activity_notifs %}
+                        {% for notification in post_activity_notifs %}
+                            <div class="google-notification-item notification-post-activity {% if not notification.is_read %}unread{% endif %}" 
+                                 data-notification-id="{{ notification.notification_id }}">
+                                <div class="google-notification-icon">
+                                    {% if 'liked' in notification.message %}
+                                        <span class="material-icons">favorite</span>
+                                    {% elif 'commented' in notification.message %}
+                                        <span class="material-icons">comment</span>
+                                    {% else %}
+                                        <span class="material-icons">thumb_up</span>
+                                    {% endif %}
+                                </div>
+                                <div class="google-notification-content">
+                                    <div class="google-notification-title">
+                                        {% if 'liked' in notification.message %}
+                                            Post Liked
+                                        {% elif 'commented' in notification.message %}
+                                            New Comment
+                                        {% else %}
+                                            Post Activity
+                                        {% endif %}
+                                    </div>
+                                    <div class="google-notification-message">
+                                        {{ notification.message }}
+                                    </div>
+                                    <div class="google-notification-meta">
+                                        <span>{{ notification.created_at.strftime('%B %d, %Y at %I:%M %p') }}</span>
+                                        {% if not notification.is_read %}
+                                            <span style="color: #fbbc04; font-weight: 500;">• New</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="google-notification-actions">
+                                        <button onclick="deleteNotification({{ notification.notification_id }})" class="google-btn google-btn-delete google-btn-small">
+                                            <span class="material-icons" style="font-size: 16px;">delete</span>
+                                            Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="google-empty-state">
+                            <div class="google-empty-icon">
+                                <span class="material-icons" style="font-size: inherit;">favorite_border</span>
+                            </div>
+                            <h3 class="google-empty-title">No post activity</h3>
+                            <p class="google-empty-subtitle">Likes, comments, and other post interactions will appear here when implemented.</p>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Report Status Tab -->
+                <div id="tab-report_status" class="google-tab-content">
+                    {% if report_status_notifs %}
+                        {% for notification in report_status_notifs %}
+                            <div class="google-notification-item notification-report-status {% if not notification.is_read %}unread{% endif %}" 
+                                 data-notification-id="{{ notification.notification_id }}">
+                                <div class="google-notification-icon">
+                                    <span class="material-icons">report</span>
+                                </div>
+                                <div class="google-notification-content">
+                                    <div class="google-notification-title">
+                                        Report Status Update
+                                    </div>
+                                    <div class="google-notification-message">
+                                        {{ notification.message }}
+                                    </div>
+                                    <div class="google-notification-meta">
+                                        <span>{{ notification.created_at.strftime('%B %d, %Y at %I:%M %p') }}</span>
+                                        {% if not notification.is_read %}
+                                            <span style="color: #ff9800; font-weight: 500;">• New</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="google-notification-actions">
+                                        <button onclick="deleteNotification({{ notification.notification_id }})" class="google-btn google-btn-delete google-btn-small">
+                                            <span class="material-icons" style="font-size: 16px;">delete</span>
+                                            Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="google-empty-state">
+                            <div class="google-empty-icon">
+                                <span class="material-icons" style="font-size: inherit;">report</span>
+                            </div>
+                            <h3 class="google-empty-title">No report updates</h3>
+                            <p class="google-empty-subtitle">Updates on your reports will appear here when available.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentTab = 'friend_request';
+let isDropdownOpen = false;
+
+function toggleDropdown() {
+    const dropdown = document.getElementById('dropdownMenu');
+    const button = document.getElementById('dropdownButton');
+    
+    isDropdownOpen = !isDropdownOpen;
+    
+    if (isDropdownOpen) {
+        dropdown.classList.add('show');
+        button.classList.add('active');
+    } else {
+        dropdown.classList.remove('show');
+        button.classList.remove('active');
+    }
+}
+
+function selectNotificationType(type, title, icon, count) {
+    // Close dropdown
+    toggleDropdown();
+    
+    // Update dropdown button
+    document.getElementById('dropdown-current-text').textContent = title;
+    document.querySelector('.google-dropdown-icon').textContent = icon;
+    document.querySelector('.google-dropdown-icon').className = `material-icons google-dropdown-icon notification-${type}`;
+    
+    // Update header title
+    document.getElementById('current-tab-title').textContent = title;
+    document.getElementById('current-tab-icon').textContent = icon;
+    
+    // Update active state in dropdown
+    document.querySelectorAll('.google-dropdown-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    document.querySelector(`[data-type="${type}"]`).classList.add('active');
+    
+    // Show corresponding tab
+    showTab(type);
+    
+    // Show/hide buttons based on content
+    const markAllBtn = document.getElementById('markAllReadBtn');
+    const deleteAllBtn = document.getElementById('deleteAllBtn');
+    const hasUnread = document.querySelectorAll(`#tab-${type} .unread`).length > 0;
+    const hasNotifications = document.querySelectorAll(`#tab-${type} .google-notification-item`).length > 0;
+    
+    markAllBtn.style.display = hasUnread ? 'inline-flex' : 'none';
+    deleteAllBtn.style.display = hasNotifications ? 'inline-flex' : 'none';
+}
+
+function showTab(tabName) {
+    // Hide all tabs
+    const tabs = document.querySelectorAll('.google-tab-content');
+    tabs.forEach(tab => {
+        tab.classList.remove('active');
+        tab.style.display = 'none';
+    });
+    
+    // Show selected tab
+    const selectedTab = document.getElementById('tab-' + tabName);
+    if (selectedTab) {
+        selectedTab.style.display = 'block';
+        selectedTab.classList.add('active');
+    }
+    
+    currentTab = tabName;
+}
+
+function refreshNotifications() {
+    window.location.reload();
+}
+
+function markAllAsRead() {
+    const notifications = document.querySelectorAll(`#tab-${currentTab} .google-notification-item.unread`);
+    
+    if (notifications.length === 0) {
+        return;
+    }
+    
+    // Get all notification IDs that need to be marked as read
+    const notificationIds = Array.from(notifications).map(notification => 
+        notification.getAttribute('data-notification-id')
+    );
+    
+    // Make API call to mark notifications as read
+    fetch(`/mark_all_notifications_read/${currentTab}`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('meta[name=csrf-token]').getAttribute('content'),
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            notification_ids: notificationIds
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update UI to show success
+            notifications.forEach((notification, index) => {
+                setTimeout(() => {
+                    notification.classList.remove('unread');
+                    notification.style.background = '#e8f5e8';
+                    
+                    setTimeout(() => {
+                        notification.style.background = '';
+                    }, 1000);
+                }, index * 100);
+            });
+            
+            // Hide mark all as read button
+            const markAllBtn = document.getElementById('markAllReadBtn');
+            markAllBtn.style.opacity = '0';
+            markAllBtn.style.transform = 'scale(0.8)';
+            
+            setTimeout(() => {
+                markAllBtn.style.display = 'none';
+                markAllBtn.style.opacity = '';
+                markAllBtn.style.transform = '';
+            }, 300);
+        } else {
+            alert('Error marking notifications as read: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error marking notifications as read');
+    });
+}
+function markNotificationAsRead(notificationId) {
+    fetch(`/mark_notification_read/${notificationId}`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('meta[name=csrf-token]').getAttribute('content'),
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const notification = document.querySelector(`[data-notification-id="${notificationId}"]`);
+            if (notification) {
+                notification.classList.remove('unread');
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error marking notification as read:', error);
+    });
+}
+
+// Add click event listeners to notification items
+document.addEventListener('DOMContentLoaded', function() {
+    // ... existing DOMContentLoaded code ...
+    
+    // Add click handlers to mark notifications as read when clicked
+    document.querySelectorAll('.google-notification-item.unread').forEach(notification => {
+        notification.addEventListener('click', function(e) {
+            // Don't mark as read if clicking on action buttons
+            if (!e.target.closest('.google-notification-actions')) {
+                const notificationId = this.getAttribute('data-notification-id');
+                if (notificationId) {
+                    markNotificationAsRead(notificationId);
+                }
+            }
+        });
+    });
+});
+function deleteNotification(notificationId) {
+    if (!confirm('Are you sure you want to delete this notification?')) {
+        return;
+    }
+    
+    fetch(`/delete_notification/${notificationId}`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('meta[name=csrf-token]').getAttribute('content'),
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Remove the notification element from DOM
+            const notificationElement = document.querySelector(`[data-notification-id="${notificationId}"]`);
+            if (notificationElement) {
+                notificationElement.style.opacity = '0';
+                notificationElement.style.transform = 'translateX(-20px)';
+                
+                setTimeout(() => {
+                    notificationElement.remove();
+                    updateNotificationCounts();
+                }, 300);
+            }
+        } else {
+            alert('Error deleting notification: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error deleting notification');
+    });
+}
+
+function deleteAllNotifications() {
+    const confirmMessage = `Are you sure you want to delete all ${document.getElementById('current-tab-title').textContent}? This action cannot be undone.`;
+    
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+    
+    fetch(`/delete_all_notifications/${currentTab}`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('meta[name=csrf-token]').getAttribute('content'),
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success feedback
+            const deleteAllBtn = document.getElementById('deleteAllBtn');
+            const originalHTML = deleteAllBtn.innerHTML;
+            deleteAllBtn.innerHTML = '<span class="material-icons" style="font-size: 18px;">check</span>Deleted';
+            deleteAllBtn.style.background = '#34a853';
+            
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+        } else {
+            alert('Error deleting notifications: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error deleting notifications');
+    });
+}
+
+function updateNotificationCounts() {
+    // Update the counts in the dropdown
+    const currentTabElement = document.querySelector(`#tab-${currentTab}`);
+    const notificationCount = currentTabElement.querySelectorAll('.google-notification-item').length;
+    
+    document.getElementById('dropdown-current-count').textContent = notificationCount;
+    document.querySelector(`[data-type="${currentTab}"] .google-dropdown-item-count`).textContent = notificationCount;
+    
+    // Hide buttons if no notifications
+    const markAllBtn = document.getElementById('markAllReadBtn');
+    const deleteAllBtn = document.getElementById('deleteAllBtn');
+    const hasUnread = document.querySelectorAll(`#tab-${currentTab} .unread`).length > 0;
+    
+    if (notificationCount === 0) {
+        markAllBtn.style.display = 'none';
+        deleteAllBtn.style.display = 'none';
+        
+        // Show empty state if no notifications left
+        setTimeout(() => {
+            const currentTabElement = document.querySelector(`#tab-${currentTab}`);
+            if (currentTabElement.querySelectorAll('.google-notification-item').length === 0) {
+                window.location.reload();
+            }
+        }, 500);
+    } else {
+        markAllBtn.style.display = hasUnread ? 'inline-flex' : 'none';
+        deleteAllBtn.style.display = 'inline-flex';
+    }
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(event) {
+    const dropdown = document.querySelector('.google-notification-dropdown');
+    
+    if (!dropdown.contains(event.target) && isDropdownOpen) {
+        toggleDropdown();
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize with friend requests
+    showTab('friend_request');
+    
+    // Set initial counts (removed admin notification count)
+    const friendRequestCount = {{ friend_request_notifs|length if friend_request_notifs else 0 }};
+    const eventNotifCount = {{ event_notifs|length if event_notifs else 0 }};
+    const messageCount = {{ message_unread_count or 0 }};
+    const postActivityCount = {{ post_activity_notifs|length if post_activity_notifs else 0 }};
+    const reportStatusCount = {{ report_status_notifs|length if report_status_notifs else 0 }};
+    
+    document.getElementById('dropdown-current-count').textContent = friendRequestCount;
+    document.querySelector('[data-type="friend_request"] .google-dropdown-item-count').textContent = friendRequestCount;
+    document.querySelector('[data-type="event_notification"] .google-dropdown-item-count').textContent = eventNotifCount;
+    document.querySelector('[data-type="message"] .google-dropdown-item-count').textContent = messageCount;
+    document.querySelector('[data-type="post_activity"] .google-dropdown-item-count').textContent = postActivityCount;
+    document.querySelector('[data-type="report_status"] .google-dropdown-item-count').textContent = reportStatusCount;
+    
+    // Show buttons based on initial state
+    const hasUnread = document.querySelectorAll('#tab-friend_request .unread').length > 0;
+    const hasNotifications = document.querySelectorAll('#tab-friend_request .google-notification-item').length > 0;
+    
+    if (hasUnread) {
+        document.getElementById('markAllReadBtn').style.display = 'inline-flex';
+    }
+    
+    if (hasNotifications) {
+        document.getElementById('deleteAllBtn').style.display = 'inline-flex';
+    }
+});
+</script>
+{% endblock %}

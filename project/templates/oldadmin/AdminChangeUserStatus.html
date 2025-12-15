@@ -1,0 +1,547 @@
+{% extends "UserBase.html" %}
+{% block title %}Manage User{% endblock %}
+
+{% block content %}
+<style>
+/* Google-inspired design for user management page */
+.google-container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 24px;
+    background-color: #fff;
+    min-height: 100vh;
+}
+
+.google-card {
+    background: #fff;
+    border: 1px solid #dadce0;
+    border-radius: 8px;
+    box-shadow: 0 1px 2px 0 rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15);
+    overflow: hidden;
+}
+
+.google-card-header {
+    background: #1a73e8;
+    color: white;
+    padding: 20px 24px;
+    border-bottom: none;
+}
+
+.google-card-title {
+    font-size: 20px;
+    font-weight: 500;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.google-card-body {
+    padding: 24px;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+    padding: 16px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.user-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #dadce0;
+}
+
+.user-details h3 {
+    margin: 0 0 4px 0;
+    font-size: 18px;
+    font-weight: 500;
+    color: #3c4043;
+}
+
+.user-details p {
+    margin: 0;
+    font-size: 14px;
+    color: #5f6368;
+}
+
+.current-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-active {
+    background: rgba(52, 168, 83, 0.15);
+    color: #34a853;
+    border: 1px solid rgba(52, 168, 83, 0.3);
+}
+
+.status-offline {
+    background: rgba(52, 168, 83, 0.15);
+    color: #34a853;
+    border: 1px solid rgba(52, 168, 83, 0.3);
+}
+
+.status-suspended {
+    background: rgba(251, 188, 4, 0.15);
+    color: #f57c00;
+    border: 1px solid rgba(251, 188, 4, 0.4);
+}
+
+.status-terminated {
+    background: rgba(234, 67, 53, 0.15);
+    color: #ea4335;
+    border: 1px solid rgba(234, 67, 53, 0.4);
+}
+
+.action-cards {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin: 24px 0;
+}
+
+.action-card {
+    border: 2px solid transparent;
+    border-radius: 12px;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    background: #fff;
+}
+
+.action-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.action-card.selected {
+    border-color: #1a73e8;
+    background: rgba(26, 115, 232, 0.02);
+}
+
+.action-card-restore {
+    border-color: #e8f5e8;
+    background: rgba(52, 168, 83, 0.02);
+}
+
+.action-card-restore:hover,
+.action-card-restore.selected {
+    border-color: #34a853;
+    background: rgba(52, 168, 83, 0.05);
+}
+
+.action-card-suspend {
+    border-color: #fff3e0;
+    background: rgba(251, 188, 4, 0.02);
+}
+
+.action-card-suspend:hover,
+.action-card-suspend.selected {
+    border-color: #f57c00;
+    background: rgba(251, 188, 4, 0.05);
+}
+
+.action-card-terminate {
+    border-color: #ffebee;
+    background: rgba(234, 67, 53, 0.02);
+}
+
+.action-card-terminate:hover,
+.action-card-terminate.selected {
+    border-color: #ea4335;
+    background: rgba(234, 67, 53, 0.05);
+}
+
+.action-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.action-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+}
+
+.action-icon-restore {
+    background: rgba(52, 168, 83, 0.1);
+    color: #34a853;
+}
+
+.action-icon-suspend {
+    background: rgba(251, 188, 4, 0.1);
+    color: #f57c00;
+}
+
+.action-icon-terminate {
+    background: rgba(234, 67, 53, 0.1);
+    color: #ea4335;
+}
+
+.action-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.action-title-restore {
+    color: #34a853;
+}
+
+.action-title-suspend {
+    color: #f57c00;
+}
+
+.action-title-terminate {
+    color: #ea4335;
+}
+
+.action-description {
+    font-size: 14px;
+    color: #5f6368;
+    margin: 0;
+    line-height: 1.4;
+}
+
+.radio-input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-label {
+    display: block;
+    font-size: 16px;
+    font-weight: 600;
+    color: #3c4043;
+    margin-bottom: 12px;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid #dadce0;
+}
+
+.btn-primary {
+    background: #1a73e8;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 12px 24px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-primary:hover {
+    background: #1557b0;
+    color: white;
+    text-decoration: none;
+}
+
+.btn-secondary {
+    background: transparent;
+    color: #1a73e8;
+    border: 1px solid #dadce0;
+    border-radius: 6px;
+    padding: 12px 24px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-secondary:hover {
+    background: #f8f9fa;
+    border-color: #1a73e8;
+    color: #1a73e8;
+    text-decoration: none;
+}
+
+/* ✅ ALERT STYLES */
+.alert {
+    padding: 16px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border: 1px solid transparent;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.alert-warning {
+    background: rgba(251, 188, 4, 0.1);
+    border-color: rgba(251, 188, 4, 0.3);
+    color: #b8860b;
+}
+
+.alert-danger {
+    background: rgba(234, 67, 53, 0.1);
+    border-color: rgba(234, 67, 53, 0.3);
+    color: #c5221f;
+}
+
+.alert-success {
+    background: rgba(52, 168, 83, 0.1);
+    border-color: rgba(52, 168, 83, 0.3);
+    color: #2e7d32;
+}
+</style>
+
+<div class="google-container">
+    <div class="google-card">
+        <div class="google-card-header">
+            <h2 class="google-card-title">
+                <i class="bi bi-gear"></i>
+                Manage User Account
+            </h2>
+        </div>
+        
+        <div class="google-card-body">
+            <!-- User Information -->
+            <div class="user-info">
+                <img src="{% if user.profile_pic_url %}{{ url_for('static', filename='uploads/' + user.profile_pic_url) }}{% else %}{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}{% endif %}" 
+                     alt="{{ user.username }}" 
+                     class="user-avatar"
+                     onerror="this.src='{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}'">
+                <div class="user-details">
+                    <h3>{{ user.username }}</h3>
+                    <p>User ID: {{ user.user_id }} • Joined {{ user.created_at.strftime('%B %Y') }}</p>
+                </div>
+            </div>
+
+            <!-- Current Status -->
+            <div class="form-group">
+                <label class="form-label">Current Status</label>
+                <div>
+                    <span class="current-status 
+                        {% if user.current_status in ['online', 'offline'] %}status-active
+                        {% elif user.current_status == 'suspended' %}status-suspended
+                        {% elif user.current_status == 'terminated' %}status-terminated
+                        {% endif %}">
+                        <i class="bi {% if user.current_status in ['online', 'offline'] %}bi-check-circle{% elif user.current_status == 'suspended' %}bi-pause-circle{% else %}bi-x-circle{% endif %}"></i>
+                        {% if user.current_status in ['online', 'offline'] %}
+                            Active
+                        {% else %}
+                            {{ user.current_status|title }}
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+
+            {% if user.current_status == 'suspended' %}
+            <div class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle" style="font-size: 18px; margin-top: 2px;"></i>
+                <div>
+                    <strong>This user is currently suspended.</strong><br>
+                    <span style="font-size: 13px;">User cannot log in until their account is restored by an administrator.</span>
+                </div>
+            </div>
+            {% elif user.current_status == 'terminated' %}
+            <div class="alert alert-danger">
+                <i class="bi bi-x-circle" style="font-size: 18px; margin-top: 2px;"></i>
+                <div>
+                    <strong>This user account has been permanently terminated.</strong><br>
+                    <span style="font-size: 13px;">Account cannot be restored. User has permanent access denial.</span>
+                </div>
+            </div>
+            {% else %}
+            <div class="alert alert-success">
+                <i class="bi bi-check-circle" style="font-size: 18px; margin-top: 2px;"></i>
+                <div>
+                    <strong>This user account is currently active.</strong><br>
+                    <span style="font-size: 13px;">User can log in and access all platform features normally.</span>
+                </div>
+            </div>
+            {% endif %}
+
+            <form method="post" action="{{ url_for('admin.manage_user', user_id=user.user_id) }}">
+                {{ form.hidden_tag() }}
+                
+                <div class="form-group">
+                    <label class="form-label">Select Action</label>
+                    
+                    <div class="action-cards">
+                        <!-- Restore/Active Option -->
+                        <label class="action-card action-card-restore {% if user.current_status in ['online', 'offline'] %}selected{% endif %}" for="status_offline">
+                            <input type="radio" name="status" value="offline" id="status_offline" class="radio-input" {% if user.current_status in ['online', 'offline'] %}checked{% endif %}>
+                            <div class="action-card-header">
+                                <div class="action-icon action-icon-restore">
+                                    <i class="bi bi-check-circle"></i>
+                                </div>
+                                <h3 class="action-title action-title-restore">Restore Account</h3>
+                            </div>
+                            <p class="action-description">
+                                Allow user to log in and access all platform features. This is the normal active state for user accounts.
+                            </p>
+                        </label>
+
+                        <!-- Suspend Option -->
+                        <label class="action-card action-card-suspend {% if user.current_status == 'suspended' %}selected{% endif %}" for="status_suspended">
+                            <input type="radio" name="status" value="suspended" id="status_suspended" class="radio-input" {% if user.current_status == 'suspended' %}checked{% endif %}>
+                            <div class="action-card-header">
+                                <div class="action-icon action-icon-suspend">
+                                    <i class="bi bi-pause-circle"></i>
+                                </div>
+                                <h3 class="action-title action-title-suspend">Suspend Account</h3>
+                            </div>
+                            <p class="action-description">
+                                Temporarily prevent user from logging in. User can be restored later by an administrator. Reversible action.
+                            </p>
+                        </label>
+
+                        <!-- Terminate Option -->
+                        <label class="action-card action-card-terminate {% if user.current_status == 'terminated' %}selected{% endif %}" for="status_terminated">
+                            <input type="radio" name="status" value="terminated" id="status_terminated" class="radio-input" {% if user.current_status == 'terminated' %}checked{% endif %}>
+                            <div class="action-card-header">
+                                <div class="action-icon action-icon-terminate">
+                                    <i class="bi bi-x-circle"></i>
+                                </div>
+                                <h3 class="action-title action-title-terminate">Terminate Account</h3>
+                            </div>
+                            <p class="action-description">
+                                Permanently ban user from the platform. User cannot log in and account cannot be restored. <strong>Irreversible action!</strong>
+                            </p>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    {{ form.recaptcha }}
+                </div>
+                
+                <div class="action-buttons">
+                    <a href="{{ url_for('admin.manage_users') }}" class="btn-secondary">
+                        <i class="bi bi-arrow-left"></i>
+                        Back to Users
+                    </a>
+                    <button type="submit" class="btn-primary" onclick="return confirm('Apply the selected action to this user account?')">
+                        <i class="bi bi-check-circle"></i>
+                        Apply Action
+                    </button>
+                </div>
+            </form>
+
+            <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #dadce0;">
+                <h4 style="font-size: 16px; font-weight: 500; color: #3c4043; margin-bottom: 16px;">Account Information</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 14px;">
+                    <div>
+                        <strong style="color: #5f6368;">User ID:</strong><br>
+                        {{ user.user_id }}
+                    </div>
+                    <div>
+                        <strong style="color: #5f6368;">Username:</strong><br>
+                        {{ user.username }}
+                    </div>
+                    <div>
+                        <strong style="color: #5f6368;">Created:</strong><br>
+                        {{ user.created_at.strftime('%B %d, %Y') }}
+                    </div>
+                    <div>
+                        <strong style="color: #5f6368;">Last Active:</strong><br>
+                        {% if user.last_active_at %}
+                            {{ user.last_active_at.strftime('%B %d, %Y at %I:%M %p') }}
+                        {% else %}
+                            Never logged in
+                        {% endif %}
+                    </div>
+                    <div>
+                        <strong style="color: #5f6368;">Failed Logins:</strong><br>
+                        {{ user.failed_login_attempts }} attempts
+                        {% if user.lockout_until %}
+                            <br><small style="color: #ea4335;">Locked until {{ user.lockout_until.strftime('%I:%M %p') }}</small>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <strong style="color: #5f6368;">Account Status:</strong><br>
+                        <span class="current-status 
+                            {% if user.current_status in ['online', 'offline'] %}status-active
+                            {% elif user.current_status == 'suspended' %}status-suspended
+                            {% elif user.current_status == 'terminated' %}status-terminated
+                            {% endif %}" style="font-size: 11px; padding: 4px 8px;">
+                            {% if user.current_status in ['online', 'offline'] %}
+                                Active
+                            {% else %}
+                                {{ user.current_status|title }}
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const cards = document.querySelectorAll('.action-card');
+    const radios = document.querySelectorAll('input[name="status"]');
+    
+    cards.forEach(card => {
+        card.addEventListener('click', function() {
+            const radio = this.querySelector('input[type="radio"]');
+            if (radio) {
+                radio.checked = true;
+                updateCardSelection();
+            }
+        });
+    });
+    
+    radios.forEach(radio => {
+        radio.addEventListener('change', updateCardSelection);
+    });
+    
+    function updateCardSelection() {
+        cards.forEach(card => {
+            const radio = card.querySelector('input[type="radio"]');
+            if (radio.checked) {
+                card.classList.add('selected');
+            } else {
+                card.classList.remove('selected');
+            }
+        });
+    }
+    
+    // Initialize on page load
+    updateCardSelection();
+});
+</script>
+{% endblock %}

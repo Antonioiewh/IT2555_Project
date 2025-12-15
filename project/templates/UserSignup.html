@@ -1,0 +1,329 @@
+{% extends "UserBase.html" %}
+{% block title %}Sign Up{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 500px; margin: 2rem auto; padding: 0 1rem;">
+    <div class="signup-header text-center mb-4">
+        <h1 class="signup-title">Create your account</h1>
+        <p class="signup-subtitle">Join our community today</p>
+    </div>
+
+    <!-- Password Requirements Card -->
+    <div class="password-requirements-card mb-4">
+        <div class="d-flex align-items-center mb-3">
+            <i class="bi bi-info-circle me-2 text-info"></i>
+            <span class="fw-medium">Password Requirements</span>
+        </div>
+        <div class="requirements-list">
+            <div class="requirement-item" id="req-length">
+                <i class="bi bi-circle requirement-icon"></i>
+                <span>At least 12 characters</span>
+            </div>
+            <div class="requirement-item" id="req-upper">
+                <i class="bi bi-circle requirement-icon"></i>
+                <span>At least 1 uppercase letter (A-Z)</span>
+            </div>
+            <div class="requirement-item" id="req-lower">
+                <i class="bi bi-circle requirement-icon"></i>
+                <span>At least 1 lowercase letter (a-z)</span>
+            </div>
+            <div class="requirement-item" id="req-number">
+                <i class="bi bi-circle requirement-icon"></i>
+                <span>At least 1 number (0-9)</span>
+            </div>
+            <div class="requirement-item" id="req-special">
+                <i class="bi bi-circle requirement-icon"></i>
+                <span>At least 1 special character (!@#$%^&*)</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="signup-form-card">
+        <form method="POST" id="signupForm">
+            {{ form.hidden_tag() }}
+
+            <!-- Username -->
+            <div class="mb-4">
+                {{ form.username.label(class="form-label fw-medium") }}
+                {{ form.username(class="form-control") }}
+                {% if form.username.errors %}
+                    <div class="text-danger small mt-1">
+                        {% for error in form.username.errors %}
+                            <div>{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Password -->
+            <div class="mb-4">
+                {{ form.password.label(class="form-label fw-medium") }}
+                <div class="password-input-container">
+                    {{ form.password(class="form-control", id="signup-password") }}
+                    <button type="button" class="password-toggle-btn" id="signupPasswordToggle">
+                        <i class="bi bi-eye" id="signupPasswordToggleIcon"></i>
+                    </button>
+                </div>
+                <div class="form-text">Password must meet all requirements above</div>
+                {% if form.password.errors %}
+                    <div class="text-danger small mt-1">
+                        {% for error in form.password.errors %}
+                            <div>{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Phone Number -->
+            <div class="mb-4">
+                {{ form.phone_no.label(class="form-label fw-medium") }}
+                {{ form.phone_no(class="form-control") }}
+                {% if form.phone_no.errors %}
+                    <div class="text-danger small mt-1">
+                        {% for error in form.phone_no.errors %}
+                            <div>{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- CAPTCHA -->
+            <div class="mb-4">
+                {{ form.recaptcha() }}
+                {% if form.recaptcha.errors %}
+                    <div class="text-danger small mt-1">
+                        {% for error in form.recaptcha.errors %}
+                            <div>{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Submit Button -->
+            <div class="d-grid mb-3">
+                {{ form.submit(class="btn btn-primary btn-lg") }}
+            </div>
+
+            <div class="text-center">
+                <p class="mb-0">Already have an account? <a href="{{ url_for('login') }}" class="text-decoration-none">Sign in</a></p>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Custom Styles -->
+<style>
+.signup-header {
+    margin-bottom: 2rem;
+}
+
+.signup-title {
+    font-size: 1.75rem;
+    font-weight: 400;
+    color: #202124;
+}
+
+.signup-subtitle {
+    color: #5f6368;
+    margin-bottom: 0;
+}
+
+.signup-form-card,
+.password-requirements-card {
+    background: white;
+    border: 1px solid #dadce0;
+    border-radius: 8px;
+    padding: 1.5rem;
+}
+
+.requirements-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.requirement-item {
+    display: flex;
+    align-items: center;
+    font-size: 0.875rem;
+    transition: color 0.3s ease;
+}
+
+.requirement-item.met {
+    color: #28a745;
+}
+
+.requirement-item.met .requirement-icon {
+    color: #28a745;
+}
+
+.requirement-item.met .requirement-icon::before {
+    content: "\f26b"; /* bi-check-circle-fill */
+}
+
+.requirement-icon {
+    margin-right: 0.5rem;
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
+.form-label {
+    color: #202124;
+    margin-bottom: 0.5rem;
+}
+
+.form-control {
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    padding: 0.75rem;
+    font-size: 1rem;
+}
+
+.form-control:focus {
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 0.2rem rgba(26, 115, 232, 0.25);
+}
+
+.btn-primary {
+    background-color: #1a73e8;
+    border-color: #1a73e8;
+    border-radius: 4px;
+    font-weight: 500;
+    padding: 0.75rem 1.5rem;
+}
+
+.btn-primary:hover {
+    background-color: #1557b0;
+    border-color: #1557b0;
+}
+
+@media (max-width: 768px) {
+    .container {
+        max-width: 100% !important;
+        margin: 1rem auto !important;
+        padding: 0 0.5rem !important;
+    }
+}
+
+.password-input-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-toggle-btn {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #6c757d;
+    font-size: 16px;
+    padding: 4px;
+    border-radius: 4px;
+    transition: color 0.2s, background-color 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+}
+
+.password-toggle-btn:hover {
+    color: #1a73e8;
+    background-color: #f8f9fa;
+}
+
+.password-toggle-btn:focus {
+    outline: 2px solid #1a73e8;
+    outline-offset: 2px;
+}
+
+.password-input-container .form-control {
+    padding-right: 48px; /* Make room for the toggle button */
+}
+</style>
+
+<!-- JavaScript for Real-time Password Validation -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const passwordField = document.getElementById('signup-password');
+    const passwordToggle = document.getElementById('signupPasswordToggle');
+    const passwordToggleIcon = document.getElementById('signupPasswordToggleIcon');
+    const form = document.getElementById('signupForm');
+    
+    // Password validation function
+    function validatePasswordRequirements(password) {
+        const requirements = {
+            length: password.length >= 12,
+            upper: /[A-Z]/.test(password),
+            lower: /[a-z]/.test(password),
+            number: /\d/.test(password),
+            special: /[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\\/~`]/.test(password)
+        };
+        
+        // Update requirement indicators
+        Object.keys(requirements).forEach(req => {
+            const element = document.getElementById(`req-${req}`);
+            if (element) {
+                if (requirements[req]) {
+                    element.classList.add('met');
+                } else {
+                    element.classList.remove('met');
+                }
+            }
+        });
+        
+        return requirements;
+    }
+
+    // Real-time password validation
+    if (passwordField) {
+        passwordField.addEventListener('input', function() {
+            validatePasswordRequirements(this.value);
+        });
+    }
+
+    // Password toggle functionality
+    if (passwordToggle && passwordField && passwordToggleIcon) {
+        passwordToggle.addEventListener('click', function() {
+            // Toggle password visibility
+            if (passwordField.type === 'password') {
+                passwordField.type = 'text';
+                passwordToggleIcon.className = 'bi bi-eye-slash';
+                passwordToggle.setAttribute('aria-label', 'Hide password');
+            } else {
+                passwordField.type = 'password';
+                passwordToggleIcon.className = 'bi bi-eye';
+                passwordToggle.setAttribute('aria-label', 'Show password');
+            }
+        });
+
+        // Set initial aria-label
+        passwordToggle.setAttribute('aria-label', 'Show password');
+    }
+
+    // Form submission validation
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            if (passwordField) {
+                const requirements = validatePasswordRequirements(passwordField.value);
+                const allMet = Object.values(requirements).every(req => req);
+                
+                if (!allMet) {
+                    e.preventDefault();
+                    alert('Please ensure your password meets all requirements.');
+                    return false;
+                }
+            }
+            
+            return true;
+        });
+    }
+});
+</script>
+
+
+{% endblock %}

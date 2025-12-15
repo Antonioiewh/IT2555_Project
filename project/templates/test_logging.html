@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Logging Test</title>
+</head>
+<body>
+    <h1>Splunk Logging Test</h1>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <p>Test events have been sent to Splunk.</p>
+    
+    <h2>Check Splunk:</h2>
+    <ol>
+        <li>Go to <a href="http://localhost:8000" target="_blank">Splunk Web</a></li>
+        <li>Login with admin / Admin123!</li>
+        <li>Go to Search & Reporting</li>
+        <li>Run these searches:</li>
+    </ol>
+    
+    <h3>Search Queries:</h3>
+    <pre>
+# All events from your app
+index=main sourcetype="app_security_event"
+
+# Test events specifically  
+index=main event_type="test_event"
+
+# Login attempts
+index=main event_type IN ("login_success", "login_failure")
+
+# Access violations
+index=main event_type="access_violation"
+
+# Recent events (last 15 minutes)
+index=main earliest=-15m
+    </pre>
+    
+    <a href="/">Back to Home</a>
+</body>
+</html>

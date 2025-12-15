@@ -1,0 +1,270 @@
+services:
+  
+  mysql-master:
+    image: mysql:8.0.35
+    hostname: mysql-master  
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: flaskdb
+      MYSQL_USER: flaskuser
+      MYSQL_PASSWORD: password
+    command: --log-bin=mysql-bin --server-id=1 --binlog-format=ROW --log-slave-updates=1 --report-host=mysql-master --gtid-mode=ON --enforce-gtid-consistency=ON
+    volumes:
+      - ./mysql:/docker-entrypoint-initdb.d
+      - mysql-master-data:/var/lib/mysql
+    ports:
+      - "33600:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 5s
+    networks:
+      - flask-sql
+
+  mysql-slave1:
+    image: mysql:8.0.35
+    hostname: mysql-slave1
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: flaskdb
+      MYSQL_USER: flaskuser
+      MYSQL_PASSWORD: password
+    command: --log-bin=mysql-bin --server-id=2 --binlog-format=ROW --log-slave-updates=1 --report-host=mysql-slave1 --read-only=1 --gtid-mode=ON --enforce-gtid-consistency=ON
+    volumes:
+      - ./mysql:/docker-entrypoint-initdb.d
+      - mysql-slave1-data:/var/lib/mysql
+    ports:
+      - "33602:3306"
+    depends_on:
+      mysql-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 5s
+    networks:
+      - flask-sql
+
+  mysql-slave2:
+    image: mysql:8.0.35
+    hostname: mysql-slave2
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: flaskdb
+      MYSQL_USER: flaskuser
+      MYSQL_PASSWORD: password
+    command: --log-bin=mysql-bin --server-id=3 --binlog-format=ROW --log-slave-updates=1 --report-host=mysql-slave2 --read-only=1 --gtid-mode=ON --enforce-gtid-consistency=ON
+    volumes:
+      - ./mysql:/docker-entrypoint-initdb.d
+      - mysql-slave2-data:/var/lib/mysql
+    ports:
+      - "33603:3306"
+    depends_on:
+      mysql-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 5s
+    networks:
+      - flask-sql
+
+  orchestrator-db:
+    image: mysql:8.0.35
+    environment:
+      MYSQL_ROOT_PASSWORD: orchestrator_root_password
+      MYSQL_DATABASE: orchestrator
+      MYSQL_USER: orchestrator_srv
+      MYSQL_PASSWORD: orchestrator_srv_password
+    volumes:
+      - ./orchestrator/init-orchestrator-db.sql:/docker-entrypoint-initdb.d/init-orchestrator-db.sql:ro
+      - orchestrator-db-data:/var/lib/mysql
+    ports:
+      - "33601:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-porchestrator_root_password"]
+      interval: 5s
+      retries: 5
+      start_period: 30s
+      timeout: 5s
+    networks:
+      - flask-sql
+
+  orchestrator:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"  
+      - "3001:3001"  
+    environment:
+      - ORC_TOPOLOGY_USER=orchestrator
+      - ORC_TOPOLOGY_PASSWORD=orchestrator_password
+      - ORC_DB_HOST=orchestrator-db
+      - ORC_DB_PORT=3306
+      - ORC_DB_NAME=orchestrator
+      - ORC_DB_USER=orchestrator_srv
+      - ORC_DB_PASSWORD=orchestrator_srv_password
+    volumes:
+      - ./orchestrator/orchestrator.conf.json:/etc/orchestrator/orchestrator.conf.json:ro
+      - orchestrator-data:/var/lib/orchestrator
+      - orchestrator-logs:/var/log/orchestrator
+    depends_on:
+      orchestrator-db:
+        condition: service_healthy
+      mysql-master:
+        condition: service_healthy
+    networks:
+      - flask-sql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  app1:
+    build:
+      context: project
+    expose:
+      - "5000"
+    volumes:
+      - ./project:/code
+      - ./nginx_logs:/code/shared_logs
+      - ./certs:/code/certs
+    depends_on:
+      mysql-master:
+        condition: service_healthy
+    networks:
+      - flask-sql
+    command: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 --reload app:app 
+    env_file:
+      - ./project/.env
+
+  app2:
+    build:
+      context: project
+    expose:
+      - "5000"
+    volumes:
+      - ./project:/code
+      - ./nginx_logs:/code/shared_logs
+      - ./certs:/code/certs
+    depends_on:
+      mysql-master:
+        condition: service_healthy
+    networks:
+      - flask-sql
+    command: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 --reload app:app
+    env_file:
+      - ./project/.env
+
+  app3:
+    build:
+      context: project
+    expose:
+      - "5000"
+    volumes:
+      - ./project:/code
+      - ./nginx_logs:/code/shared_logs
+      - ./certs:/code/certs
+    depends_on:
+      mysql-master:
+        condition: service_healthy
+    networks:
+      - flask-sql
+    command: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 --reload app:app
+    env_file:
+      - ./project/.env
+
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "6379:6379"
+    networks:
+      - flask-sql
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+
+  nginx:
+    build: ./nginxproxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./project/templates/nginx_errors/429_error.html:/usr/share/nginx/html/429.html:ro
+      - ./project/templates/nginx_errors/403_error.html:/usr/share/nginx/html/403.html:ro
+      - ./project/templates/nginx_errors/406_error.html:/usr/share/nginx/html/406.html:ro
+      - ./project/templates/nginx_errors/500_error.html:/usr/share/nginx/html/50x.html:ro
+      - ./project/templates/rate_limit.html:/usr/share/nginx/html/rate_limit.html:ro
+      - ./nginxproxy/custom_modsec_rules:/etc/nginx/modsec/custom_modsec_rules
+      - ./certs:/etc/nginx/certs:ro 
+      - ./nginx_logs:/var/log/nginx
+      - ./project/static:/var/www/static:ro
+    depends_on:
+      - app1
+      - app2
+      - app3
+    restart: always
+    networks:
+      - flask-sql
+
+  splunk:
+    image: splunk/splunk:8.2
+    container_name: splunk-enterprise
+    hostname: splunk
+    environment:
+      - SPLUNK_START_ARGS=--accept-license --answer-yes --no-prompt --seed-passwd Admin123!
+      - SPLUNK_PASSWORD=Admin123!
+    ports:
+      - "8000:8000"
+      - "8088:8088"
+      - "8089:8089"
+    volumes:
+      - splunk-data:/opt/splunk/var
+    networks:
+      - flask-sql
+    restart: unless-stopped
+    command: start-service
+  
+  splunk-forwarder:
+    image: splunk/universalforwarder:latest
+    container_name: splunk-forwarder
+    hostname: splunk-forwarder
+    environment:
+      - SPLUNK_START_ARGS=--accept-license
+      - SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com
+      - SPLUNK_PASSWORD=Admin123!
+      - SPLUNK_FORWARD_SERVER=splunk:9997
+      - SPLUNK_USER=splunk
+    volumes:
+      - ./nginx_logs:/var/log/nginx:ro
+      - ./nginx_logs/modsec_audit_data:/var/log/nginx/modsec_audit_data:ro
+      - ./splunk-forwarder:/opt/splunkforwarder/etc/system/local
+    depends_on:
+      - splunk
+    networks:
+      - flask-sql
+    restart: unless-stopped
+
+volumes:
+  mysql-master-data:
+  mysql-slave1-data:
+  mysql-slave2-data:
+  orchestrator-data:
+  orchestrator-db-data:
+  orchestrator-logs:
+  two-tier:
+  splunk-data:
+  splunk-etc:
+
+networks:
+  flask-sql:
+    driver: bridge

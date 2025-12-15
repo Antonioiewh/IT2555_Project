@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}{% endblock %}</title>
+    <!-- Bootstrap 5.1.3 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <!--Bootstrap 5 icons-->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!--favicon-->
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='imgs/favicon.ico') }}">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    {%block stylesheet%}
+    {% endblock %}
+    {% block head %}{% endblock %}
+</head>
+<body>
+<style>
+    .google-sidebar {
+        background: #f8f9fa;
+        border-right: 1px solid #dadce0;
+        width: 280px;
+        height: 100vh;
+        position: fixed;
+        right: -280px;
+        top: 0;
+        transition: right 0.3s ease-in-out;
+        z-index: 1050;
+        font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        box-shadow: -2px 0 8px rgba(0,0,0,0.1);
+        display: flex;
+        flex-direction: column;
+        isolation: isolate;
+    }
+
+    .google-sidebar.show {
+        right: 0;
+    }
+
+    .sidebar-header {
+        padding: 16px 24px;
+        border-bottom: 1px solid #dadce0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #fff;
+        flex-shrink: 0;
+    }
+
+    .sidebar-header h5 {
+        color: #3c4043;
+        font-size: 16px;
+        font-weight: 500;
+        margin: 0;
+    }
+
+    .sidebar-close {
+        background: none;
+        border: none;
+        padding: 8px;
+        border-radius: 4px;
+        color: #5f6368;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+
+    .sidebar-close:hover {
+        background-color: #f1f3f4;
+    }
+
+    .sidebar-nav {
+        padding: 12px 0;
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        position: relative;
+        /* Add bottom padding to account for user-info section */
+        padding-bottom: 120px;
+    }
+
+    .sidebar-nav::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .sidebar-nav::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .sidebar-nav::-webkit-scrollbar-thumb {
+        background: #dadce0;
+        border-radius: 3px;
+    }
+
+    .sidebar-nav::-webkit-scrollbar-thumb:hover {
+        background: #bdc1c6;
+    }
+
+    .nav-item {
+        margin: 0 12px 4px 12px;
+        position: relative;
+        z-index: 1;
+        overflow: hidden;
+    }
+
+    .nav-link-google {
+        display: flex;
+        align-items: center;
+        padding: 12px 16px;
+        color: #3c4043;
+        text-decoration: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 400;
+        transition: background-color 0.2s;
+        min-height: 48px;
+        position: relative;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        overflow: hidden;
+        contain: layout style;
+    }
+
+    .nav-link-google:hover {
+        background-color: #f1f3f4;
+        color: #3c4043;
+    }
+
+    .nav-link-google.active {
+        background-color: #e8f0fe;
+        color: #1a73e8;
+        border: none !important;
+        box-shadow: none !important;
+        outline: none !important;
+    }
+
+    .nav-link-google::before,
+    .nav-link-google::after {
+        display: none !important;
+        content: none !important;
+    }
+
+    .nav-icon {
+        width: 20px;
+        height: 20px;
+        margin-right: 12px;
+        color: #5f6368;
+        font-size: 18px;
+        flex-shrink: 0;
+    }
+
+    .nav-link-google:hover .nav-icon,
+    .nav-link-google.active .nav-icon {
+        color: #1a73e8;
+    }
+
+    .nav-divider {
+        height: 1px;
+        background-color: #dadce0;
+        margin: 8px 24px;
+        position: relative;
+        z-index: 1;
+    }
+
+    .nav-section-title {
+        padding: 16px 24px 8px;
+        color: #5f6368;
+        font-size: 12px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        position: relative;
+        z-index: 1;
+    }
+
+    .collapsible-nav {
+        margin: 0 12px;
+        position: relative;
+        z-index: 1;
+    }
+
+    .collapse-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        color: #3c4043;
+        text-decoration: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 400;
+        transition: background-color 0.2s;
+        cursor: pointer;
+        border: none;
+        background: none;
+        width: 100%;
+    }
+
+    .collapse-toggle:hover {
+        background-color: #f1f3f4;
+    }
+
+    .collapse-icon {
+        transition: transform 0.3s ease;
+        color: #5f6368;
+    }
+
+    .collapse-toggle[aria-expanded="true"] .collapse-icon {
+        transform: rotate(180deg);
+    }
+
+    .nested-nav {
+        margin-left: 32px;
+        margin-top: 4px;
+    }
+
+    .nested-nav .nav-link-google {
+        padding-left: 12px;
+        font-size: 13px;
+        min-height: 40px;
+    }
+
+    .user-info {
+        padding: 16px 24px;
+        border-top: 1px solid #dadce0;
+        background: #fff;
+        flex-shrink: 0;
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        z-index: 10;
+        isolation: isolate;
+        contain: layout style;
+        /* Remove the fixed positioning and transitions that were causing issues */
+    }
+
+    .user-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: #1a73e8;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 16px;
+        font-weight: 500;
+        margin-right: 12px;
+        flex-shrink: 0;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .user-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 50%;
+    }
+
+    .user-avatar-text {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 16px;
+        font-weight: 500;
+        color: white;
+    }
+
+    .user-details {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .user-name {
+        font-size: 14px;
+        font-weight: 500;
+        color: #3c4043;
+        margin: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .user-status {
+        font-size: 12px;
+        color: #5f6368;
+        margin: 2px 0 0 0;
+        overflow: visible !important;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        display: flex;
+        align-items: center;
+        position: relative;
+        z-index: 1;
+    }
+
+    .sidebar-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 1040;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease-in-out;
+    }
+
+    .sidebar-backdrop.show {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    .status-indicator {
+        width: 8px !important;
+        height: 8px !important;
+        border-radius: 50% !important;
+        background: #34a853 !important;
+        display: inline-block !important;
+        margin-right: 8px !important;
+        flex-shrink: 0 !important;
+        position: static !important;
+        z-index: auto !important;
+        vertical-align: baseline !important;
+        border: none !important;
+        box-shadow: none !important;
+        outline: none !important;
+        transform: none !important;
+        overflow: visible !important;
+        min-width: 8px !important;
+        min-height: 8px !important;
+        max-width: 8px !important;
+        max-height: 8px !important;
+    }
+
+    .status-indicator.offline {
+        background: #ea4335 !important;
+    }
+
+    .status-indicator::before,
+    .status-indicator::after {
+        display: none !important;
+        content: none !important;
+    }
+
+    .google-badge {
+        background: #ea4335;
+        color: white;
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 12px;
+        margin-left: auto;
+        min-width: 18px;
+        text-align: center;
+        flex-shrink: 0;
+    }
+
+    .sidebar-content {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+    }
+
+    .sidebar-nav * {
+        border-left: none !important;
+        border-right: none !important;
+    }
+
+    .sidebar-nav *::before,
+    .sidebar-nav *::after {
+        border-left: none !important;
+        border-right: none !important;
+        background: transparent !important;
+    }
+
+    .flash-messages-container {
+        position: fixed;
+        top: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1055;
+        width: 90%;
+        max-width: 600px;
+        pointer-events: none;
+    }
+
+    .flash-message {
+        background: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffeaa7;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 10px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 14px;
+        font-weight: 400;
+        pointer-events: auto;
+        opacity: 1;
+        transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .flash-message.success {
+        background: #d1e7dd;
+        color: #0f5132;
+        border-color: #a3cfbb;
+    }
+
+    .flash-message.error {
+        background: #f8d7da;
+        color: #721c24;
+        border-color: #f1aeb5;
+    }
+
+    .flash-message.info {
+        background: #d1ecf1;
+        color: #055160;
+        border-color: #9eeaf9;
+    }
+
+    .flash-message.warning {
+        background: #fff3cd;
+        color: #856404;
+        border-color: #ffeaa7;
+    }
+
+    .flash-message-close {
+        background: none;
+        border: none;
+        color: inherit;
+        opacity: 0.7;
+        cursor: pointer;
+        font-size: 18px;
+        margin-left: 12px;
+        padding: 0;
+        line-height: 1;
+        flex-shrink: 0;
+    }
+
+    .flash-message-close:hover {
+        opacity: 1;
+    }
+
+    .flash-message.fade-out {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    .nav-notif-dot {
+        display:inline-block; 
+        width:10px; height:10px; 
+        border-radius:50%;
+        background:#ea4335; 
+        position:absolute;
+        right:16px;
+        top:50%;
+        transform: translateY(-50%);
+        visibility:hidden;
+        box-shadow: 0 0 0 2px #fff; 
+    }
+
+    /* Responsive flash messages */
+    @media (max-width: 768px) {
+        .flash-messages-container {
+            width: 95%;
+            top: 70px;
+        }
+        
+        .flash-message {
+            padding: 10px 12px;
+            font-size: 13px;
+        }
+    }
+</style>
+    
+{% block navbar %}
+    {% include 'includes/_navbar.html' %}
+{% endblock %}
+
+<!-- Flash Messages Container -->
+<div class="flash-messages-container" id="flashMessagesContainer">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="flash-message {{ category }}" data-auto-dismiss="true">
+                    <span>{{ message }}</span>
+                    <button class="flash-message-close" onclick="dismissFlashMessage(this)" aria-label="Close">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+</div>
+
+<div class="container-fluid">
+    {% block content %}
+
+    {% endblock %}
+</div>
+
+<!-- Google-style Sidebar Backdrop -->
+<div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+<!-- Google-style Sidebar -->
+<div class="google-sidebar" id="googleSidebar">
+    <div class="sidebar-content">
+        <div class="sidebar-header">
+            <h5>Menu</h5>
+            <button class="sidebar-close" id="sidebarClose">
+                <i class="bi bi-x" style="font-size: 20px;"></i>
+            </button>
+        </div>
+        
+        <div class="sidebar-nav">
+            <!-- =================================================================== -->
+            <!-- UNAUTHENTICATED USERS -->
+            <!-- =================================================================== -->
+            {% if not current_user.is_authenticated %}
+                <div class="nav-item">
+                    <a href="/login" class="nav-link-google">
+                        <i class="bi bi-box-arrow-in-right nav-icon"></i>
+                        Sign in
+                    </a>
+                </div>
+            {% endif %}
+            
+            <!-- =================================================================== -->
+            <!-- AUTHENTICATED USERS - COMMON HOME LINK -->
+            <!-- =================================================================== -->
+            {% if current_user.is_authenticated %}
+                <div class="nav-item">
+                    <a href="{{ url_for('home') }}" class="nav-link-google">
+                        <i class="bi bi-house nav-icon"></i>
+                        Home
+                    </a>
+                </div>
+                
+                <div class="nav-divider"></div>
+            {% endif %}
+            
+            <!-- =================================================================== -->
+            <!-- ADMIN USERS - FULL ACCESS (NO TICKET VIEWING) -->
+            <!-- =================================================================== -->
+            {% if current_user.is_authenticated and current_user.has_role('admin') %}
+                <div class="nav-section-title">Administration</div>
+                
+                <!-- User Management -->
+                <div class="nav-item">
+                    <a href="/admin/users_dashboard" class="nav-link-google">
+                        <i class="bi bi-people nav-icon"></i>
+                        Manage users
+                    </a>
+                </div>
+                
+                <!-- Logs Management Collapsible -->
+                <div class="collapsible-nav">
+                    <button class="collapse-toggle" data-bs-toggle="collapse" data-bs-target="#logsCollapse" aria-expanded="false">
+                        <div style="display: flex; align-items: center;">
+                            <i class="bi bi-file-earmark-text nav-icon"></i>
+                            View Logs
+                        </div>
+                        <i class="bi bi-chevron-down collapse-icon"></i>
+                    </button>
+                    <div class="collapse" id="logsCollapse">
+                        <div class="nested-nav">
+                            <a href="/admin/manage_ModSecLogs" class="nav-link-google">
+                                <i class="bi bi-shield-lock nav-icon"></i>
+                                ModSec Logs
+                            </a>
+                            <a href="/admin/manage_ErrorLogs" class="nav-link-google">
+                                <i class="bi bi-exclamation-circle nav-icon"></i>
+                                Error Logs
+                            </a>
+                            <a href="/admin/manage_UserActions" class="nav-link-google">
+                                <i class="bi bi-person-lines-fill nav-icon"></i>
+                                User Logs
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Reports Management -->
+                <div class="nav-item">
+                    <a href="/admin/reports_dashboard" class="nav-link-google">
+                        <i class="bi bi-flag nav-icon"></i>
+                        Manage reports
+                    </a>
+                </div>
+                
+                <!-- Audit Logs -->
+                <div class="nav-item">
+                    <a href="#" class="nav-link-google">
+                        <i class="bi bi-journal-text nav-icon"></i>
+                        View audit logs
+                    </a>
+                </div>
+                
+                <div class="nav-divider"></div>
+                
+                <!-- Admin Agent Management Section (NO TICKET ACCESS) -->
+                <div class="nav-section-title">Agent Management</div>
+                
+                <div class="nav-item">
+                    <a href="{{ url_for('ticketing.manage_agents') }}" class="nav-link-google">
+                        <i class="bi bi-people-fill nav-icon"></i>
+                        Manage Agents
+                    </a>
+                </div>
+                
+                <div class="nav-divider"></div>
+                
+                <!-- Admin Security Section -->
+                <div class="nav-section-title">Security</div>
+                <div class="nav-item">
+                    <a href="{{ url_for('admin.test_upload') }}" class="nav-link-google">
+                        <i class="bi bi-shield-check nav-icon"></i>
+                        Security Test
+                    </a>
+                </div>
+                
+                <div class="nav-divider"></div>
+                
+                <!-- Admin Logout -->
+                <div class="nav-item">
+                    <a href="/logout" class="nav-link-google">
+                        <i class="bi bi-box-arrow-right nav-icon"></i>
+                        Sign out
+                    </a>
+                </div>
+            <!-- =================================================================== -->
+            <!-- SUPPORT AGENTS - RESTRICTED ACCESS (TICKETING, PROFILE, SECURITY ONLY) -->
+            <!-- =================================================================== -->
+            {% elif current_user.is_authenticated and current_user.has_role('support_agent') %}
+                
+                <!-- AGENT DASHBOARD -->
+                <div class="nav-item">
+                    <a href="{{ url_for('ticketing.agent_dashboard') }}" class="nav-link-google">
+                        <i class="bi bi-speedometer2 nav-icon"></i>
+                        Agent Dashboard
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="{{ url_for('ticketing.agent_archived_tickets') }}" class="nav-link-google">
+                        <i class="bi bi-archive nav-icon"></i>
+                        Archived Tickets
+                    </a>
+                </div>
+                <!-- TICKETING FUNCTIONS - PRIMARY AGENT FUNCTION -->
+                <div class="collapsible-nav">
+                    <button class="collapse-toggle" data-bs-toggle="collapse" data-bs-target="#ticketingCollapse" aria-expanded="false">
+                        <div style="display: flex; align-items: center;">
+                            <i class="bi bi-ticket nav-icon"></i>
+                            Ticketing
+                        </div>
+                        <i class="bi bi-chevron-down collapse-icon"></i>
+                    </button>
+                    <div class="collapse" id="ticketingCollapse">
+                        <div class="nested-nav">
+                            <a href="{{ url_for('ticketing.agent_my_tickets') }}" class="nav-link-google">
+                                <i class="bi bi-person-check nav-icon"></i>
+                                My Tickets
+                            </a>
+                            <a href="{{ url_for('ticketing.agent_open_tickets') }}" class="nav-link-google">
+                                <i class="bi bi-clipboard-check nav-icon"></i>
+                                Open Tickets
+                            </a>
+                            <a href="{{ url_for('ticketing.create_ticket') }}" class="nav-link-google">
+                                <i class="bi bi-plus-circle nav-icon"></i>
+                                Create Ticket
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="nav-divider"></div>
+                
+                <!-- AGENT ACCOUNT FUNCTIONS - LIMITED TO PROFILE & SECURITY ONLY -->
+                <div class="nav-section-title">Account</div>
+                
+                <!-- Profile Access -->
+                <div class="nav-item">
+                    <a href="{{ url_for('view_profile', user_id=current_user.user_id) }}" class="nav-link-google">
+                        <i class="bi bi-person-circle nav-icon"></i>
+                        Profile
+                    </a>
+                </div>
+                
+                <!-- Security Access -->
+                <div class="nav-item">
+                    <a href="{{ url_for('user.account_security') }}" class="nav-link-google">
+                        <i class="bi bi-shield-lock nav-icon"></i>
+                        Security
+                    </a>
+                </div>
+                
+                <div class="nav-divider"></div>
+                
+                <!-- Agent Logout -->
+                <div class="nav-item">
+                    <a href="/logout" class="nav-link-google">
+                        <i class="bi bi-box-arrow-right nav-icon"></i>
+                        Sign out
+                    </a>
+                </div>
+               
+                
+          
+            <!-- =================================================================== -->
+            <!-- REGULAR USERS - SOCIAL FEATURES ONLY (users with ONLY 'user' role) -->
+            <!-- =================================================================== -->
+            {% elif current_user.is_authenticated and current_user.has_role('user') and not current_user.has_role('support_agent') and not current_user.has_role('admin') %}
+                <!-- User Account Section -->
+                <div class="nav-section-title">Account</div>
+                
+                <div class="nav-item">
+                    <a href="{{ url_for('view_profile', user_id=current_user.user_id) }}" class="nav-link-google">
+                        <i class="bi bi-person-circle nav-icon"></i>
+                        Profile
+                    </a>
+                </div>
+                
+                <div class="nav-item">
+                    <a href="{{ url_for('user.account_security') }}" class="nav-link-google">
+                        <i class="bi bi-shield-lock nav-icon"></i>
+                        Security
+                    </a>
+                </div>
+                
+                <div class="nav-divider"></div>
+                
+                <!-- Social Features -->
+                <div class="nav-section-title">Social</div>
+                
+                <div class="nav-item">
+                    <a href="/messages" class="nav-link-google">
+                        <i class="bi bi-chat nav-icon"></i>
+                        Messages
+                    </a>
+                </div>
+                
+                <div class="nav-item">
+                    <a href="/UserFriends" class="nav-link-google">
+                        <i class="bi bi-people nav-icon"></i>
+                        Friends
+                    </a>
+                </div>
+                
+                <div class="nav-item">
+                    <a href="/DiscoverFriends" class="nav-link-google">
+                        <i class="bi bi-globe nav-icon"></i>
+                        Discover People
+                    </a>
+                </div>
+                
+                <div class="nav-item">
+                    <a href="{{ url_for('notifications') }}" id="nav-notifications-link" class="nav-link-google">
+                        <i class="bi bi-bell nav-icon" aria-hidden="true"></i>
+                        Notifications
+                        <span id="nav-notif-dot" class="nav-notif-dot" aria-hidden="true"></span>
+                    </a>
+                </div>
+                
+                <div class="nav-divider"></div>
+                
+                <!-- Events Features -->
+                <div class="nav-section-title">Events</div>
+                
+                <div class="nav-item">
+                    <a href="/events_dashboard" class="nav-link-google">
+                        <i class="bi bi-calendar-event nav-icon"></i>
+                        My Events
+                    </a>
+                </div>
+                
+                <div class="nav-item">
+                    <a href="/create_event" class="nav-link-google">
+                        <i class="bi bi-calendar-plus nav-icon"></i>
+                        Create Event
+                    </a>
+                </div>
+                
+                <div class="nav-item">
+                    <a href="/discover_events" class="nav-link-google">
+                        <i class="bi bi-search nav-icon"></i>
+                        Discover Events
+                    </a>
+                </div>
+
+                <div class="nav-divider"></div>
+                
+                <!-- Posts Features -->
+                <div class="nav-section-title">Posts</div>
+                
+                <div class="nav-item">
+                    <a href="/create_post" class="nav-link-google">
+                        <i class="bi bi-calendar-event nav-icon"></i>
+                        Create Post
+                    </a>
+                </div>
+                
+                <div class="nav-divider"></div>
+                
+                <!-- Support Features for Regular Users - BASIC TICKET CREATION ONLY -->
+                <div class="nav-section-title">Support</div>
+                
+                <div class="nav-item">
+                    <a href="{{ url_for('ticketing.create_ticket') }}" class="nav-link-google">
+                        <i class="bi bi-headset nav-icon"></i>
+                        Create Support Ticket
+                    </a>
+                </div>
+                
+                <div class="nav-item">
+                    <a href="{{ url_for('ticketing.index') }}" class="nav-link-google">
+                        <i class="bi bi-ticket nav-icon"></i>
+                        My Tickets
+                    </a>
+                </div>
+                
+                <div class="nav-item">
+                    <a href="{{ url_for('user.report_user') }}" class="nav-link-google">
+                        <i class="bi bi-flag nav-icon"></i>
+                        Report someone
+                    </a>
+                </div>
+                
+                <div class="nav-divider"></div>
+                
+                <!-- User Logout -->
+                <div class="nav-item">
+                    <a href="/logout" class="nav-link-google">
+                        <i class="bi bi-box-arrow-right nav-icon"></i>
+                        Sign out
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+        
+        <!-- =================================================================== -->
+        <!-- USER INFO SECTION - COMMON FOR ALL AUTHENTICATED USERS -->
+        <!-- =================================================================== -->
+        {% if current_user.is_authenticated %}
+        <div class="user-info">
+            <div style="display: flex; align-items: center;">
+                <div class="user-avatar">
+                    {% if current_user.profile_pic_url %}
+                        <img src="{{ url_for('static', filename='uploads/' + current_user.profile_pic_url) }}" 
+                             alt="Profile Picture"
+                             onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                        <span class="user-avatar-text" style="display: none;">{{ current_user.username[0].upper() }}</span>
+                    {% else %}
+                        <span class="user-avatar-text">{{ current_user.username[0].upper() }}</span>
+                    {% endif %}
+                </div>
+                <div class="user-details">
+                    <div class="user-name">{{ current_user.username }}</div>
+                    <div class="user-status">
+                        <span class="status-indicator {{ 'online' if current_user.current_status == 'online' else 'offline' }}"></span>
+                        Status: {{ current_user.current_status }}
+                    </div>
+                    <div class="user-status">
+                        {% if current_user.has_role('support_agent') and current_user.support_agent_profile %}
+                            Role: Support Agent (L{{ current_user.support_agent_profile.clearance_level }})
+                        {% else %}
+                            Role: {% for role in current_user.roles %}{{ role.role_name }}{% if not loop.last %}, {% endif %}{% endfor %}
+                        {% endif %}
+                    </div>
+                    <div class="user-status">
+                        Container: {{ container_id[:8] }}...
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% block scripts %}
+<!-- Popper 2.10.2, Bootstrap 5.1.3 JavaScript -->
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.10.2/dist/umd/popper.min.js" integrity="sha384-7+zCNj/IqJ95wo16oMtfsKbZ9ccEh31eOz1HGyDuCQ6wgnyJNSYdrPa03rtR1zdB" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.min.js" integrity="sha384-QJHtvGhmr9XOIpI6YVutG+2QOK9T+ZnN4kzFN1RtK3zEFEIsxhlmWl5/YESvpZ13" crossorigin="anonymous"></script>
+
+<script>
+// Flash message functionality
+function dismissFlashMessage(button) {
+    const message = button.closest('.flash-message');
+    message.classList.add('fade-out');
+    setTimeout(() => {
+        message.remove();
+        
+        // Remove container if no messages left
+        const container = document.getElementById('flashMessagesContainer');
+        if (container && container.children.length === 0) {
+            container.style.display = 'none';
+        }
+    }, 300);
+}
+
+// Auto-dismiss flash messages after 5 seconds
+document.addEventListener('DOMContentLoaded', function() {
+    const flashMessages = document.querySelectorAll('.flash-message[data-auto-dismiss="true"]');
+    
+    flashMessages.forEach(function(message, index) {
+        // Stagger auto-dismiss timing if multiple messages
+        const dismissTime = 5000 + (index * 500);
+        
+        setTimeout(function() {
+            if (message.parentNode) { // Check if message still exists
+                const closeButton = message.querySelector('.flash-message-close');
+                if (closeButton) {
+                    dismissFlashMessage(closeButton);
+                }
+            }
+        }, dismissTime);
+    });
+});
+
+// Function to add flash messages dynamically (for AJAX requests)
+function addFlashMessage(message, category = 'info', autoDismiss = true) {
+    const container = document.getElementById('flashMessagesContainer');
+    if (!container) return;
+    
+    container.style.display = 'block';
+    
+    const messageElement = document.createElement('div');
+    messageElement.className = `flash-message ${category}`;
+    if (autoDismiss) {
+        messageElement.setAttribute('data-auto-dismiss', 'true');
+    }
+    
+    messageElement.innerHTML = `
+        <span>${message}</span>
+        <button class="flash-message-close" onclick="dismissFlashMessage(this)" aria-label="Close">
+            <i class="bi bi-x"></i>
+        </button>
+    `;
+    
+    container.appendChild(messageElement);
+    
+    // Auto-dismiss if enabled
+    if (autoDismiss) {
+        setTimeout(() => {
+            if (messageElement.parentNode) {
+                dismissFlashMessage(messageElement.querySelector('.flash-message-close'));
+            }
+        }, 5000);
+    }
+}
+
+// Google-style sidebar functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const sidebar = document.getElementById('googleSidebar');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    const closeBtn = document.getElementById('sidebarClose');
+    
+    // Function to open sidebar
+    function openSidebar() {
+        sidebar.classList.add('show');
+        backdrop.classList.add('show');
+        document.body.style.overflow = 'hidden';
+    }
+    
+    // Function to close sidebar
+    function closeSidebar() {
+        sidebar.classList.remove('show');
+        backdrop.classList.remove('show');
+        document.body.style.overflow = '';
+    }
+    
+    // Listen for the original offcanvas trigger (from navbar)
+    document.addEventListener('click', function(e) {
+        if (e.target.matches('[data-bs-toggle="offcanvas"][data-bs-target="#offcanvasRight"]') ||
+            e.target.closest('[data-bs-toggle="offcanvas"][data-bs-target="#offcanvasRight"]')) {
+            e.preventDefault();
+            openSidebar();
+        }
+    });
+    
+    // Close sidebar events
+    closeBtn.addEventListener('click', closeSidebar);
+    backdrop.addEventListener('click', closeSidebar);
+    
+    // Close on escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && sidebar.classList.contains('show')) {
+            closeSidebar();
+        }
+    });
+    
+    // Active link highlighting
+    const currentPath = window.location.pathname;
+    const navLinks = document.querySelectorAll('.nav-link-google');
+    navLinks.forEach(link => {
+        if (link.getAttribute('href') === currentPath) {
+            link.classList.add('active');
+        }
+    });
+});
+
+// Notification dot functionality (only for regular users, NOT agents)
+{% if current_user.is_authenticated and current_user.has_role('user') %}
+(function(){
+    async function refreshNotifDot(){
+        try{
+        const r = await fetch('{{ url_for("unread_message_notifications_count") }}', { credentials:'same-origin' });
+        const j = await r.json();
+        const dot = document.getElementById('nav-notif-dot');
+        if (!dot) return;
+        dot.style.visibility = (j && j.ok && j.count > 0) ? 'visible' : 'hidden';
+        }catch(e){}
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+        refreshNotifDot();
+        setInterval(refreshNotifDot, 20000); // poll every 20s
+    });
+    })();
+{% endif %}
+</script>
+{% endblock %}
+</body>
+</html>

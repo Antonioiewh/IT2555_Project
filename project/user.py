@@ -72,7 +72,7 @@ from models import (
     db, User, Role, Permission, Event, EventParticipant, Post, PostImage, PostLike,
     Notification, Report, Chat, ChatParticipant, Message, 
     Friendship, AdminAction, UserLog, ModSecLog, ErrorLog, 
-    WebAuthnCredential, user_role_assignments,Event,FriendChatMap,BlockedUser,UserPublicKey, ChatKeyEnvelope
+    WebAuthnCredential, user_role_assignments,Event,FriendChatMap,BlockedUser
 
 
 )

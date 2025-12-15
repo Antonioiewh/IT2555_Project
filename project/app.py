@@ -77,7 +77,7 @@ from models import (
     db, User, Role, Permission, Event, EventParticipant, Post, PostImage, PostLike,
     Notification, Report, Chat, ChatParticipant, Message, 
     Friendship, AdminAction, UserLog, ModSecLog, ErrorLog, 
-    WebAuthnCredential, user_role_assignments,Event,FriendChatMap,BlockedUser,UserPublicKey, ChatKeyEnvelope
+    WebAuthnCredential, user_role_assignments, Event, FriendChatMap, BlockedUser
 )
 from decorators import user_required, admin_required, single_role_required,role_required
 
@@ -542,6 +542,8 @@ def validate_host():
         'localhost', 
         'localhost:5000', 
         'localhost:80',
+        '127.0.0.1',          
+        '127.0.0.1:5000',
         'glowing-briefly-cicada.ngrok-free.app'
     ]
     
@@ -1030,6 +1032,11 @@ def signup():
         phone_no = form.phone_no.data
         password = form.password.data
 
+        # Get keys from hidden fields (You must add these to SignupForm or request.form)
+        pub_key = request.form.get('public_key')
+        enc_priv_key = request.form.get('encrypted_private_key')
+        salt = request.form.get('key_salt')
+
         existing_user = User.query.filter(
             (User.username == username) |
             (User.phone_number == phone_no)
@@ -1042,6 +1049,10 @@ def signup():
             username=username,
             phone_number=phone_no,
             password_hash=generate_password_hash(password),
+            # Save E2EE Data
+            public_key=pub_key,
+            encrypted_private_key=enc_priv_key,
+            key_salt=salt,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
             current_status='online'
@@ -2523,71 +2534,59 @@ def add_friend_chat_map(user_id, friend_id, chat_id):
     except Exception:
         db.session.rollback()
 
+
+
+# --- E2EE Chat Management ---
+@app.route('/api/get_public_key/<int:user_id>')
+@login_required
+def get_user_public_key(user_id):
+    user = User.query.get_or_404(user_id)
+    
+    response = {
+        'user_id': user.user_id,
+        'public_key': user.public_key,
+        'salt': user.key_salt 
+    }
+    
+    # CRITICAL: Only send the encrypted private key to its owner
+    if current_user.user_id == user.user_id:
+        response['encrypted_private_key'] = user.encrypted_private_key
+        
+    return jsonify(response)
+
+
+@app.route('/api/update_security_keys', methods=['POST'])
+@login_required
+def update_security_keys():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+            
+        public_key = data.get('public_key')
+        
+        # For Option 2 (Enclave), we might not send these, so we allow them to be empty/dummy
+        encrypted_private_key = data.get('encrypted_private_key', 'DEVICE_BOUND_ENCLAVE') 
+        key_salt = data.get('key_salt', 'DEVICE_BOUND_SALT')
+
+        if not public_key:
+            return jsonify({'error': 'Missing public key'}), 400
+
+        # Update current user
+        current_user.public_key = public_key
+        current_user.encrypted_private_key = encrypted_private_key
+        current_user.key_salt = key_salt
+        
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Public identity synced'})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Key update failed: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+
 # --- Messaging ---
-@app.route('/api/me/pubkey', methods=['POST'])
-@single_role_required('user')
-def api_set_user_pubkey():
-    data = request.get_json(silent=True) or {}
-    spki_b64 = (data.get('spki_b64') or '').strip()
-    alg = (data.get('alg') or 'P-256').strip()
-    if not spki_b64:
-        return jsonify({'ok': False, 'error': 'missing_key'}), 400
-
-    row = UserPublicKey.query.get(current_user.user_id)
-    if row:
-        row.public_key_spki_b64 = spki_b64
-        row.alg = alg
-    else:
-        row = UserPublicKey(user_id=current_user.user_id, public_key_spki_b64=spki_b64, alg=alg)
-        db.session.add(row)
-    db.session.commit()
-    return jsonify({'ok': True})
-
-@app.route('/api/users/<int:user_id>/pubkey', methods=['GET'])
-@single_role_required('user')
-def api_get_user_pubkey(user_id):
-    row = UserPublicKey.query.get(user_id)
-    if not row:
-        return jsonify({'ok': False, 'error': 'no_key'}), 404
-    return jsonify({'ok': True, 'alg': row.alg, 'spki_b64': row.public_key_spki_b64})
-
-@app.route('/api/chats/<int:chat_id>/key_envelope', methods=['POST'])
-@single_role_required('user')
-def api_put_chat_envelope(chat_id):
-    data = request.get_json(silent=True) or {}
-    envelope_b64 = (data.get('envelope_b64') or '').strip()
-    key_version = int(data.get('key_version') or 1)
-    if not envelope_b64:
-        return jsonify({'ok': False, 'error': 'missing_envelope'}), 400
-
-    # authorize: must be a participant
-    cp = ChatParticipant.query.filter_by(chat_id=chat_id, user_id=current_user.user_id, is_in_chat=True).first()
-    if not cp:
-        return jsonify({'ok': False, 'error': 'not_in_chat'}), 403
-
-    row = ChatKeyEnvelope.query.filter_by(chat_id=chat_id, user_id=current_user.user_id, key_version=key_version).first()
-    if row:
-        row.envelope_b64 = envelope_b64
-    else:
-        row = ChatKeyEnvelope(chat_id=chat_id, user_id=current_user.user_id, key_version=key_version, envelope_b64=envelope_b64)
-        db.session.add(row)
-    db.session.commit()
-    return jsonify({'ok': True})
-
-@app.route('/api/chats/<int:chat_id>/key_envelope', methods=['GET'])
-@single_role_required('user')
-def api_get_chat_envelope(chat_id):
-    key_version = request.args.get('version', type=int)
-    q = ChatKeyEnvelope.query.filter_by(chat_id=chat_id, user_id=current_user.user_id)
-    if key_version:
-        q = q.filter_by(key_version=key_version)
-    row = q.order_by(ChatKeyEnvelope.key_version.desc()).first()
-    if not row:
-        return jsonify({'ok': False, 'error': 'no_envelope'}), 404
-    return jsonify({'ok': True, 'key_version': row.key_version, 'envelope_b64': row.envelope_b64})
-
-
-
 @app.route('/messages', methods=['GET'])
 @single_role_required('user')
 def messages():
@@ -2844,12 +2843,17 @@ def emit_to_user(user_id, event, payload):
 @socketio.on('send_message')
 def handle_send_message(data):
     if not current_user.is_authenticated:
-        print("Anonymous user tried to send a message.")
         return
     
-    encrypted_message = data.get('message')
-    if not encrypted_message or (isinstance(encrypted_message, str) and encrypted_message.strip() == ""):
-        # Ignore empty messages
+    # 1. Extract Encrypted Data Fields
+    ciphertext = data.get('ciphertext')
+    iv = data.get('iv')
+    sender_enc_key = data.get('sender_enc_key')
+    receiver_enc_key = data.get('receiver_enc_key')
+    
+    # Validate critical fields
+    if not all([ciphertext, iv, sender_enc_key, receiver_enc_key]):
+        print("Error: Missing encryption fields in message data.")
         return
     
     try:
@@ -2869,39 +2873,53 @@ def handle_send_message(data):
     other_user_id = next((uid for uid in participants if uid != current_user.user_id), None)
     if other_user_id is None:
         return
-    
 
-    #  if either direction has an active block, silently drop for both ends
+    # Check for blocks
     if is_any_active_block_between(sender_id, other_user_id):
+        # Save as deleted if blocked (optional, or just reject)
         msg = Message(
             chat_id=chat_id,
             sender_id=sender_id,
-            message_text=encrypted_message,
+            message_text=ciphertext, # Save ciphertext even if blocked/deleted logic applies
+            iv=iv,
+            sender_enc_key=sender_enc_key,
+            receiver_enc_key=receiver_enc_key,
             is_deleted_by_sender=True,
             is_deleted_by_receiver=True
         )
         db.session.add(msg)
         db.session.commit()
-        # Do not emit to sender or recipient
         socketio.emit('send_error', {'chat_id': chat_id, 'reason': 'blocked'}, room=request.sid)
-        print(f"send_message: blocked {sender_id}<->{other_user_id} chat {chat_id}")
         return
 
-    # No block: deliver normally
-    msg = Message(chat_id=chat_id, sender_id=sender_id, message_text=encrypted_message)
+    # 2. Save Message to Database
+    msg = Message(
+        chat_id=chat_id, 
+        sender_id=sender_id, 
+        message_text=ciphertext,  # Store the encrypted content
+        iv=iv,
+        sender_enc_key=sender_enc_key,
+        receiver_enc_key=receiver_enc_key
+    )
     db.session.add(msg)
     db.session.commit()
 
+    # 3. Emit to Client
     payload = {
         'chat_id': msg.chat_id,
         'message_id': msg.message_id,
         'sender_id': msg.sender_id,
-        'message_text': msg.message_text,
+        'message_text': msg.message_text, # ciphertext
+        'iv': msg.iv,
+        'sender_enc_key': msg.sender_enc_key,
+        'receiver_enc_key': msg.receiver_enc_key,
         'sent_at': msg.sent_at.strftime('%H:%M')
     }
+    
+    # Broadcast to the chat room
     socketio.emit('receive_message', payload, room=str(msg.chat_id))
 
-    # notif for message to other party
+    # Notifications
     try:
         others = ChatParticipant.query.filter(
             ChatParticipant.chat_id == chat_id,
@@ -2909,7 +2927,8 @@ def handle_send_message(data):
             ChatParticipant.is_in_chat == True
         ).all()
         for other in others:
-            add_message_notification(other.user_id, sender_id, 'New message')
+            # Note: We send a generic notification because content is encrypted
+            add_message_notification(other.user_id, sender_id, 'New Encrypted Message')
     except Exception as e:
         current_app.logger.warning(f'notify on send_message failed: {e}')
 
@@ -3011,7 +3030,10 @@ def chat_history(friend_id):
             'sent_at': m.sent_at.strftime('%H:%M'),
             'is_deleted_by_sender': m.is_deleted_by_sender,
             'is_deleted_by_receiver': m.is_deleted_by_receiver,
-            'deleted_for_me': deleted_for_me
+            'deleted_for_me': deleted_for_me,
+            'iv': m.iv,                           # <--- ADDED
+            'sender_enc_key': m.sender_enc_key,   # <--- ADDED
+            'receiver_enc_key': m.receiver_enc_key # <--- ADDED
         })
     return jsonify(out)
 

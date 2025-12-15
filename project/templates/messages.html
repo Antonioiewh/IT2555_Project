@@ -9,507 +9,135 @@
 
 {% block content %}
 <style>
-:root{
-  --bg:#f5f7fb;
-  --surface:#ffffff;
-  --ink:#2b2f36;
-  --muted:#6b7280;
-  --border:#e6e9f2;
-  --shadow:0 8px 24px rgba(18, 22, 33, 0.06);
-  --ring:0 0 0 3px rgba(99,102,241,.15);
-
-  /* Accents */
-  --blue:#1a73e8;                 /* Google action blue */
-  --blue-700:#1557b0;
-  --danger:#ea4335;
-  --warn:#fbbc04;
-
-  /* Instagram-ish gradient accents */
-  --grad-1:#4152eb;               /* purple */
-  --grad-2:#783ee6;               /* pink */
-  --grad-3:#e760e0;               /* orange accent */
-  --brand-grad:linear-gradient(135deg, var(--grad-1) 0%, var(--grad-2) 60%, var(--grad-3) 100%);
-  --app-header-h: 56px;
-  --insta-blue-1:#68a8fc;   /* Google blue */
-  --insta-blue-2:#2b67c9;   /* vivid blue */
-  --insta-blue-3:#094a99;   /* light blue accent */
-}
-
+/* ... (Keep your existing CSS exactly as it was) ... */
+:root{ --bg:#f5f7fb; --surface:#ffffff; --ink:#2b2f36; --muted:#6b7280; --border:#e6e9f2; --shadow:0 8px 24px rgba(18, 22, 33, 0.06); --ring:0 0 0 3px rgba(99,102,241,.15); --blue:#1a73e8; --blue-700:#1557b0; --danger:#ea4335; --warn:#fbbc04; --grad-1:#4152eb; --grad-2:#783ee6; --grad-3:#e760e0; --brand-grad:linear-gradient(135deg, var(--grad-1) 0%, var(--grad-2) 60%, var(--grad-3) 100%); --app-header-h: 56px; --insta-blue-1:#68a8fc; --insta-blue-2:#2b67c9; --insta-blue-3:#094a99; }
 html, body { height: 100%; }
-
-/* Page wrapper */
-.main-messages-wrapper{
-  padding:16px;
-  background:var(--bg);
-  font-family:'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
-  color:var(--ink);
-  height: calc(100dvh - var(--app-header-h)); /* fit under navbar */
-  overflow: hidden; /* internal panes scroll */
-}
-
-/* Two-column layout uses full height */
-.messages-layout{
-  display:grid;
-  grid-template-columns: 320px 1fr;
-  gap:20px;
-  align-items:start;
-  height: 100%;
-}
-
-/* Sidebar grows full height; list scrolls inside */
-.friends-sidebar{
-  background:var(--surface);
-  border:1px solid var(--border);
-  border-radius:16px;
-  box-shadow:var(--shadow);
-  overflow:hidden;
-  display:flex;           /* NEW */
-  flex-direction:column;  /* NEW */
-  height:100%;            /* NEW */
-}
-.friends-header{
-  padding:14px 16px;
-  display:flex; align-items:center; gap:10px;
-  background:linear-gradient(135deg, #f6f7ff 0%, #eef2ff 100%);
-  border-bottom:1px solid var(--border);
-  font-weight:600;
-  color:#374151;
-}
-.friend-search{
-  padding:12px 12px !important;
-  border-bottom:1px solid var(--border);
-  display:flex; align-items:center; gap:8px !important;
-}
-.friend-search .form-control{
-  border:1px solid var(--border);
-  border-radius:24px;
-  padding:10px 14px;
-  box-shadow:none;
-}
+.main-messages-wrapper{ padding:16px; background:var(--bg); font-family:'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; color:var(--ink); height: calc(100dvh - var(--app-header-h)); overflow: hidden; }
+.messages-layout{ display:grid; grid-template-columns: 320px 1fr; gap:20px; align-items:start; height: 100%; }
+.friends-sidebar{ background:var(--surface); border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow); overflow:hidden; display:flex; flex-direction:column; height:100%; }
+.friends-header{ padding:14px 16px; display:flex; align-items:center; gap:10px; background:linear-gradient(135deg, #f6f7ff 0%, #eef2ff 100%); border-bottom:1px solid var(--border); font-weight:600; color:#374151; }
+.friend-search{ padding:12px 12px !important; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px !important; }
+.friend-search .form-control{ border:1px solid var(--border); border-radius:24px; padding:10px 14px; box-shadow:none; }
 .friend-search .form-control:focus{ border-color:#c7d2fe; box-shadow:var(--ring); }
-
-/* “+” button with gradient ring */
-#add-chat-btn{
-  display:inline-flex; align-items:center; justify-content:center;
-  width:36px; height:36px; border-radius:50%;
-  background:#fff; border:1px solid var(--border); color:var(--grad-1);
-  position:relative;
-}
-#add-chat-btn::after{
-  content:""; position:absolute; inset:-2px; border-radius:50%;
-  background:var(--brand-grad); z-index:-1; filter:blur(8px); opacity:.25;
-}
+#add-chat-btn{ display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; background:#fff; border:1px solid var(--border); color:var(--grad-1); position:relative; cursor: pointer; }
 #add-chat-btn:hover{ background:#f7f7ff; }
-
-/* Friend list as clean cards */
-.friend-list{
-  margin:0;
-  padding:10px !important;
-  flex: 1 1 auto;         /* NEW: take remaining height */
-  overflow:auto;          /* NEW */
-  max-height: none;       /* NEW: remove old vh cap */
-}
-.friend-list li.friend-link{
-  display:flex; align-items:center; gap:12px;
-  border:1px solid var(--border);
-  background:#fff; border-radius:14px;
-  padding:10px 12px; margin:8px 2px;
-  transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
-}
-.friend-list li.friend-link:hover{
-  transform:translateY(-1px);
-  box-shadow:0 6px 18px rgba(18,22,33,.06);
-}
-.friend-list li.friend-link.active{
-  border-color:#c7d2fe;
-  background:linear-gradient(0deg, #fafaff, #fff);
-  box-shadow:0 6px 20px rgba(99,102,241,.12);
-}
+.friend-list{ margin:0; padding:10px !important; flex: 1 1 auto; overflow:auto; max-height: none; }
+.friend-list li.friend-link{ display:flex; align-items:center; gap:12px; border:1px solid var(--border); background:#fff; border-radius:14px; padding:10px 12px; margin:8px 2px; transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease; cursor: pointer; }
+.friend-list li.friend-link:hover{ transform:translateY(-1px); box-shadow:0 6px 18px rgba(18,22,33,.06); }
+.friend-list li.friend-link.active{ border-color:#c7d2fe; background:linear-gradient(0deg, #fafaff, #fff); box-shadow:0 6px 20px rgba(99,102,241,.12); }
 .friend-profile{ width:40px; height:40px; border-radius:50%; object-fit:cover; }
 .friend-name{ font-weight:600; color:#111827; }
 .friend-status{ font-size:12px; color:var(--muted); }
-
+.friend-link.status-online .friend-name::before, .friend-link.status-offline .friend-name::before, .friend-link.status-blocked .friend-name::before{ content:""; position:absolute; left:0; top:50%; width:10px; height:10px; border-radius:50%; transform: translateY(-50%); box-shadow: 0 0 0 3px rgba(0,0,0,.06); }
 .friend-link .friend-name{ position:relative; padding-left:18px; }
-.friend-link.status-online .friend-name::before,
-.friend-link.status-offline .friend-name::before,
-.friend-link.status-blocked .friend-name::before{
-  content:"";
-  position:absolute; left:0; top:50%;
-  width:10px; height:10px; border-radius:50%;
-  transform: translateY(-50%);
-  box-shadow: 0 0 0 3px rgba(0,0,0,.06);
-}
 .friend-link.status-online .friend-name::before{ background:#34a853; box-shadow:0 0 0 3px rgba(52,168,83,.15); }
 .friend-link.status-offline .friend-name::before{ background:#9aa0a6; box-shadow:0 0 0 3px rgba(154,160,166,.12); }
 .friend-link.status-blocked .friend-name::before{ background:#ea4335; box-shadow:0 0 0 3px rgba(234,67,53,.15); }
-
-.friend-link.status-blocked{
-  border-color:#fadde1;
-  background:#fff6f6;
-  opacity: .85;
-}
-
-.friend-link.has-unread .friend-name::after{
-  content:'';
-  display:inline-block;
-  width:8px; height:8px; margin-left:8px;
-  background:#1a73e8; border-radius:50%; vertical-align:middle;
-}
-
-/* Chat container column */
-.chat-container{
-  display:flex;
-  flex-direction:column;
-  gap:12px;
-  height: 100%;
-  min-height: 0;
-}
-
-.chat-topbar{
-  display:flex; align-items:center; justify-content:space-between;
-  padding:12px 14px;
-  border:0;                       /* remove border edge */
-  border-radius:16px;
-  background: linear-gradient(135deg, var(--insta-blue-1) 0%, var(--insta-blue-2) 60%, var(--insta-blue-3) 100%);
-  color:#fff;                     /* readable text */
-  box-shadow:var(--shadow);
-}
+.friend-link.status-blocked{ border-color:#fadde1; background:#fff6f6; opacity: .85; }
+.friend-link.has-unread .friend-name::after{ content:''; display:inline-block; width:8px; height:8px; margin-left:8px; background:#1a73e8; border-radius:50%; vertical-align:middle; }
+.chat-container{ display:flex; flex-direction:column; gap:12px; height: 100%; min-height: 0; }
+.chat-topbar{ display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border:0; border-radius:16px; background: linear-gradient(135deg, var(--insta-blue-1) 0%, var(--insta-blue-2) 60%, var(--insta-blue-3) 100%); color:#fff; box-shadow:var(--shadow); }
 .current-chat-info{ display:flex; align-items:center; gap:12px; }
 #current-friend-name{ color:#fff; font-weight:600; }
 .chat-topbar .friend-profile{ width:36px; height:36px; border:2px solid rgba(255,255,255,.6); border-radius:50%; }
-.chat-topbar .material-icons{ color:#fff; opacity:.95; }
-
-/* Options button inside top bar should look great on blue */
-.chat-topbar .btn{
-  background:rgba(255,255,255,.12);
-  color:#fff;
-  border:1px solid rgba(255,255,255,.35);
-  border-radius:20px;
-}
-.chat-topbar .btn:hover{
-  background:rgba(255,255,255,.18);
-  border-color:rgba(255,255,255,.55);
-}
-
-/* OPTIONS CARD: Google-style (no gradient) */
-.chat-options{
-  background:#fff !important;
-  border:1px solid var(--border) !important;
-  border-radius:16px;
-  box-shadow:var(--shadow);
-}
-.chat-options .options-inner{
-  background:#fff;
-  border-radius:14px;
-  padding:12px 14px;
-}
-
-/* Options inputs: clean Google look */
-.chat-options .form-control{
-  border-radius:20px;
-  border:1px solid var(--border);
-  box-shadow:none;
-}
-.chat-options .form-control:focus{
-  border-color:#c7d2fe; box-shadow:var(--ring);
-}
-
-/* Options buttons: Google look */
-.chat-options .btn{ border-radius:20px; }
-
-/* neutral chips for Images/Links */
-.chat-options .btn.btn-outline-secondary{
-  background:#fff; color:#3c4043;
-  border:1px solid var(--border);
-}
-.chat-options .btn.btn-outline-secondary:hover{
-  background:#f1f3f4; border-color:#dadce0; color:#202124;
-}
-
-/* Block = neutral/secondary */
-.chat-options .btn.btn-secondary{
-  background:#fff; color:#3c4043; border:1px solid var(--border);
-}
-.chat-options .btn.btn-secondary:hover{
-  background:#f8f9fa; color:#202124;
-}
-/* Clear/Delete = Google danger */
-.chat-options .btn.btn-danger{
-  background:#ea4335; color:#fff; border:none;
-}
-.chat-options .btn.btn-danger:hover{ background:#c5221f; }
-
-.chat-options .form-control{
-  border-radius:20px; border:1px solid var(--border); box-shadow:none;
-}
+.chat-topbar .btn{ background:rgba(255,255,255,.12); color:#fff; border:1px solid rgba(255,255,255,.35); border-radius:20px; }
+.chat-topbar .btn:hover{ background:rgba(255,255,255,.18); border-color:rgba(255,255,255,.55); }
+.chat-options{ background:#fff !important; border:1px solid var(--border) !important; border-radius:16px; box-shadow:var(--shadow); }
+.chat-options .options-inner{ background:#fff; border-radius:14px; padding:12px 14px; }
+.chat-options .form-control{ border-radius:20px; border:1px solid var(--border); box-shadow:none; }
 .chat-options .form-control:focus{ border-color:#c7d2fe; box-shadow:var(--ring); }
+.chat-options .btn{ border-radius:20px; }
+.chat-options .btn.btn-outline-secondary{ background:#fff; color:#3c4043; border:1px solid var(--border); }
+.chat-options .btn.btn-outline-secondary:hover{ background:#f1f3f4; border-color:#dadce0; color:#202124; }
+.chat-options .btn.btn-secondary{ background:#fff; color:#3c4043; border:1px solid var(--border); }
+.chat-options .btn.btn-secondary:hover{ background:#f8f9fa; color:#202124; }
+.chat-options .btn.btn-danger{ background:#ea4335; color:#fff; border:none; }
+.chat-options .btn.btn-danger:hover{ background:#c5221f; }
 .chat-container .btn{ border-radius:22px; }
-
-/* Chat box (scroll) */
-.chat-box{
-  background:var(--surface) !important;
-  border:1px solid var(--border);
-  border-radius:16px;
-  box-shadow:var(--shadow);
-  padding:16px !important;
-  flex: 1 1 auto;   /* fill remaining height */
-  min-height: 0;    /* allow flexbox scrolling */
-  max-height: none; /* remove previous calc(100vh - ...) cap */
-  overflow:auto;
-}
-/* Report user button */
-/* Report = Google warn */
-#report-user-btn.btn.btn-warning{
-  background:#fbbc04; color:#1f2937; border:none;
-}
+.chat-box{ background:var(--surface) !important; border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow); padding:16px !important; flex: 1 1 auto; min-height: 0; max-height: none; overflow:auto; }
+#report-user-btn.btn.btn-warning{ background:#fbbc04; color:#1f2937; border:none; }
 #report-user-btn.btn.btn-warning:hover{ filter:brightness(.96); }
-
 .composer-previews{ display:none; gap:8px; padding:8px; border:1px dashed #e5e7eb; border-radius:10px; margin:8px 0; flex-wrap:wrap; }
 .preview-item{ position:relative; display:flex; align-items:center; gap:8px; background:#f8fafc; border:1px solid #e5e7eb; border-radius:10px; padding:6px 8px; }
 .preview-item img{ width:56px; height:56px; object-fit:cover; border-radius:8px; }
 .preview-remove{ position:absolute; top:-8px; right:-8px; width:22px; height:22px; border:none; border-radius:50%; background:#ef4444; color:#fff; font-size:14px; cursor:pointer; }
 .preview-meta{ font-size:12px; color:#6b7280; }
-
-
-
-/* Message attachments */
-.msg-image{ max-width:min(60vw, 480px); max-height:360px; border-radius:12px; display:block; }
+.msg-image{ max-width:min(60vw, 480px); max-height:360px; border-radius:12px; display:block; cursor: pointer; }
 .msg-video{ max-width:min(60vw, 480px); max-height:360px; border-radius:12px; }
 .attachment-card{ display:flex; align-items:center; gap:10px; background:rgba(255,255,255,.72); border-radius:12px; padding:10px; }
 .message-row.me .attachment-card{ background:rgba(255,255,255,.18); }
 .attachment-name{ font-weight:600; }
 .attachment-meta{ font-size:12px; opacity:.8; }
 .attachment-download.btn{ border-radius:18px; padding:6px 10px; }
-/* Options tracker list */
 #options-images, #options-links { display:none; margin-top:8px; }
 #options-links a { word-break: break-all; overflow-wrap: anywhere; }
-
-
-
-/* Message bubbles (Instagram-ish pills + Google spacing) */
 .message-row{ margin:10px 0; display:flex; }
 .message-row.me{ justify-content:flex-end; }
-.message-bubble{
-  position:relative;
-  max-width:min(78%, 720px);
-  padding:10px 12px;
-  border-radius:18px;
-  background:#f3f4f6;
-  color:#111827;
-  border:1px solid #eef0f6;
-  box-shadow:0 2px 10px rgba(17,24,39,.06);
-  word-break: break-word; 
-  overflow-wrap: anywhere;
-}
-
+.message-bubble{ position:relative; max-width:min(78%, 720px); padding:10px 12px; border-radius:18px; background:#f3f4f6; color:#111827; border:1px solid #eef0f6; box-shadow:0 2px 10px rgba(17,24,39,.06); word-break: break-word; overflow-wrap: anywhere; }
 .message-text{ white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
-.message-row.me .message-bubble{
-  color:#fff; border:none;
-  background:var(--brand-grad);
-  box-shadow:0 6px 18px rgba(124,58,237,.22);
-}
+.message-row.me .message-bubble{ color:#fff; border:none; background:var(--brand-grad); box-shadow:0 6px 18px rgba(124,58,237,.22); }
 .message-time{ font-size:11px; opacity:.75; margin-top:6px; }
-.message-bubble.message-deleted{
-  background:#fafafa !important; color:#9aa0a6 !important; font-style:italic;
-  border-style:dashed;
-}
-/* Three-dots menu */
+.message-bubble.message-deleted{ background:#fafafa !important; color:#9aa0a6 !important; font-style:italic; border-style:dashed; }
 .message-more{ color:#9aa0a6; margin-left:8px; cursor:pointer; display:none; }
 .message-bubble:hover .message-more{ display:inline; }
-.message-menu{
-  min-width:160px; padding:8px; border-radius:12px;
-  box-shadow:0 10px 26px rgba(0,0,0,.12);
-}
-
-/* Input row */
-.chat-input-row{
-  display:flex; gap:10px; align-items:center;
-  background:var(--surface);
-  border:1px solid var(--border);
-  border-radius:16px;
-  box-shadow:var(--shadow);
-  padding:8px 8px 8px 12px;
-}
-#chat-input{
-  resize:none; 
-  overflow-y:auto;
-  max-height:140px; 
-  line-height:1.4; 
-}
+.chat-input-row{ display:flex; gap:10px; align-items:center; background:var(--surface); border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow); padding:8px 8px 8px 12px; }
+#chat-input{ resize:none; overflow-y:auto; max-height:140px; line-height:1.4; }
 #chat-input:focus{ box-shadow:none; }
-#chat-send-btn.btn{
-  background:var(--blue); color:#fff;
-  border:none; border-radius:24px; padding:10px 16px;
-  box-shadow:0 6px 14px rgba(26,115,232,.24);
-}
+#chat-send-btn.btn{ background:var(--blue); color:#fff; border:none; border-radius:24px; padding:10px 16px; box-shadow:0 6px 14px rgba(26,115,232,.24); }
 #chat-send-btn.btn:hover{ background:var(--blue-700); }
-
-/* Placeholder card (centered) */
-#chat-placeholder{
-  display:flex; align-items:center; justify-content:center;
-  background:var(--surface);
-  border:1px solid var(--border);
-  border-radius:16px;
-  box-shadow:var(--shadow);
-  flex: 1 1 auto;
-  min-height: 0;
-  max-height: none;
-}
+#chat-placeholder{ display:flex; align-items:center; justify-content:center; background:var(--surface); border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow); flex: 1 1 auto; min-height: 0; max-height: none; }
 .placeholder-inner{ text-align:center; color:var(--muted); }
-.placeholder-icon{
-  display:inline-flex; align-items:center; justify-content:center;
-  width:56px; height:56px; border-radius:14px; color:#fff;
-  background:var(--brand-grad);
-  margin-bottom:10px;
-  box-shadow:0 8px 24px rgba(124,58,237,.25);
-}
-
-/* --- Toasts --- */
-.sb-toast-container{
-  position: fixed; right: 20px; bottom: 20px; z-index: 3000;
-  display: flex; flex-direction: column; gap: 10px;
-}
-.sb-toast{
-  min-width: 240px; max-width: 360px;
-  border-radius: 12px; padding: 10px 12px;
-  display: flex; align-items: center; gap: 8px;
-  color: #fff; box-shadow: 0 10px 26px rgba(0,0,0,.2);
-}
+.placeholder-icon{ display:inline-flex; align-items:center; justify-content:center; width:56px; height:56px; border-radius:14px; color:#fff; background:var(--brand-grad); margin-bottom:10px; box-shadow:0 8px 24px rgba(124,58,237,.25); }
+.sb-toast-container{ position: fixed; right: 20px; bottom: 20px; z-index: 3000; display: flex; flex-direction: column; gap: 10px; }
+.sb-toast{ min-width: 240px; max-width: 360px; border-radius: 12px; padding: 10px 12px; display: flex; align-items: center; gap: 8px; color: #fff; box-shadow: 0 10px 26px rgba(0,0,0,.2); }
 .sb-toast .material-icons{ font-size: 18px; }
 .sb-toast.success{ background: linear-gradient(135deg, #34a853, #1e8e3e); }
 .sb-toast.error{ background: linear-gradient(135deg, #ea4335, #c5221f); }
 .sb-toast.info{ background: linear-gradient(135deg, var(--grad-1), var(--grad-2)); }
 .sb-toast.warn{ background: linear-gradient(135deg, #fbbc04, #f29900); color:#1f2937; }
-
-/* --- Confirm modal polish --- */
-#confirm-modal{
-  align-items: center; justify-content: center;
-}
-#confirm-modal .confirm-card{
-  background:#fff; border-radius:16px; width: min(520px, 92vw);
-  border:1px solid var(--border);
-  box-shadow:0 20px 60px rgba(17,24,39,.25);
-  overflow: hidden;
-}
-.confirm-head{
-  padding:12px 14px; display:flex; align-items:center; gap:8px;
-  background: var(--brand-grad);
-  color:#fff; font-weight:600;
-}
+#confirm-modal{ align-items: center; justify-content: center; }
+#confirm-modal .confirm-card{ background:#fff; border-radius:16px; width: min(520px, 92vw); border:1px solid var(--border); box-shadow:0 20px 60px rgba(17,24,39,.25); overflow: hidden; }
+.confirm-head{ padding:12px 14px; display:flex; align-items:center; gap:8px; background: var(--brand-grad); color:#fff; font-weight:600; }
 .confirm-message{ padding:16px; color:var(--ink); }
-.confirm-actions{
-  padding:0 16px 16px 16px; display:flex; gap:8px; justify-content:flex-end;
-}
-
-/* --- Message popover (delete) --- */
-.popover-menu{
-  position:absolute; right: 8px; top: calc(100% + 8px);
-  background:#fff; border:1px solid var(--border);
-  border-radius:12px; box-shadow:0 12px 28px rgba(0,0,0,.18);
-  padding:8px; z-index: 20; min-width: 170px;
-}
-.popover-menu .arrow{
-  position:absolute; top:-6px; right:16px; width:12px; height:12px;
-  background:#fff; transform: rotate(45deg);
-  border-left:1px solid var(--border); border-top:1px solid var(--border);
-}
-.popover-menu .menu-item{
-  width:100%; display:flex; align-items:center; gap:8px;
-  padding:8px 10px; border-radius:10px; cursor:pointer; border:none; background:transparent;
-  color:#374151; text-align:left;
-}
+.confirm-actions{ padding:0 16px 16px 16px; display:flex; gap:8px; justify-content:flex-end; }
+.popover-menu{ position:absolute; right: 8px; top: calc(100% + 8px); background:#fff; border:1px solid var(--border); border-radius:12px; box-shadow:0 12px 28px rgba(0,0,0,.18); padding:8px; z-index: 20; min-width: 170px; }
+.popover-menu .arrow{ position:absolute; top:-6px; right:16px; width:12px; height:12px; background:#fff; transform: rotate(45deg); border-left:1px solid var(--border); border-top:1px solid var(--border); }
+.popover-menu .menu-item{ width:100%; display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:10px; cursor:pointer; border:none; background:transparent; color:#374151; text-align:left; }
 .popover-menu .menu-item:hover{ background:#f3f4f6; }
 .popover-menu .menu-item.danger{ color:#c5221f; }
-
-.popover-menu.popover-portal{
-  position: fixed;               
-  z-index: 3000;                
-  right: auto; top: 0; left: 0; 
-}
-.popover-menu.popover-portal .arrow{
-  display: none; 
-}
-
-/* Modal (add chat) */
+.popover-menu.popover-portal{ position: fixed; z-index: 3000; right: auto; top: 0; left: 0; }
+.popover-menu.popover-portal .arrow{ display: none; }
 .chat-modal{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(17,24,39,.35); z-index:1050; }
-.chat-modal-content{
-  width:480px; max-width:92vw; border-radius:16px; overflow:hidden; background:#fff;
-  border:1px solid var(--border); box-shadow:0 20px 60px rgba(17,24,39,.25);
-}
-.chat-modal-header{
-  padding:12px 16px; display:flex; align-items:center; justify-content:space-between;
-  background:linear-gradient(135deg, var(--insta-blue-1) 0%, var(--insta-blue-2) 60%, var(--insta-blue-3) 100%);
-  color:#fff; border-bottom:1px solid rgba(255,255,255,.15);
-}
+.chat-modal-content{ width:480px; max-width:92vw; border-radius:16px; overflow:hidden; background:#fff; border:1px solid var(--border); box-shadow:0 20px 60px rgba(17,24,39,.25); }
+.chat-modal-header{ padding:12px 16px; display:flex; align-items:center; justify-content:space-between; background:linear-gradient(135deg, var(--insta-blue-1) 0%, var(--insta-blue-2) 60%, var(--insta-blue-3) 100%); color:#fff; border-bottom:1px solid rgba(255,255,255,.15); }
 .chat-modal-title{ display:flex; align-items:center; gap:8px; font-weight:600; }
-.chat-modal-close{
-  border:none; background:rgba(255,255,255,.16); color:#fff; width:32px; height:32px; border-radius:50%;
-  display:inline-flex; align-items:center; justify-content:center; cursor:pointer;
-}
+.chat-modal-close{ border:none; background:rgba(255,255,255,.16); color:#fff; width:32px; height:32px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; }
 .chat-modal-close:hover{ background:rgba(255,255,255,.22); }
 .chat-modal-body{ padding:12px 14px; background:#fff; }
-
-.picker-search{
-  display:flex; align-items:center; gap:8px; margin-bottom:10px;
-  border:1px solid var(--border); border-radius:22px; padding:8px 12px;
-}
+.picker-search{ display:flex; align-items:center; gap:8px; margin-bottom:10px; border:1px solid var(--border); border-radius:22px; padding:8px 12px; }
 .picker-search .material-icons{ color:#9aa0a6; }
-#friend-picker-search{
-  border:none; outline:none; width:100%; font-size:14px; background:transparent;
-}
-
+#friend-picker-search{ border:none; outline:none; width:100%; font-size:14px; background:transparent; }
 .chat-modal-list{ max-height:60vh; overflow:auto; border-top:1px solid #f1f3f5; }
-.chat-modal-item{
-  display:flex; align-items:center; gap:12px; padding:12px 14px; cursor:pointer;
-  border-bottom:1px solid #f5f6f8; transition:background .12s, transform .08s, box-shadow .12s;
-}
+.chat-modal-item{ display:flex; align-items:center; gap:12px; padding:12px 14px; cursor:pointer; border-bottom:1px solid #f5f6f8; transition:background .12s, transform .08s, box-shadow .12s; }
 .chat-modal-item:hover{ background:#f7f7ff; transform:translateY(-1px); box-shadow:0 8px 18px rgba(18,22,33,.06); }
-
-.picker-avatar{
-  width:44px; height:44px; border-radius:50%; padding:2px;
-  background: conic-gradient(#f59e0b, #ef4444, #8b5cf6, #3b82f6, #22c55e, #f59e0b);
-}
-.picker-avatar > img{
-  width:100%; height:100%; border-radius:50%; object-fit:cover; background:#fff;
-}
+.picker-avatar{ width:44px; height:44px; border-radius:50%; padding:2px; background: conic-gradient(#f59e0b, #ef4444, #8b5cf6, #3b82f6, #22c55e, #f59e0b); }
+.picker-avatar > img{ width:100%; height:100%; border-radius:50%; object-fit:cover; background:#fff; }
 .picker-meta{ display:flex; flex-direction:column; gap:2px; }
 .chat-modal-user-name{ font-weight:600; color:#111827; }
 .chat-modal-user-sub{ font-size:12px; color:#6b7280; }
-
-.picker-hint{
-  margin-left:auto; font-size:12px; color:#6b7280; display:flex; align-items:center; gap:4px;
-}
-
-.chat-modal-list .loading,
-.chat-modal-list .muted{
-  padding:18px; text-align:center; color:#6b7280;
-}
-.chat-modal-list .loading::before{
-  content:""; display:inline-block; width:16px; height:16px; border-radius:50%;
-  border:2px solid #c7d2fe; border-top-color:#6366f1; margin-right:8px; vertical-align:-3px;
-  animation: spin .9s linear infinite;
-}
+.picker-hint{ margin-left:auto; font-size:12px; color:#6b7280; display:flex; align-items:center; gap:4px; }
+.chat-modal-list .loading, .chat-modal-list .muted{ padding:18px; text-align:center; color:#6b7280; }
+.chat-modal-list .loading::before{ content:""; display:inline-block; width:16px; height:16px; border-radius:50%; border:2px solid #c7d2fe; border-top-color:#6366f1; margin-right:8px; vertical-align:-3px; animation: spin .9s linear infinite; }
 @keyframes spin{ to{ transform: rotate(360deg); } }
-
-/* Scrollbars (subtle) */
-.friend-list::-webkit-scrollbar,
-.chat-box::-webkit-scrollbar { width:10px; }
-.friend-list::-webkit-scrollbar-thumb,
-.chat-box::-webkit-scrollbar-thumb { background:#e5e7eb; border-radius:8px; }
-.friend-list::-webkit-scrollbar-thumb:hover,
-.chat-box::-webkit-scrollbar-thumb:hover { background:#d1d5db; }
-
-/* Responsive */
-@media (max-width: 992px){
-  .messages-layout{ grid-template-columns: 1fr; gap:12px; }
-  .friend-list{ max-height:40vh; }
-}
+.friend-list::-webkit-scrollbar, .chat-box::-webkit-scrollbar { width:10px; }
+.friend-list::-webkit-scrollbar-thumb, .chat-box::-webkit-scrollbar-thumb { background:#e5e7eb; border-radius:8px; }
+.friend-list::-webkit-scrollbar-thumb:hover, .chat-box::-webkit-scrollbar-thumb:hover { background:#d1d5db; }
+@media (max-width: 992px){ .messages-layout{ grid-template-columns: 1fr; gap:12px; } .friend-list{ max-height:40vh; } }
+.blur-overlay { filter: blur(5px); pointer-events: none; }
 </style>
 
-<div class="main-messages-wrapper">
-  <!-- NEW: grid wrapper for sidebar + chat -->
+<div class="main-messages-wrapper" id="main-interface">
   <div class="messages-layout">
-    <!-- Friends Sidebar -->
     <div class="friends-sidebar shadow-sm">
       <div class="friends-header">
         <span class="material-icons" aria-hidden="true" style="color:#1a73e8;">people</span>
@@ -522,41 +150,12 @@ html, body { height: 100%; }
         </span>
       </div>
 
-      <!-- ...existing create-chat modal... -->
-      <div id="create-chat-modal" class="chat-modal" onclick="if(event.target===this) closeChatModal()">
-        <div class="chat-modal-content" role="dialog" aria-modal="true" aria-labelledby="addChatTitle">
-          <div class="chat-modal-header">
-            <div class="chat-modal-title">
-              <span class="material-icons" aria-hidden="true">person_add</span>
-              <span id="addChatTitle">Add Chat</span>
-            </div>
-            <button class="chat-modal-close" type="button" aria-label="Close" onclick="closeChatModal()">✕</button>
-          </div>
-          <div class="chat-modal-body">
-            <div class="picker-search">
-              <span class="material-icons" aria-hidden="true">search</span>
-              <input id="friend-picker-search" type="text" placeholder="Search friends to add…">
-            </div>
-            <div class="chat-modal-list" id="friend-picker-list">
-              <!-- populated by refreshFriendsToReadd() -->
-            </div>
-          </div>
-        </div>
-      </div>
-      
-
-        <!-- ...existing friends list... -->
-        <ul class="friend-list" id="friend-list">
+      <ul class="friend-list" id="friend-list">
         {% for friend in friends %}
           <li class="friend-link {% if friend.is_online %}status-online{% else %}status-offline{% endif %}"
               data-user-id="{{ friend.user_id }}"
-              data-chat-id="{{ friend_chat_ids.get(friend.user_id, '') }}">
-            <!-- UPDATED: Use consistent profile picture URL construction -->
-            {% if friend.profile_pic_url %}
-              <img src="{{ url_for('static', filename='uploads/' + friend.profile_pic_url) }}"
-            {% else %}
-              <img src="{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
-            {% endif %}
+              data-chat-id="{{ friend.chat_id }}">
+            <img src="{{ url_for('static', filename='uploads/' + friend.profile_pic_url) if friend.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
                 alt="Profile" class="friend-profile"
                 onerror="this.src='{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}'">
             <div class="friend-info">
@@ -572,9 +171,8 @@ html, body { height: 100%; }
       </ul>
     </div>
 
-      <!-- Main Chat Container -->
-      <div class="chat-container">
-        <div class="chat-topbar" id="chat-topbar" style="display:none;">
+    <div class="chat-container">
+      <div class="chat-topbar" id="chat-topbar" style="display:none;">
         <div class="current-chat-info">
           <img id="current-friend-pic" src="{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
               alt="Profile" class="friend-profile">
@@ -586,43 +184,39 @@ html, body { height: 100%; }
           <span class="material-icons" style="vertical-align:middle;margin-left:4px;">expand_more</span>
         </button>
       </div>
-        <!-- ...existing chat-topbar... -->
 
-        <!-- ...existing collapsible options bar... -->
-        <div class="chat-options collapse" id="chatOptions">
-          <div class="options-inner">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <h5>Chat Options</h5>
-            </div>
-            <div class="d-flex gap-3 mb-2">
-              <button id="images-btn" class="btn btn-outline-secondary">Images <span id="images-count" class="badge text-bg-light ms-1">0</span></button>
-              <button id="links-btn" class="btn btn-outline-secondary">Links <span id="links-count" class="badge text-bg-light ms-1">0</span></button>
-              <input type="text" class="form-control w-50" placeholder="Find messages...">
-            </div>
-            <div id="options-images"></div>
-            <div id="options-links"></div>
-            <div class="d-flex gap-2">
-              <button class="btn btn-secondary">Block User</button>
-              <button id="report-user-btn" class="btn btn-warning">Report User</button>
-              <button class="btn btn-danger">Clear Chat</button>
-              <button class="btn btn-danger">Delete Chat</button>
-            </div>
+      <div class="chat-options collapse" id="chatOptions">
+        <div class="options-inner">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h5>Chat Options</h5>
+          </div>
+          <div class="d-flex gap-3 mb-2">
+            <button id="images-btn" class="btn btn-outline-secondary">Images <span id="images-count" class="badge text-bg-light ms-1">0</span></button>
+            <button id="links-btn" class="btn btn-outline-secondary">Links <span id="links-count" class="badge text-bg-light ms-1">0</span></button>
+            <input type="text" class="form-control w-50" placeholder="Find messages...">
+          </div>
+          <div id="options-images"></div>
+          <div id="options-links"></div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-secondary">Block User</button>
+            <button id="report-user-btn" class="btn btn-warning">Report User</button>
+            <button class="btn btn-danger">Clear Chat</button>
+            <button class="btn btn-danger">Delete Chat</button>
           </div>
         </div>
-        <!-- Chat Placeholder / Box / Form -->
-        <!-- REPLACE placeholder content with clean centered Google-like version -->
-        <div id="chat-placeholder" style="">
-          <div class="placeholder-inner">
-            <span class="material-icons placeholder-icon" aria-hidden="true">chat_bubble</span>
-            <div>Select a friend to start chatting</div>
-          </div>
-        </div>
+      </div>
 
-        <!-- ...existing #chat-box and form (unchanged)... -->
-         <div id="composer-previews" class="composer-previews"></div>
-        <div id="chat-box" class="chat-box" style="display: none;"></div>
+      <div id="chat-placeholder">
+        <div class="placeholder-inner">
+          <span class="material-icons placeholder-icon" aria-hidden="true">chat_bubble</span>
+          <div>Select a friend to start chatting securely</div>
+        </div>
+      </div>
+
+      <div id="composer-previews" class="composer-previews"></div>
+      <div id="chat-box" class="chat-box" style="display: none;"></div>
+      
       <form id="chat-form" class="chat-input-row" style="display: none;">
-        <!-- Attachment trigger (UX only; encryption stays the same) -->
         <input id="attachment-input" type="file" multiple
               accept=".jpg,.jpeg,.png,.gif,.webp,.mp4,.webm,.pdf,.txt,.docx,.xlsx,.pptx,image/*,video/mp4,video/webm,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation"
               style="display:none">
@@ -631,85 +225,382 @@ html, body { height: 100%; }
           Add
         </button>
         <textarea id="chat-input" class="form-control" placeholder="Type a message..." rows="1"></textarea>
-
         <button id="chat-send-btn" class="btn btn-primary" type="submit">
           <span class="material-icons" style="font-size:18px;vertical-align:middle;margin-right:6px;">send</span>
           Send
         </button>
       </form>
-      <div id="image-viewer" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:3000; align-items:center; justify-content:center;">
-        <img id="image-viewer-img" alt="" style="max-width:92vw; max-height:92vh; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.4);" />
-        <button type="button" aria-label="Close" onclick="closeImageViewer()"
-                style="position:absolute; top:16px; right:16px; width:40px; height:40px; border-radius:50%; border:none; background:rgba(255,255,255,.15); color:#fff; font-size:22px; cursor:pointer;">✕</button>
-      </div>
-
-      <div id="confirm-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.3); z-index:2000; align-items:center; justify-content:center;">
-        <div class="confirm-card">
-        <!-- content injected by showConfirm() -->
-        </div>
-      </div>
     </div>
   </div>
+</div>
+
+<div id="create-chat-modal" class="chat-modal" onclick="if(event.target===this) closeChatModal()">
+  <div class="chat-modal-content" role="dialog" aria-modal="true" aria-labelledby="addChatTitle">
+    <div class="chat-modal-header">
+      <div class="chat-modal-title">
+        <span class="material-icons" aria-hidden="true">person_add</span>
+        <span id="addChatTitle">Add Chat</span>
+      </div>
+      <button class="chat-modal-close" type="button" aria-label="Close" onclick="closeChatModal()">✕</button>
+    </div>
+    <div class="chat-modal-body">
+      <div class="picker-search">
+        <span class="material-icons" aria-hidden="true">search</span>
+        <input id="friend-picker-search" type="text" placeholder="Search friends to add…">
+      </div>
+      <div class="chat-modal-list" id="friend-picker-list"></div>
+    </div>
+  </div>
+</div>
+
+<div id="image-viewer" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:3000; align-items:center; justify-content:center;">
+  <img id="image-viewer-img" alt="" style="max-width:92vw; max-height:92vh; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.4);" />
+  <button type="button" aria-label="Close" onclick="closeImageViewer()"
+          style="position:absolute; top:16px; right:16px; width:40px; height:40px; border-radius:50%; border:none; background:rgba(255,255,255,.15); color:#fff; font-size:22px; cursor:pointer;">✕</button>
+</div>
+
+<div id="confirm-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.3); z-index:2000; align-items:center; justify-content:center;">
+  <div class="confirm-card">
+    <div class="confirm-head">
+      <span class="material-icons" aria-hidden="true">warning</span>
+      <div>Confirm action</div>
+    </div>
+    <div id="confirm-modal-message" class="confirm-message"></div>
+    <div class="confirm-actions">
+      <button id="confirm-modal-no" class="btn btn-secondary">Cancel</button>
+      <button id="confirm-modal-yes" class="btn btn-danger">Continue</button>
+    </div>
+  </div>
+</div>
+
+<div id="key-setup-modal" class="chat-modal" style="display:none;">
+  <div class="chat-modal-content">
+    <div class="chat-modal-header" style="background:#ea4335;">
+      <div class="chat-modal-title"><h4 style="margin:0;color:#fff;">Identity Mismatch</h4></div>
+    </div>
+    <div class="chat-modal-body">
+      <p><b>Security Warning:</b> Your browser does not have the keys required to read your chat history (Encryption Keys Missing).</p>
+      <p>This usually happens if you:</p>
+      <ul><li>Logged in from a new device</li><li>Cleared your browser cache</li><li>Are in Incognito mode</li></ul>
+      <p class="text-danger">To chat from this device, you must generate a new identity. <b>This will make old history unreadable.</b></p>
+      <button id="btn-reset-identity" class="btn btn-danger w-100">Reset Identity (Lose History)</button>
+    </div>
+  </div>
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
 
-<!-- CSS Variables -->
 <script>
- 
-
-
+// --- GLOBALS ---
 const socket = io(window.location.origin, { withCredentials: true, transports: ['websocket', 'polling'] });
 window.socket = socket;
-const myUserId = {{ current_user.user_id | tojson }};
-window.myUserId = myUserId; // legacy code can read it
-
-//--- message upload files and attachments --
-const chatFilesIndex = new Map(); // chatId -> [{kind,url,name,size}]
-const chatLinksIndex = new Map(); // chatId -> Set(url)
-
-
-// --- Per‑chat keys (E2EE-ready) ---
-const chatKeys = Object.create(null);
-const DEFAULT_CHAT_KEY = 'YOUR_SHARED_SECRET_KEY';// temp fallback (until you implement key exchange)
-window.secretKey = DEFAULT_CHAT_KEY; // backward compatibility for old checks
-
-// CSRF token for fetch requests
+// Ensure user ID is a string for IndexedDB consistency
+const myUserId = String({{ current_user.user_id | tojson }}); 
 const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
-// Join my rooms once on connect
-const myChatIds = {{ my_chat_ids | tojson }};
-const safeChatIds = (Array.isArray(myChatIds) ? myChatIds : []).map(n => Number(n)).filter(n => Number.isFinite(n));
-
-
+// E2EE Caches
+let myKeys = { public: null, private: null };
+let friendPublicKeyCache = {}; 
 let currentChatId = null;
-let pendingChatId = null;          // chat id we've asked server to join but not yet confirmed
-const joinedChats = new Set();     // confirmed joined chat ids (strings)
+const chatFilesIndex = new Map(); 
+const chatLinksIndex = new Map(); 
+const pendingAttachments = []; 
 
+// ==========================================
+// 1. SOFTWARE ENCLAVE (IndexedDB)
+// ==========================================
+const Enclave = {
+    dbName: "SecureChatEnclave",
+    storeName: "keys",
+    version: 2, // Bumped to force clean slate
 
-// ---------- socket.io event handlers ----------
-socket.on('joined_chat', (data) => {
-  try {
-    if (data && data.chat_id) {
-      const joinedId = String(data.chat_id);
-      joinedChats.add(joinedId);
-      console.log('joined_chat confirmed by server:', joinedId);
+    openDB: function() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(this.dbName, this.version);
+            request.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (db.objectStoreNames.contains(this.storeName)) {
+                    db.deleteObjectStore(this.storeName);
+                }
+                db.createObjectStore(this.storeName, { keyPath: "userId" });
+            };
+            request.onsuccess = (e) => resolve(e.target.result);
+            request.onerror = (e) => reject(e);
+        });
+    },
 
-      // If this was the chat we were waiting for, activate it
-      if (pendingChatId && String(pendingChatId) === joinedId) {
-        currentChatId = joinedId;
-        pendingChatId = null;
-        // update active friend-link dataset so future joins use authoritative id
-        const activeLink = document.querySelector('.friend-link.active');
-        if (activeLink) {
-          activeLink.dataset.chatId = joinedId;
-          activeLink.setAttribute('data-chat-id', joinedId);
-        }
-      }
+    saveKeys: async function(userId, keyPair) {
+        const db = await this.openDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction([this.storeName], "readwrite");
+            const store = tx.objectStore(this.storeName);
+            // Store raw CryptoKey objects
+            const req = store.put({
+                userId: userId, 
+                privateKey: keyPair.privateKey,
+                publicKey: keyPair.publicKey,
+                created: Date.now()
+            });
+            req.onsuccess = () => resolve();
+            req.onerror = (e) => reject(e);
+        });
+    },
+
+    loadKeys: async function(userId) {
+        const db = await this.openDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction([this.storeName], "readonly");
+            const store = tx.objectStore(this.storeName);
+            const req = store.get(userId);
+            req.onsuccess = (e) => resolve(e.target.result);
+            req.onerror = (e) => reject(e);
+        });
     }
-  } catch (e) { console.error(e); }
+};
+
+// ==========================================
+// 2. CRYPTO OPS
+// ==========================================
+const CryptoManager = {
+    // Utils
+    str2ab: (str) => new TextEncoder().encode(str),
+    ab2str: (buf) => new TextDecoder().decode(buf),
+    base64ToArrayBuffer: (base64) => {
+        const bin = window.atob(base64);
+        const len = bin.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+        return bytes.buffer;
+    },
+    arrayBufferToBase64: (buf) => {
+        let bin = '';
+        const bytes = new Uint8Array(buf);
+        for (let i = 0; i < bytes.byteLength; i++) bin += String.fromCharCode(bytes[i]);
+        return window.btoa(bin);
+    },
+
+    // Generate Non-Extractable Keys
+    generateKeyPair: async () => {
+        if (!window.crypto || !window.crypto.subtle) return null;
+        return window.crypto.subtle.generateKey(
+            { name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+            true, 
+            ["encrypt", "decrypt"]
+        );
+    },
+
+    exportPublicKey: async (key) => {
+        const exp = await window.crypto.subtle.exportKey("spki", key);
+        return CryptoManager.arrayBufferToBase64(exp);
+    },
+
+    importPublicKey: async (b64) => {
+        return window.crypto.subtle.importKey(
+            "spki", CryptoManager.base64ToArrayBuffer(b64),
+            { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]
+        );
+    },
+
+    // Hybrid Encryption
+    encryptMessage: async (text, rxPub, myPub) => {
+        const sesKey = await window.crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+        const iv = window.crypto.getRandomValues(new Uint8Array(12));
+        const cip = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv }, sesKey, CryptoManager.str2ab(text));
+        
+        const rawSes = await window.crypto.subtle.exportKey("raw", sesKey);
+        const encRx = await window.crypto.subtle.encrypt({ name: "RSA-OAEP" }, rxPub, rawSes);
+        const encTx = await window.crypto.subtle.encrypt({ name: "RSA-OAEP" }, myPub, rawSes);
+
+        return {
+            ciphertext: CryptoManager.arrayBufferToBase64(cip),
+            iv: CryptoManager.arrayBufferToBase64(iv),
+            sender_enc_key: CryptoManager.arrayBufferToBase64(encTx),
+            receiver_enc_key: CryptoManager.arrayBufferToBase64(encRx)
+        };
+    },
+
+    // Decrypt using the Private Key Object directly
+    decryptMessage: async (payload) => {
+        try {
+            if (!myKeys.private) return "[Locked]";
+            const isMe = String(payload.sender_id) === String(myUserId);
+            const blob = isMe ? payload.sender_enc_key : payload.receiver_enc_key;
+            if(!blob) return "[No Key]";
+
+            const rawSes = await window.crypto.subtle.decrypt(
+                { name: "RSA-OAEP" }, 
+                myKeys.private, // Using the stored Key Object
+                CryptoManager.base64ToArrayBuffer(blob)
+            );
+
+            const sesKey = await window.crypto.subtle.importKey("raw", rawSes, { name: "AES-GCM" }, false, ["decrypt"]);
+            const dec = await window.crypto.subtle.decrypt(
+                { name: "AES-GCM", iv: CryptoManager.base64ToArrayBuffer(payload.iv) },
+                sesKey, CryptoManager.base64ToArrayBuffer(payload.message_text || payload.ciphertext)
+            );
+            return CryptoManager.ab2str(dec);
+        } catch (e) {
+            console.error("Decrypt failed:", e);
+            return "[Encrypted]";
+        }
+    }
+};
+
+// ==========================================
+// 3. INITIALIZATION (Seamless)
+// ==========================================
+async function initSecurity() {
+    console.log("Checking Enclave...");
+    
+    try {
+        // 1. Fetch Server Info (Does user have a public key?)
+        const res = await fetch(`/api/get_public_key/${myUserId}`);
+        const data = await res.json();
+
+        // 2. Check IndexedDB for existing keys
+        const storedKeys = await Enclave.loadKeys(myUserId);
+        
+        if (storedKeys) {
+            console.log("Keys found in Enclave. Loading...");
+            myKeys.private = storedKeys.privateKey;
+            myKeys.public = storedKeys.publicKey;
+            
+            // Check if server needs resync (edge case)
+            if (!data.public_key) {
+                console.log("Server missing public key. Re-uploading...");
+                const pub64 = await CryptoManager.exportPublicKey(storedKeys.publicKey);
+                await uploadKeys(pub64);
+            }
+            
+            // Refresh history immediately
+            if(currentChatId) {
+                 const activeLink = document.querySelector('.friend-link.active');
+                 if(activeLink) loadChatHistoryByFriendId(activeLink.dataset.userId);
+            }
+        } else if (data.public_key) {
+            // CASE: Server has Identity, Browser DOES NOT
+            // This is the "Refresh destroys history" trap. We MUST NOT overwrite.
+            console.warn("Identity Mismatch: Server has keys, Browser does not.");
+            document.getElementById('key-setup-modal').style.display = 'flex';
+            document.getElementById('main-interface').classList.add('blur-overlay');
+            
+            document.getElementById('btn-reset-identity').onclick = async () => {
+                if (confirm("Are you sure? Old chat history will be unreadable.")) {
+                    await generateAndSaveIdentity();
+                    location.reload();
+                }
+            };
+        } else {
+            // CASE: Fresh Account (No Server Key, No Browser Key)
+            await generateAndSaveIdentity();
+        }
+    } catch (e) {
+        console.error("Enclave Error:", e);
+        showToast("Security System Failed", "error");
+    }
+}
+
+async function generateAndSaveIdentity() {
+    console.log("Generating new identity...");
+    const kp = await CryptoManager.generateKeyPair();
+    await Enclave.saveKeys(myUserId, kp);
+    const pub64 = await CryptoManager.exportPublicKey(kp.publicKey);
+    await uploadKeys(pub64);
+    
+    myKeys.public = kp.publicKey;
+    myKeys.private = kp.privateKey;
+    showToast("Secure Identity Created", "success");
+}
+
+async function uploadKeys(pub64) {
+    await fetch('/api/update_security_keys', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify({ 
+            public_key: pub64,
+            encrypted_private_key: 'DEVICE_BOUND', 
+            key_salt: 'DEVICE_BOUND' 
+        })
+    });
+}
+
+window.addEventListener('DOMContentLoaded', initSecurity);
+
+// ==========================================
+// 4. CHAT LOGIC
+// ==========================================
+
+document.getElementById('chat-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!currentChatId) { showToast("Select a chat", "warn"); return; }
+    
+    // Auto-init if missing
+    if (!myKeys.public) {
+        console.log("Keys missing on send. Retrying init...");
+        await initSecurity();
+        if(!myKeys.public) {
+            showToast("Security Error: Identity missing. Please refresh.", "error");
+            return;
+        }
+    }
+
+    const input = document.getElementById('chat-input');
+    const text = input.value.trim();
+
+    // 1. Get Friend Key
+    const friendId = document.querySelector('.friend-link.active').dataset.userId;
+    let friendKey = friendPublicKeyCache[friendId];
+    
+    if(!friendKey) {
+        try {
+            const r = await fetch(`/api/get_public_key/${friendId}`);
+            const d = await r.json();
+            if(d.public_key) {
+                friendKey = await CryptoManager.importPublicKey(d.public_key);
+                friendPublicKeyCache[friendId] = friendKey;
+            } else {
+                showToast("Friend has not set up security yet.", "error");
+                return;
+            }
+        } catch(e) { console.error(e); return; }
+    }
+
+    // 2. Attachments
+    const attachmentsToSend = [...pendingAttachments];
+    for (const item of attachmentsToSend) {
+        try {
+            const fd = new FormData();
+            fd.append('file', item.file);
+            fd.append('csrf_token', csrfToken);
+            const res = await fetch('/upload_message_attachment', {method:'POST', body:fd, headers:{'X-CSRFToken':csrfToken}});
+            const j = await res.json();
+            if (j.ok) {
+                const payload = JSON.stringify({ type:'attachment', url: j.url, name: j.name, kind: j.kind, size: j.size });
+                const enc = await CryptoManager.encryptMessage(payload, friendKey, myKeys.public);
+                socket.emit('send_message', { chat_id: Number(currentChatId), ...enc });
+                ensureChatIndexes(currentChatId);
+                chatFilesIndex.get(String(currentChatId)).push({type:'attachment', ...j});
+            }
+        } catch(err) {}
+    }
+    pendingAttachments.length = 0;
+    renderComposerPreviews();
+
+    // 3. Text
+    if (text) {
+        try {
+            const enc = await CryptoManager.encryptMessage(text, friendKey, myKeys.public);
+            socket.emit('send_message', { chat_id: Number(currentChatId), ...enc });
+            input.value = '';
+            input.style.height = 'auto';
+        } catch(e) {
+            console.error("Encrypt failed", e);
+            showToast("Message encryption failed", "error");
+        }
+    }
 });
 
+<<<<<<< HEAD
 socket.on('connect', () => {
   console.log('socket connected', socket.id);
   safeChatIds.forEach(cid => socket.emit('join_chat', { chat_id: cid }));
@@ -894,11 +785,19 @@ socket.on('unblocked', (data) => {
     const activeLink = document.querySelector('.friend-link.active');
     if (activeLink) {
       loadChatHistoryByFriendId(activeLink.dataset.userId);
+=======
+socket.on('receive_message', async (data) => {
+    if (String(data.chat_id) !== String(currentChatId)) {
+        const li = document.querySelector(`.friend-link[data-chat-id="${data.chat_id}"]`);
+        if(li) li.classList.add('has-unread');
+        return;
+>>>>>>> c8725995ca7b53d38933bd2ec5653b8e1e07895f
     }
-    updateBlockButton(false);
-  }
+    const text = await CryptoManager.decryptMessage(data);
+    appendMessage(String(data.sender_id) === String(myUserId) ? 'me' : 'friend', text, data.sent_at, data.message_id);
 });
 
+<<<<<<< HEAD
 socket.on('join_error', (data) => {
   console.warn('join_error', data);
   if (data?.error === 'deleted_for_you' || data?.error === 'no_mapping') {
@@ -1277,81 +1176,43 @@ const MAX_ATTACHMENT_BYTES = 16 * 1024 * 1024;
 const pendingAttachments = []; // {id,file,kind,objectUrl}
 const previewsEl = document.getElementById('composer-previews');
 
+=======
+// UI & Helpers
+>>>>>>> c8725995ca7b53d38933bd2ec5653b8e1e07895f
 function ensureChatIndexes(chatId) {
   const key = String(chatId);
   if (!chatFilesIndex.has(key)) chatFilesIndex.set(key, []);
   if (!chatLinksIndex.has(key)) chatLinksIndex.set(key, new Set());
 }
-
 function renderOptionsTracker() {
   const key = String(currentChatId || '');
   const files = chatFilesIndex.get(key) || [];
   const links = Array.from(chatLinksIndex.get(key) || []);
   const imgCount = files.filter(f => f.kind === 'image').length;
-
   const imagesCountEl = document.getElementById('images-count');
   const linksCountEl = document.getElementById('links-count');
   if (imagesCountEl) imagesCountEl.textContent = String(imgCount);
   if (linksCountEl)  linksCountEl.textContent  = String(links.length);
-
   const imagesBox = document.getElementById('options-images');
-  const linksBox  = document.getElementById('options-links');
   if (imagesBox) {
     imagesBox.innerHTML = files.map(f => {
       if (f.kind === 'image') {
-        return `<div class="attachment-card" style="margin-bottom:6px;">
-          <img src="${f.url}" alt="" style="width:48px;height:48px;border-radius:8px;object-fit:cover" onclick="openImageViewer('${f.url}')">
-          <div style="flex:1 1 auto">
-            <div class="attachment-name">${f.name}</div>
-            <div class="attachment-meta">${formatBytes(f.size)}</div>
-          </div>
-          <a href="${f.url}" download="${f.name}" class="btn btn-sm btn-light attachment-download">
-            <span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px;">download</span>Download
-          </a>
-        </div>`;
+        return `<div class="attachment-card" style="margin-bottom:6px;"><img src="${f.url}" style="width:48px;height:48px;border-radius:8px;object-fit:cover" onclick="openImageViewer('${f.url}')"><div style="flex:1 1 auto"><div class="attachment-name">${f.name}</div><div class="attachment-meta">${formatBytes(f.size)}</div></div><a href="${f.url}" download="${f.name}" class="btn btn-sm btn-light attachment-download">Download</a></div>`;
       }
-      return `<div class="attachment-card" style="margin-bottom:6px;">
-        <span class="material-icons" aria-hidden="true">insert_drive_file</span>
-        <div style="flex:1 1 auto">
-          <div class="attachment-name">${f.name}</div>
-          <div class="attachment-meta">${f.mime || 'file'} • ${formatBytes(f.size)}</div>
-        </div>
-        <a href="${f.url}" download="${f.name}" class="btn btn-sm btn-light attachment-download">
-          <span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px;">download</span>Download
-        </a>
-      </div>`;
-    }).join('') || '<div class="text-muted small">No files yet</div>';
-  }
-  if (linksBox) {
-    linksBox.innerHTML = links.map(href => `
-      <div class="d-flex align-items-center justify-content-between" style="gap:8px;margin-bottom:6px;">
-        <a href="${href}" target="_blank" rel="noopener noreferrer">${href}</a>
-        <a href="${href}" download class="btn btn-sm btn-light">
-          <span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px;">download</span>
-          Save
-        </a>
-      </div>
-    `).join('') || '<div class="text-muted small">No links yet</div>';
+      return `<div class="attachment-card" style="margin-bottom:6px;"><span class="material-icons">insert_drive_file</span><div style="flex:1 1 auto"><div class="attachment-name">${f.name}</div></div><a href="${f.url}" download="${f.name}" class="btn btn-sm btn-light attachment-download">Download</a></div>`;
+    }).join('') || '<div class="text-muted small">No files</div>';
   }
 }
-
-// Toggle panels
-document.getElementById('images-btn')?.addEventListener('click', () => {
-  const el = document.getElementById('options-images');
-  el.style.display = (el.style.display === 'none' || !el.style.display) ? 'block' : 'none';
-});
-document.getElementById('links-btn')?.addEventListener('click', () => {
-  const el = document.getElementById('options-links');
-  el.style.display = (el.style.display === 'none' || !el.style.display) ? 'block' : 'none';
-});
-
-
-// Lightbox helpers
-function openImageViewer(src){
-  const overlay = document.getElementById('image-viewer');
-  const img = document.getElementById('image-viewer-img');
-  img.src = src; overlay.style.display = 'flex';
+function formatBytes(n){ if (!Number.isFinite(n)) return ''; const u=['B','KB','MB','GB']; let i=0; while(n>=1024&&i<u.length-1){n/=1024;i++;} return `${n.toFixed(1)} ${u[i]}`; }
+function openImageViewer(src){ document.getElementById('image-viewer').style.display = 'flex'; document.getElementById('image-viewer-img').src = src; }
+function closeImageViewer(){ document.getElementById('image-viewer').style.display = 'none'; document.getElementById('image-viewer-img').src = ''; }
+function showToast(msg, type='info'){
+    let c = document.querySelector('.sb-toast-container');
+    if(!c) { c = document.createElement('div'); c.className = 'sb-toast-container'; document.body.appendChild(c); }
+    const el = document.createElement('div'); el.className = `sb-toast ${type}`; el.innerHTML = `<span>${msg}</span>`;
+    c.appendChild(el); setTimeout(() => el.remove(), 3000);
 }
+<<<<<<< HEAD
 function closeImageViewer(){
   const overlay = document.getElementById('image-viewer');
   const img = document.getElementById('image-viewer-img');
@@ -1754,443 +1615,134 @@ document.querySelector('.chat-options input[placeholder="Find messages..."]').ad
 });
 
 // Confirm modal (styled)
+=======
+>>>>>>> c8725995ca7b53d38933bd2ec5653b8e1e07895f
 function showConfirm(message, onConfirm){
   const modal = document.getElementById('confirm-modal');
   const card = modal.querySelector('.confirm-card');
-  card.innerHTML = `
-    <div class="confirm-head">
-      <span class="material-icons" aria-hidden="true">warning</span>
-      <div>Confirm action</div>
-    </div>
-    <div id="confirm-modal-message" class="confirm-message">${message}</div>
-    <div class="confirm-actions">
-      <button id="confirm-modal-no" class="btn btn-secondary">Cancel</button>
-      <button id="confirm-modal-yes" class="btn btn-danger">Continue</button>
-    </div>
-  `;
+  card.innerHTML = `<div class="confirm-head">Confirm</div><div class="confirm-message">${message}</div><div class="confirm-actions"><button id="confirm-modal-no" class="btn btn-secondary">Cancel</button><button id="confirm-modal-yes" class="btn btn-danger">Continue</button></div>`;
   modal.style.display = 'flex';
-  const yesBtn = card.querySelector('#confirm-modal-yes');
-  const noBtn = card.querySelector('#confirm-modal-no');
-  yesBtn.onclick = function(){ modal.style.display = 'none'; onConfirm(); };
-  noBtn.onclick = function(){ modal.style.display = 'none'; };
+  card.querySelector('#confirm-modal-yes').onclick = function(){ modal.style.display = 'none'; onConfirm(); };
+  card.querySelector('#confirm-modal-no').onclick = function(){ modal.style.display = 'none'; };
 }
-
-// Toast helpers
-function ensureToastContainer(){
-  let c = document.querySelector('.sb-toast-container');
-  if (!c){
-    c = document.createElement('div');
-    c.className = 'sb-toast-container';
-    document.body.appendChild(c);
-  }
-  return c;
-}
-
-function showToast(message, type='info', timeout=2500){
-  const c = ensureToastContainer();
-  const el = document.createElement('div');
-  el.className = `sb-toast ${type}`;
-  const iconMap = { success:'check_circle', error:'error', info:'info', warn:'warning' };
-  el.innerHTML = `<span class="material-icons" aria-hidden="true">${iconMap[type] || 'info'}</span><span>${message}</span>`;
-  c.appendChild(el);
-  setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateY(4px)'; }, timeout);
-  setTimeout(() => el.remove(), timeout + 300);
-}
-
-function updateBlockButton(isBlocked) {
-  const blockBtn = document.querySelector('.btn.btn-secondary');
-  if (isBlocked) {
-    blockBtn.textContent = 'Unblock User';
-    blockBtn.onclick = function() {
-      fetch(`/unblock_user/${currentChatId}`, {
-        method: 'POST',
-        headers: {
-          'X-CSRFToken': csrfToken
-        }
-      })
-      .then(() => {
-        showToast('User unblocked.', 'success');
-        blockBtn.textContent = 'Block User';
-        blockBtn.onclick = blockHandler;
-      });
-    };
-  } else {
-    blockBtn.textContent = 'Block User';
-    blockBtn.onclick = blockHandler;
-  }
-}
-
-function blockHandler() {
-  fetch(`/block_user/${currentChatId}`, {
-    method: 'POST',
-    headers: {
-      'X-CSRFToken': csrfToken
-    }
-  })
-    .then(() => {
-      showToast('User blocked. You cannot send or receive messages in this chat.', 'error');
-      updateBlockButton(true);
-    });
-}
-
-
-document.getElementById('friend-search-input').addEventListener('input', function() {
-    const filter = this.value.toLowerCase();
-    document.querySelectorAll('.friend-list li.friend-link').forEach(function(li) {
-        const name = li.querySelector('.friend-name').textContent.toLowerCase();
-        li.style.display = name.includes(filter) ? '' : 'none';
-    });
-});
-
-// History
-function loadChatHistoryByFriendId(friendUserId) {
-  const chatBox = document.getElementById('chat-box');
-  chatBox.innerHTML = '';
-  return fetch(`/chat_history/${friendUserId}`)
-    .then(r => r.json())
-    .then(async (messages) => {
-      const keyStr = getChatKey(currentChatId) || await loadChatKey(currentChatId) || DEFAULT_CHAT_KEY;
-      for (const msg of messages) {
-        const isDeleted = (msg.deleted_for_me === true) || (msg.message_text === 'Message deleted');
-        const text = isDeleted ? 'Message deleted' : await decryptWithKey(msg.message_text, keyStr);
-        appendMessage(String(msg.sender_id) === String(myUserId) ? 'me' : 'friend', text, msg.sent_at, msg.message_id, isDeleted);
-      }
-      ensureChatIndexes(currentChatId);
-      renderOptionsTracker();
-    })
-    .catch(err => console.error('Failed to load chat history', err));
-}
-
-
-
-function closeChatModal() {
-  document.getElementById('create-chat-modal').style.display = 'none';
-}
-
-function addFriendToSidebar(friend, chatId) {
-  const friendList = document.getElementById('friend-list');
-  if (!friendList) return;
-
-  // If already present, update it
-  const existing = friendList.querySelector(`.friend-link[data-user-id="${friend.user_id}"]`);
-  if (existing) {
-    existing.setAttribute('data-chat-id', String(chatId));
-    existing.querySelector('.friend-name').textContent = friend.username;
-    const img = existing.querySelector('img.friend-profile');
-    if (img) img.src = friend.profile_pic_url;
-    return;
-  }
-
-  const li = document.createElement('li');
-  li.className = 'friend-link';
-  li.setAttribute('data-user-id', String(friend.user_id));
-  li.setAttribute('data-chat-id', String(chatId));
-  li.innerHTML = `
-    <img src="${friend.profile_pic_url}" class="friend-profile" alt="Profile">
-    <div class="friend-info">
-      <div class="friend-name">${friend.username}</div>
-      <div class="friend-status">Offline</div>
-    </div>
-  `;
-  friendList.prepend(li);
-}
-
-function refreshFriendsToReadd() {
-  const picker = document.getElementById('friend-picker-list');
-  if (!picker) return;
-  picker.innerHTML = '<div class="loading">Loading…</div>';
-
-  fetch('/api/friends_to_readd')
-    .then(r => r.json())
-    .then(list => {
-      picker.innerHTML = '';
-      if (!list || list.length === 0) {
-        picker.innerHTML = `
-          <div class="muted">
-            <span class="material-icons" style="vertical-align:middle;color:#cbd5e1;margin-right:6px;">group_off</span>
-            No users to re-add
-          </div>`;
-        return;
-      }
-
-      list.forEach(u => {
-        const item = document.createElement('div');
-        item.className = 'chat-modal-item selectable';
-        item.dataset.userId = u.user_id;
-        item.innerHTML = `
-          <div class="picker-avatar">
-            <img src="${u.profile_pic_url}" class="chat-modal-user-img" alt="">
-          </div>
-          <div class="picker-meta">
-            <div class="chat-modal-user-name">${u.username}</div>
-            <div class="chat-modal-user-sub">Tap to add</div>
-          </div>
-          <div class="picker-hint">
-            <span class="material-icons" aria-hidden="true">chevron_right</span>
-          </div>
-        `;
-
-        // Clicking the entire row creates chat
-        item.addEventListener('click', async () => {
-          if (item.classList.contains('disabled')) return;
-          item.classList.add('disabled');
-          try {
-            const resp = await fetch(`/create_chat/${Number(item.dataset.userId)}`, {
-              method: 'POST',
-              headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content') }
-            });
-            const j = await resp.json();
-            if (!j || !j.chat_id || !j.friend) {
-              item.classList.remove('disabled');
-              return;
-            }
-            addFriendToSidebar(j.friend, j.chat_id);
-            if (window.socket && typeof socket.emit === 'function') {
-              socket.emit('join_chat', { chat_id: Number(j.chat_id) });
-            }
-            document.getElementById('create-chat-modal').style.display = 'none';
-          } catch (err) {
-            console.error('create_chat error', err);
-            item.classList.remove('disabled');
-          }
-        });
-
-        picker.appendChild(item);
-      });
-    })
-    .catch(err => {
-      console.error('friends_to_readd error', err);
-      picker.innerHTML = '<div class="muted">Error loading users</div>';
-    });
-}
-
-
-
-// Wire the “+” icon to open modal and refresh the clickable list
-document.getElementById('add-chat-btn')?.addEventListener('click', () => {
-  refreshFriendsToReadd();
-  openChatModal();
-});
-
-
-function updateFriendsToReaddModal() {
-  const picker = document.getElementById('friend-picker-list');
-  if (!picker) return;
-  picker.innerHTML = '<div class="loading">Loading...</div>';
-  fetch('/api/friends_to_readd')
-    .then(r => r.json())
-    .then(list => {
-      picker.innerHTML = '';
-      if (!list || list.length === 0) {
-        picker.innerHTML = '<div class="muted">No users to re-add</div>';
-        return;
-      }
-      list.forEach(u => {
-        const item = document.createElement('div');
-        item.className = 'chat-modal-item';
-        item.innerHTML = `
-          <img src="${u.profile_pic_url}" class="chat-modal-user-img" alt="">
-          <span class="chat-modal-user-name">${u.username}</span>
-          <button class="btn btn-sm btn-primary add-chat-btn" data-user-id="${u.user_id}">Add</button>
-        `;
-        picker.appendChild(item);
-
-        item.querySelector('.add-chat-btn').addEventListener('click', () => {
-          createChat(u.user_id, item);
-        });
-      });
-    })
-    .catch(err => {
-      console.error('friends_to_readd error', err);
-      picker.innerHTML = '<div class="muted">Error loading users</div>';
-    });
-}
-
-document.body.addEventListener('click', async (ev) => {
-  const btn = ev.target.closest('.readd-btn');
-  if (!btn) return;
-  btn.disabled = true;
-  const friendId = btn.dataset.userId;
-  try {
-    const r = await fetch('/create_chat/' + friendId, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
-    const j = await r.json();
-    if (j && j.chat_id) {
-      // update friend link in sidebar if present
-      const link = document.querySelector(`.friend-link[data-user-id="${friendId}"]`);
-      if (link) {
-        link.setAttribute('data-chat-id', j.chat_id);
-        link.dataset.chatId = String(j.chat_id);
-      }
-      // join the chat room now that mapping exists
-      socket.emit('join_chat', { chat_id: Number(j.chat_id) });
-      // optionally load history
-      loadChatHistoryByFriendId(friendId);
-    } else {
-      console.warn('create_chat returned no chat_id', j);
-    }
-  } catch (err) {
-    console.error('create_chat error', err);
-  } finally {
-    btn.disabled = false;
-    // refresh list (it will no longer include the re-added friend)
-    refreshFriendsToReadd();
-  }
-});
-
-refreshFriendsToReadd();
-
-function createChat(friendId, pickerItem) {
-  fetch(`/create_chat/${friendId}`, {
-    method: 'POST',
-    headers: { 'X-CSRFToken': csrfToken }
-  }).then(r => r.json())
-    .then(j => {
-      if (!j || !j.chat_id) return console.error('create_chat failed', j);
-      const chatId = j.chat_id;
-
-      // Remove from Add-Chat picker
-      if (pickerItem && pickerItem.parentNode) pickerItem.parentNode.removeChild(pickerItem);
-
-      // Insert friend into sidebar (simple markup — adapt to your template)
-      const friendList = document.getElementById('friend-list');
-      const li = document.createElement('li');
-      li.className = 'friend-link';
-      li.setAttribute('data-user-id', friendId);
-      li.setAttribute('data-chat-id', chatId);
-      li.innerHTML = `
-        <img src="${(window.currentUserPics && window.currentUserPics[friendId]) || '/static/imgs/blank-profile-picture-973460_1280.webp'}" class="friend-profile" alt="Profile">
-        <div class="friend-info">
-          <div class="friend-name">User ${friendId}</div>
-          <div class="friend-status">Offline</div>
-        </div>
-      `;
-      // You may want to set name/status from the server response; adapt as needed.
-      if (friendList) friendList.prepend(li);
-
-      // Optionally close modal
-      if (typeof closeChatModal === 'function') closeChatModal();
-    })
-    .catch(err => console.error('create_chat error', err));
-}
-
-function showChat() {
-    document.getElementById('chat-placeholder').style.display = 'none';
-    document.getElementById('chat-box').style.display = '';
-    document.getElementById('chat-form').style.display = '';
-    const topbar = document.querySelector('.chat-topbar');
-    if (topbar) {
-        topbar.style.display = '';
-    }
-}
-
 function showPlaceholder() {
     document.getElementById('chat-placeholder').style.display = 'flex';
     document.getElementById('chat-box').style.display = 'none';
     document.getElementById('chat-form').style.display = 'none';
-    const topbar = document.querySelector('.chat-topbar');
-    if (topbar) {
-        topbar.style.display = 'none';
-    }
+    document.getElementById('chat-topbar').style.display = 'none';
 }
-
-
-console.log('openChat called');
+function showChat() {
+    document.getElementById('chat-placeholder').style.display = 'none';
+    document.getElementById('chat-box').style.display = 'block';
+    document.getElementById('chat-form').style.display = 'flex';
+    document.getElementById('chat-topbar').style.display = 'flex';
+}
 function openChat(link) {
-    console.log('openChat called for', link.dataset.userId, link.dataset.chatId);
-    showChat(); // Always hide placeholder and show chat when opening a chat
-
+    showChat();
     const friendUserId = link.dataset.userId;
     const chatId = link.dataset.chatId || '';
-
-    // select in sidebar
     document.querySelectorAll('.friend-link').forEach(l => l.classList.remove('active'));
     link.classList.add('active');
     link.classList.remove('has-unread');
-
-    // topbar
-    (document.getElementById('current-friend-name')||{}).textContent = (link.querySelector('.friend-name')?.textContent || '').trim();
-    const pic = link.querySelector('.friend-profile')?.src;
-    if (pic) document.getElementById('current-friend-pic').src = pic;
-
-    // clear
+    document.getElementById('current-friend-name').innerText = link.querySelector('.friend-name').innerText;
+    document.getElementById('current-friend-pic').src = link.querySelector('img').src;
     const chatBox = document.getElementById('chat-box');
     chatBox.innerHTML = '';
-
-  if (chatId) {
-    currentChatId = String(chatId);
-    socket.emit('join_chat', { chat_id: Number(chatId) });
-  } else {
-    fetch(`/create_chat/${friendUserId}`, { method:'POST', headers:{'X-CSRFToken': csrfToken} })
-      .then(r => r.json())
-      .then(j => {
-        if (!j?.chat_id) { showToast('Could not create chat.', 'error'); showPlaceholder(); return; }
-        currentChatId = String(j.chat_id);
-        link.dataset.chatId = currentChatId;
-        socket.emit('join_chat', { chat_id: Number(currentChatId) });
-        return loadChatHistoryByFriendId(friendUserId);
-      })
-      .catch(() => showPlaceholder());
-    return;
-  }
-
-  // key + history
-  ensureChatKey(currentChatId, friendUserId)
-    .then(() => loadChatHistoryByFriendId(friendUserId))
-    .catch(() => loadChatHistoryByFriendId(friendUserId));
-
-  //mark notification from this friend as read and clear unseen dot
-  try {
-    const friendUserIdNum = Number(link.dataset.userId);
-    fetch('/api/notifications/messages/mark_read', {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json', 'X-CSRFToken': csrfToken },
-      body: JSON.stringify({ sender_id: friendUserIdNum })
-    }).then(() => {
-      link.classList.remove('has-unread');
-    });
-  } catch(e) {}
-
-    console.log('Switched to chat:', currentChatId);
-  // options buttons wiring (block/clear/delete/report)
-  document.querySelector('.btn.btn-secondary').onclick = function() {
-    showConfirm('Are you sure you want to block this user?', function() {
-      fetch(`/block_user/${currentChatId}`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } })
-        .then(() => { showToast('User blocked. You cannot send or receive messages in this chat.', 'error'); updateBlockButton(true); });
-    });
-  };
-  document.querySelector('.btn.btn-danger:not(:last-child)').onclick = function() {
-    showConfirm('Are you sure you want to clear this chat? This will remove all messages for you.', function() {
-      fetch(`/clear_chat/${currentChatId}`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } })
-        .then(() => { document.getElementById('chat-box').innerHTML = ''; });
-    });
-  };
-  document.querySelector('.btn.btn-danger:last-child').onclick = function() {
-    showConfirm('Are you sure you want to delete this chat? You can re-add this user later.', function() {
-      deleteChatClient(currentChatId);
-    });
-  };
-
-  fetch(`/is_blocked/${currentChatId}`)
-    .then(r => r.json())
-    .then(d => updateBlockButton(d.is_blocked));
-
-  const reportBtn = document.getElementById('report-user-btn');
-  if (reportBtn) {
-    const friendName = (link.querySelector('.friend-name')?.textContent || '').trim();
-    reportBtn.onclick = function() {
-      const usernameToReport = friendName || document.getElementById('current-friend-name').textContent.trim();
-      if (!usernameToReport) { showToast('No user selected to report.', 'warn'); return; }
-      window.location.href = '/report_user?username=' + encodeURIComponent(usernameToReport);
+    if (chatId) {
+        currentChatId = String(chatId);
+        socket.emit('join_chat', { chat_id: Number(chatId) });
+        loadChatHistoryByFriendId(friendUserId);
+    } else {
+        fetch(`/create_chat/${friendUserId}`, { method:'POST', headers:{'X-CSRFToken': csrfToken} })
+        .then(r => r.json()).then(j => {
+            if (!j?.chat_id) { showToast('Error creating chat.', 'error'); showPlaceholder(); return; }
+            currentChatId = String(j.chat_id);
+            link.dataset.chatId = currentChatId;
+            socket.emit('join_chat', { chat_id: Number(currentChatId) });
+            loadChatHistoryByFriendId(friendUserId);
+        });
+    }
+    // Wire options
+    document.querySelector('.btn.btn-secondary').onclick = function() {
+        showConfirm('Block user?', function() { fetch(`/block_user/${currentChatId}`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } }).then(() => { showToast('Blocked.', 'error'); }); });
     };
-  }
+}
+async function loadChatHistoryByFriendId(friendId) {
+    const chatBox = document.getElementById('chat-box');
+    chatBox.innerHTML = '<div class="text-center p-3 text-muted">Decrypting history...</div>';
+    
+    // Wait for keys if not ready (fixes race condition)
+    if (!myKeys.private) {
+        console.log("Waiting for keys before loading history...");
+        await new Promise(r => setTimeout(r, 500)); // Simple wait, retry in prod
+        if (!myKeys.private) {
+             chatBox.innerHTML = '<div class="text-danger">Encryption keys not loaded. Try refreshing.</div>';
+             return;
+        }
+    }
+
+    try {
+        const res = await fetch(`/chat_history/${friendId}`);
+        const messages = await res.json();
+        chatBox.innerHTML = '';
+        for (const msg of messages) {
+            let displayText = msg.message_text;
+            if (msg.message_text !== "Message deleted") {
+                displayText = await CryptoManager.decryptMessage(msg);
+            }
+            appendMessage(String(msg.sender_id) === String(myUserId) ? 'me' : 'friend', displayText, msg.sent_at, msg.message_id);
+        }
+        ensureChatIndexes(currentChatId);
+        renderOptionsTracker();
+        chatBox.scrollTop = chatBox.scrollHeight;
+    } catch(e) { chatBox.innerHTML = '<div class="text-danger">Failed to load history</div>'; }
+}
+function appendMessage(who, text, time, msgId, isDeleted) {
+    const chatBox = document.getElementById('chat-box');
+    const div = document.createElement('div');
+    div.className = `message-row ${who}`;
+    const bubble = document.createElement('div');
+    bubble.className = `message-bubble ${isDeleted ? 'message-deleted' : ''}`;
+    if(msgId) bubble.dataset.messageId = msgId;
+    
+    let content = text;
+    if (!isDeleted && text && text.startsWith('{')) {
+        try {
+            const obj = JSON.parse(text);
+            if (obj.type === 'attachment') {
+                content = `<div class="attachment-card"><span class="material-icons">description</span> ${obj.name} <a href="${obj.url}" download class="btn btn-sm btn-light">Download</a></div>`;
+                if(obj.kind === 'image') content = `<img src="${obj.url}" class="msg-image" onclick="openImageViewer('${obj.url}')">`;
+            }
+        } catch(e){}
+    }
+    
+    bubble.innerHTML = `<div class="message-text">${content}</div><div class="message-time">${time}</div>`;
+    div.appendChild(bubble);
+    chatBox.appendChild(div);
 }
 
-// Delegate clicks for dynamically added items
-document.getElementById('friend-list')?.addEventListener('click', (e) => {
-  const li = e.target.closest('.friend-link');
-  if (li) openChat(li);
+// 7. COMPOSER PREVIEWS & ATTACHMENTS
+document.getElementById('attach-btn').addEventListener('click', () => document.getElementById('attachment-input').click());
+document.getElementById('attachment-input').addEventListener('change', (e) => {
+    for (const f of e.target.files) {
+        pendingAttachments.push({ id: Math.random(), file: f, kind: 'file' });
+    }
+    renderComposerPreviews();
+    e.target.value = '';
 });
+function renderComposerPreviews(){
+    const el = document.getElementById('composer-previews');
+    if(!pendingAttachments.length) { el.style.display='none'; return; }
+    el.style.display='flex';
+    el.innerHTML = pendingAttachments.map(a => `<div class="preview-item">${a.file.name} <button onclick="removeAttach(${a.id})">x</button></div>`).join('');
+}
+window.removeAttach = (id) => {
+    const idx = pendingAttachments.findIndex(x => x.id === id);
+    if(idx >= 0) pendingAttachments.splice(idx, 1);
+    renderComposerPreviews();
+};
 
+<<<<<<< HEAD
 // Open chat on load (query param or first with chat-id), else show placeholder
 window.addEventListener('DOMContentLoaded', async function() {
   console.log('🔐 Initializing E2EE system...');
@@ -2229,49 +1781,54 @@ window.addEventListener('DOMContentLoaded', async function() {
           <div class="friend-info"><div class="friend-name">Friend ${friendId}</div><div class="friend-status">Offline</div></div>
         `;
         document.getElementById('friend-list')?.prepend(li);
+=======
+// Friend List & UI
+function refreshFriendsToReadd() {
+  const picker = document.getElementById('friend-picker-list');
+  if (!picker) return;
+  picker.innerHTML = '<div class="loading">Loading…</div>';
+  fetch('/api/friends_to_readd').then(r => r.json()).then(list => {
+      picker.innerHTML = '';
+      if (!list || list.length === 0) {
+        picker.innerHTML = `<div class="muted">No users to re-add</div>`; return;
+>>>>>>> c8725995ca7b53d38933bd2ec5653b8e1e07895f
       }
-      li.setAttribute('data-chat-id', String(j.chat_id));
-      openChat(li);
-      return;
-    }
-  } catch(e) { /* ignore */ }
-
-  // No mapping or it was deleted for you -> prompt re-add
-  showPlaceholder();
-  try { openChatModal(); updateFriendsToReaddModal?.(); } catch(e) {}
-});
-
-// Pre-mark friend items that have unread message notifications
-fetch('/api/notifications/message_stacks', { credentials:'same-origin' })
-  .then(r => r.json())
-  .then(j => {
-    if (j && j.ok && Array.isArray(j.items)) {
-      j.items.forEach(it => {
-        if (it.unread > 0) {
-          const li = document.querySelector(`.friend-link[data-user-id="${it.sender_user_id}"]`);
-          if (li) li.classList.add('has-unread');
-        }
+      list.forEach(u => {
+        const item = document.createElement('div');
+        item.className = 'chat-modal-item';
+        item.innerHTML = `<div class="picker-avatar"><img src="${u.profile_pic_url}"></div><span class="chat-modal-user-name">${u.username}</span>`;
+        item.onclick = async () => {
+            const r = await fetch(`/create_chat/${u.user_id}`, { method:'POST', headers:{'X-CSRFToken':csrfToken}});
+            const j = await r.json();
+            location.reload(); 
+        };
+        picker.appendChild(item);
       });
-    }
-  })
-  .catch(()=>{});
-
-// ----------CSS variables------------------
-(function setHeaderVar(){
-  const header = document.querySelector('nav.navbar, .navbar, header[role="banner"], header');
-  if (header) {
-    const h = header.getBoundingClientRect().height;
-    document.documentElement.style.setProperty('--app-header-h', h + 'px');
-  }
-})();
-window.addEventListener('resize', () => {
-  const header = document.querySelector('nav.navbar, .navbar, header[role="banner"], header');
-  if (header) {
-    document.documentElement.style.setProperty('--app-header-h', header.getBoundingClientRect().height + 'px');
-  }
+  });
+}
+function openChatModal() { document.getElementById('create-chat-modal').style.display = 'block'; refreshFriendsToReadd(); }
+function closeChatModal() { document.getElementById('create-chat-modal').style.display = 'none'; }
+document.getElementById('add-chat-btn')?.addEventListener('click', openChatModal);
+document.getElementById('friend-search-input')?.addEventListener('input', function() {
+    const filter = this.value.toLowerCase();
+    document.querySelectorAll('.friend-link').forEach(li => {
+        li.style.display = li.querySelector('.friend-name').textContent.toLowerCase().includes(filter) ? '' : 'none';
+    });
 });
 
-/* Mark blocked users: add .status-blocked and update label */
+socket.on('blocked', (d) => { if(d.chat_id == currentChatId) updateBlockButton(true); });
+socket.on('unblocked', (d) => { if(d.chat_id == currentChatId) updateBlockButton(false); });
+function updateBlockButton(isBlocked) {
+    const btn = document.querySelector('.btn.btn-secondary');
+    if(!btn) return;
+    btn.textContent = isBlocked ? 'Unblock User' : 'Block User';
+    btn.onclick = () => {
+        fetch(`/${isBlocked ? 'unblock' : 'block'}_user/${currentChatId}`, { method:'POST', headers:{'X-CSRFToken':csrfToken}})
+        .then(() => { showToast(isBlocked ? 'Unblocked' : 'Blocked', 'info'); updateBlockButton(!isBlocked); });
+    };
+    const active = document.querySelector('.friend-link.active');
+    if(active) active.classList.toggle('status-blocked', !!isBlocked);
+}
 async function labelBlockedStatuses() {
   const items = document.querySelectorAll('#friend-list .friend-link');
   for (const li of items) {
@@ -2280,48 +1837,26 @@ async function labelBlockedStatuses() {
     try {
       const r = await fetch(`/is_blocked/${chatId}`);
       const j = await r.json();
-      if (j && j.is_blocked) {
-        li.classList.add('status-blocked');
-        const status = li.querySelector('.friend-status');
-        if (status) status.textContent = 'Blocked';
-      }
-    } catch(e) { /* ignore */ }
+      if (j && j.is_blocked) li.classList.add('status-blocked');
+    } catch(e) {}
   }
 }
 window.addEventListener('DOMContentLoaded', labelBlockedStatuses);
 
-/* Keep sidebar status in sync when blocking/unblocking from options */
-function markActiveFriendBlocked(flag) {
-  const active = document.querySelector('.friend-link.active');
-  if (!active) return;
-  active.classList.toggle('status-blocked', !!flag);
-  const st = active.querySelector('.friend-status');
-  if (st) st.textContent = flag ? 'Blocked' : (active.classList.contains('status-online') ? 'Online' : 'Offline');
-}
-
-/* Patch updateBlockButton to also reflect sidebar color */
-const _origUpdateBlockButton = updateBlockButton;
-updateBlockButton = function(isBlocked){
-  try { markActiveFriendBlocked(isBlocked); } catch(e){}
-  return _origUpdateBlockButton.call(this, isBlocked);
-};
-
-/* Also react to socket events */
-socket.on('blocked', () => markActiveFriendBlocked(true));
-socket.on('unblocked', () => markActiveFriendBlocked(false));
-
-(function(){
-  const ta = document.getElementById('chat-input');
-  const grow = () => { ta.style.height='auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; };
-  ta.addEventListener('input', grow);
-  ta.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      document.getElementById('chat-send-btn')?.click();
+// Initial Load
+window.addEventListener('DOMContentLoaded', () => {
+    const params = new URLSearchParams(location.search);
+    const fid = params.get('friend_id');
+    if(fid) {
+        const li = document.querySelector(`.friend-link[data-user-id="${fid}"]`);
+        if(li) openChat(li);
     }
-  });
-  grow();
-})();
-
+    document.getElementById('friend-list')?.addEventListener('click', (e) => {
+        const li = e.target.closest('.friend-link');
+        if (li) openChat(li);
+    });
+    const ta = document.getElementById('chat-input');
+    ta.addEventListener('input', () => { ta.style.height='auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; });
+});
 </script>
 {% endblock %}

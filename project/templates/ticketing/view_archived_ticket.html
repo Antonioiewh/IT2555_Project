@@ -2,79 +2,207 @@
 
 {% block title %}Archived Ticket #{{ ticket.original_ticket_id }} - Support{% endblock %}
 
+{% block head %}
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@300;400;500;600&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-    <div class="row">
-        <div class="col-md-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2>Archived Ticket #{{ ticket.original_ticket_id }}</h2>
-                <div>
-                    <span class="badge bg-warning me-2">READ ONLY</span>
-                    <a href="{{ url_for('ticketing.agent_archived_tickets') }}" class="btn btn-outline-secondary">
-                        <i class="bi bi-arrow-left"></i> Back to Archived Tickets
-                    </a>
+<div class="google-container">
+    <!-- Header Section -->
+    <div class="page-header">
+        <div class="header-main">
+            <div class="header-icon">
+                <span class="material-icons">archive</span>
+            </div>
+            <div class="header-text">
+                <h1 class="header-title">Archived Ticket #{{ ticket.original_ticket_id }}</h1>
+                <p class="header-subtitle">{{ ticket.title }}</p>
+            </div>
+        </div>
+        
+        <div class="header-actions">
+            <div class="readonly-badge">
+                <span class="material-icons">lock</span>
+                READ ONLY
+            </div>
+            <a href="{{ url_for('ticketing.agent_archived_tickets') }}" class="google-btn outline">
+                <span class="material-icons">arrow_back</span>
+                Back to Archived Tickets
+            </a>
+        </div>
+    </div>
+
+    <!-- Archive Notice -->
+    <div class="archive-notice">
+        <div class="notice-icon">
+            <span class="material-icons">inventory</span>
+        </div>
+        <div class="notice-content">
+            <h3>Archived Ticket</h3>
+            <p>
+                This ticket was archived on {{ ticket.archived_at.strftime('%Y-%m-%d at %H:%M:%S') }}
+                {% if ticket.archiver %} by {{ ticket.archiver.username }}{% endif %}
+            </p>
+        </div>
+    </div>
+
+    <!-- Ticket Details Card -->
+    <div class="ticket-card">
+        <div class="card-header">
+            <div class="ticket-status">
+                <div class="status-badge status-{{ ticket.status }}">
+                    <span class="material-icons">check_circle</span>
+                    {{ ticket.status.replace('_', ' ').title() }}
+                </div>
+                <div class="priority-badge priority-{{ ticket.priority }}">
+                    <span class="material-icons">
+                        {% if ticket.priority == 'security' %}security
+                        {% elif ticket.priority == 'critical' %}error
+                        {% elif ticket.priority == 'high' %}keyboard_arrow_up
+                        {% elif ticket.priority == 'medium' %}remove
+                        {% else %}keyboard_arrow_down{% endif %}
+                    </span>
+                    {{ ticket.priority.title() }} Priority
+                </div>
+                <div class="archived-indicator">
+                    <span class="material-icons">history</span>
+                    Archived
+                </div>
+            </div>
+        </div>
+        
+        <div class="card-content">
+            <!-- Ticket Info Grid -->
+            <div class="info-grid">
+                <div class="info-section">
+                    <h3 class="section-title">
+                        <span class="material-icons">person</span>
+                        Creator Information
+                    </h3>
+                    <div class="info-items">
+                        <div class="info-item">
+                            <span class="item-label">Created by:</span>
+                            <div class="user-chip">
+                                <span class="material-icons">account_circle</span>
+                                {{ ticket.user.username }}
+                            </div>
+                        </div>
+                        <div class="info-item">
+                            <span class="item-label">Created at:</span>
+                            <div class="date-info">
+                                <span class="material-icons">schedule</span>
+                                {{ ticket.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                            </div>
+                        </div>
+                        <div class="info-item">
+                            <span class="item-label">Last updated:</span>
+                            <div class="date-info">
+                                <span class="material-icons">update</span>
+                                {{ ticket.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="info-section">
+                    <h3 class="section-title">
+                        <span class="material-icons">settings</span>
+                        Ticket Details
+                    </h3>
+                    <div class="info-items">
+                        {% if ticket.category %}
+                        <div class="info-item">
+                            <span class="item-label">Category:</span>
+                            <div class="category-chip">
+                                <span class="material-icons">category</span>
+                                {{ ticket.category.name }}
+                            </div>
+                        </div>
+                        {% endif %}
+                        <div class="info-item">
+                            <span class="item-label">Classification:</span>
+                            <div class="classification-badge classification-{{ ticket.classification }}">
+                                <span class="material-icons">
+                                    {% if ticket.classification == 'top_secret' %}lock
+                                    {% elif ticket.classification == 'secret' %}security
+                                    {% elif ticket.classification == 'confidential' %}visibility_off
+                                    {% else %}lock_open{% endif %}
+                                </span>
+                                {{ ticket.classification|replace('_', ' ')|title }}
+                            </div>
+                        </div>
+                        <div class="info-item">
+                            <span class="item-label">Final Status:</span>
+                            <div class="final-status">
+                                <span class="material-icons">flag</span>
+                                {{ ticket.status|title }}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Read-only ticket details -->
-            <div class="card mb-4">
-                <div class="card-header bg-light">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <h5 class="card-title mb-0">{{ ticket.title }}</h5>
-                        </div>
-                        <div class="col-md-6 text-end">
-                            <span class="badge bg-success me-2">{{ ticket.status|title }}</span>
-                            <span class="badge bg-{% if ticket.priority == 'security' %}danger{% elif ticket.priority == 'critical' %}danger{% elif ticket.priority == 'high' %}warning{% elif ticket.priority == 'medium' %}info{% else %}secondary{% endif %}">
-                                {{ ticket.priority|title }} Priority
-                            </span>
-                        </div>
-                    </div>
+            <!-- Description Section -->
+            <div class="content-section">
+                <h3 class="section-title">
+                    <span class="material-icons">description</span>
+                    Description
+                </h3>
+                <div class="content-box description-content">
+                    {{ ticket.description }}
                 </div>
-                <div class="card-body">
-                    <!-- Archive info banner -->
-                    <div class="alert alert-info" role="alert">
-                        <i class="bi bi-archive"></i> This ticket was archived on {{ ticket.archived_at.strftime('%Y-%m-%d %H:%M:%S') }}
-                        {% if ticket.archiver %} by {{ ticket.archiver.username }}{% endif %}
-                    </div>
-                    
-                    <!-- Rest of ticket details (same as regular view but read-only) -->
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <strong>Created by:</strong> {{ ticket.user.username }}<br>
-                            <strong>Created at:</strong> {{ ticket.created_at.strftime('%Y-%m-%d %H:%M:%S') }}<br>
-                            <strong>Updated at:</strong> {{ ticket.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}
-                        </div>
-                        <div class="col-md-6">
-                            {% if ticket.category %}
-                                <strong>Category:</strong> {{ ticket.category.name }}<br>
-                            {% endif %}
-                            <strong>Classification:</strong> 
-                            <span class="badge bg-{% if ticket.classification == 'top_secret' %}danger{% elif ticket.classification == 'secret' %}warning{% elif ticket.classification == 'confidential' %}info{% else %}secondary{% endif %}">
-                                {{ ticket.classification|replace('_', ' ')|title }}
-                            </span><br>
-                            <strong>Status:</strong> {{ ticket.status|title }}<br>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <strong>Description:</strong>
-                        <div class="border rounded p-3 mt-2 bg-light preserve-whitespace">
-                            {{ ticket.description }}
-                        </div>
-                    </div>
+            </div>
 
-                    {% if ticket.resolution %}
-                        <div class="mb-3">
-                            <strong>Resolution:</strong>
-                            <div class="border rounded p-3 mt-2 bg-success-light preserve-whitespace">
-                                {{ ticket.resolution }}
-                            </div>
-                            {% if ticket.resolved_at %}
-                                <small class="text-muted">Resolved on: {{ ticket.resolved_at.strftime('%Y-%m-%d %H:%M:%S') }}</small>
-                            {% endif %}
+            <!-- Resolution Section -->
+            {% if ticket.resolution %}
+                <div class="content-section">
+                    <h3 class="section-title">
+                        <span class="material-icons">task_alt</span>
+                        Resolution
+                    </h3>
+                    <div class="content-box resolution-content">
+                        {{ ticket.resolution }}
+                    </div>
+                    {% if ticket.resolved_at %}
+                        <div class="resolution-date">
+                            <span class="material-icons">event_available</span>
+                            Resolved on: {{ ticket.resolved_at.strftime('%Y-%m-%d %H:%M:%S') }}
                         </div>
                     {% endif %}
+                </div>
+            {% endif %}
+
+            <!-- Archive Information Section -->
+            <div class="archive-info-section">
+                <h3 class="section-title">
+                    <span class="material-icons">inventory</span>
+                    Archive Information
+                </h3>
+                <div class="archive-details">
+                    <div class="archive-item">
+                        <span class="material-icons">schedule</span>
+                        <div class="archive-item-content">
+                            <div class="archive-label">Archived Date</div>
+                            <div class="archive-value">{{ ticket.archived_at.strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                        </div>
+                    </div>
+                    {% if ticket.archiver %}
+                    <div class="archive-item">
+                        <span class="material-icons">person</span>
+                        <div class="archive-item-content">
+                            <div class="archive-label">Archived By</div>
+                            <div class="archive-value">{{ ticket.archiver.username }}</div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    <div class="archive-item">
+                        <span class="material-icons">info</span>
+                        <div class="archive-item-content">
+                            <div class="archive-label">Access Level</div>
+                            <div class="archive-value">Read-Only Archive</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -82,11 +210,589 @@
 </div>
 
 <style>
-.bg-success-light {
-    background-color: #d1e7dd !important;
+/* Google Material Design Variables */
+:root {
+    --google-blue: #1a73e8;
+    --google-red: #ea4335;
+    --google-yellow: #fbbc04;
+    --google-green: #34a853;
+    --google-grey-50: #f8f9fa;
+    --google-grey-100: #f1f3f4;
+    --google-grey-200: #e8eaed;
+    --google-grey-300: #dadce0;
+    --google-grey-400: #bdc1c6;
+    --google-grey-500: #9aa0a6;
+    --google-grey-600: #80868b;
+    --google-grey-700: #5f6368;
+    --google-grey-800: #3c4043;
+    --google-grey-900: #202124;
+    --google-border-radius: 8px;
+    --google-shadow: 0 1px 3px 0 rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15);
+    --google-shadow-hover: 0 1px 3px 0 rgba(60, 64, 67, 0.3), 0 8px 16px 6px rgba(60, 64, 67, 0.15);
 }
-.preserve-whitespace {
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Google Sans', 'Roboto', sans-serif;
+    background-color: var(--google-grey-50);
+    color: var(--google-grey-800);
+    line-height: 1.6;
+}
+
+.google-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+/* Page Header */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: white;
+    border-radius: var(--google-border-radius);
+    box-shadow: var(--google-shadow);
+    padding: 24px 32px;
+    gap: 24px;
+}
+
+.header-main {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.header-icon {
+    width: 56px;
+    height: 56px;
+    background: var(--google-grey-600);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+}
+
+.header-icon .material-icons {
+    font-size: 28px;
+}
+
+.header-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.header-title {
+    font-size: 28px;
+    font-weight: 400;
+    margin: 0;
+    color: var(--google-grey-900);
+    font-family: 'Roboto Mono', monospace;
+}
+
+.header-subtitle {
+    color: var(--google-grey-600);
+    font-size: 16px;
+    margin: 0;
+    font-weight: 500;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.readonly-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: rgba(251, 188, 4, 0.1);
+    border: 1px solid rgba(251, 188, 4, 0.3);
+    border-radius: 20px;
+    color: #f57c00;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.readonly-badge .material-icons {
+    font-size: 16px;
+}
+
+.google-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 20px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.google-btn.outline {
+    background: transparent;
+    border: 1px solid var(--google-grey-300);
+    color: var(--google-grey-700);
+}
+
+.google-btn.outline:hover {
+    background: var(--google-grey-50);
+    color: var(--google-grey-800);
+}
+
+.google-btn .material-icons {
+    font-size: 18px;
+}
+
+/* Archive Notice */
+.archive-notice {
+    background: linear-gradient(135deg, rgba(154, 160, 166, 0.1), rgba(154, 160, 166, 0.05));
+    border: 1px solid rgba(154, 160, 166, 0.3);
+    border-radius: var(--google-border-radius);
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.notice-icon {
+    width: 48px;
+    height: 48px;
+    background: rgba(154, 160, 166, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--google-grey-600);
+    flex-shrink: 0;
+}
+
+.notice-icon .material-icons {
+    font-size: 24px;
+}
+
+.notice-content h3 {
+    margin: 0 0 4px 0;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--google-grey-800);
+}
+
+.notice-content p {
+    margin: 0;
+    color: var(--google-grey-600);
+    font-size: 14px;
+}
+
+/* Ticket Card */
+.ticket-card {
+    background: white;
+    border-radius: var(--google-border-radius);
+    box-shadow: var(--google-shadow);
+    overflow: hidden;
+}
+
+.card-header {
+    background: var(--google-grey-50);
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--google-grey-200);
+}
+
+.ticket-status {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.status-badge, .priority-badge, .archived-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-badge .material-icons,
+.priority-badge .material-icons,
+.archived-indicator .material-icons {
+    font-size: 16px;
+}
+
+/* Status badges */
+.status-badge.status-resolved,
+.status-badge.status-closed {
+    background: rgba(52, 168, 83, 0.1);
+    color: var(--google-green);
+    border: 1px solid rgba(52, 168, 83, 0.3);
+}
+
+/* Priority badges */
+.priority-badge.priority-security,
+.priority-badge.priority-critical {
+    background: rgba(234, 67, 53, 0.1);
+    color: var(--google-red);
+    border: 1px solid rgba(234, 67, 53, 0.3);
+}
+
+.priority-badge.priority-high {
+    background: rgba(251, 188, 4, 0.1);
+    color: #f57c00;
+    border: 1px solid rgba(251, 188, 4, 0.3);
+}
+
+.priority-badge.priority-medium {
+    background: rgba(26, 115, 232, 0.1);
+    color: var(--google-blue);
+    border: 1px solid rgba(26, 115, 232, 0.3);
+}
+
+.priority-badge.priority-low {
+    background: rgba(52, 168, 83, 0.1);
+    color: var(--google-green);
+    border: 1px solid rgba(52, 168, 83, 0.3);
+}
+
+.archived-indicator {
+    background: rgba(154, 160, 166, 0.1);
+    color: var(--google-grey-600);
+    border: 1px solid rgba(154, 160, 166, 0.3);
+}
+
+.card-content {
+    padding: 32px;
+}
+
+/* Info Grid */
+.info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    margin-bottom: 32px;
+}
+
+.info-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.section-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--google-grey-800);
+    margin: 0;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--google-grey-200);
+}
+
+.section-title .material-icons {
+    color: var(--google-grey-600);
+    font-size: 20px;
+}
+
+.info-items {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+
+.item-label {
+    font-weight: 500;
+    color: var(--google-grey-700);
+    min-width: 100px;
+}
+
+/* Chips and Badges */
+.user-chip, .category-chip, .date-info, .final-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--google-grey-100);
+    border-radius: 16px;
+    font-size: 13px;
+    color: var(--google-grey-700);
+    border: 1px solid var(--google-grey-300);
+}
+
+.user-chip .material-icons,
+.category-chip .material-icons,
+.date-info .material-icons,
+.final-status .material-icons {
+    font-size: 14px;
+}
+
+.classification-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.classification-badge.classification-top_secret {
+    background: rgba(234, 67, 53, 0.1);
+    color: var(--google-red);
+    border: 1px solid rgba(234, 67, 53, 0.3);
+}
+
+.classification-badge.classification-secret {
+    background: rgba(251, 188, 4, 0.1);
+    color: #f57c00;
+    border: 1px solid rgba(251, 188, 4, 0.3);
+}
+
+.classification-badge.classification-confidential {
+    background: rgba(26, 115, 232, 0.1);
+    color: var(--google-blue);
+    border: 1px solid rgba(26, 115, 232, 0.3);
+}
+
+.classification-badge.classification-internal,
+.classification-badge.classification-public {
+    background: rgba(52, 168, 83, 0.1);
+    color: var(--google-green);
+    border: 1px solid rgba(52, 168, 83, 0.3);
+}
+
+.classification-badge .material-icons {
+    font-size: 14px;
+}
+
+/* Content Sections */
+.content-section {
+    margin-bottom: 32px;
+}
+
+.content-box {
+    background: var(--google-grey-50);
+    border: 1px solid var(--google-grey-200);
+    border-radius: var(--google-border-radius);
+    padding: 20px;
     white-space: pre-line;
+    font-family: 'Roboto', sans-serif;
+    line-height: 1.6;
+    color: var(--google-grey-800);
+    font-size: 14px;
+}
+
+.resolution-content {
+    background: rgba(52, 168, 83, 0.05);
+    border-color: rgba(52, 168, 83, 0.2);
+}
+
+.resolution-date {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--google-grey-600);
+    font-size: 14px;
+    margin-top: 12px;
+    padding: 8px 12px;
+    background: rgba(52, 168, 83, 0.1);
+    border-radius: 16px;
+    display: inline-flex;
+}
+
+.resolution-date .material-icons {
+    font-size: 16px;
+}
+
+/* Archive Information Section */
+.archive-info-section {
+    background: rgba(154, 160, 166, 0.05);
+    border: 1px solid rgba(154, 160, 166, 0.2);
+    border-radius: var(--google-border-radius);
+    padding: 24px;
+    margin-top: 32px;
+}
+
+.archive-details {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.archive-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.archive-item .material-icons {
+    color: var(--google-grey-600);
+    font-size: 20px;
+    width: 20px;
+}
+
+.archive-item-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.archive-label {
+    font-size: 12px;
+    color: var(--google-grey-600);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.archive-value {
+    font-size: 14px;
+    color: var(--google-grey-800);
+    font-weight: 500;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .google-container {
+        padding: 16px;
+        gap: 20px;
+    }
+    
+    .page-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 16px;
+        padding: 20px;
+    }
+    
+    .header-main {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    
+    .header-actions {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+    
+    .archive-notice {
+        flex-direction: column;
+        text-align: center;
+        gap: 12px;
+    }
+    
+    .info-grid {
+        grid-template-columns: 1fr;
+        gap: 24px;
+    }
+    
+    .card-content {
+        padding: 20px;
+    }
+    
+    .ticket-status {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .info-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .archive-info-section {
+        padding: 16px;
+    }
+}
+
+@media (max-width: 480px) {
+    .google-container {
+        padding: 12px;
+    }
+    
+    .page-header {
+        padding: 16px;
+    }
+    
+    .header-title {
+        font-size: 24px;
+    }
+    
+    .card-content {
+        padding: 16px;
+    }
+    
+    .content-box {
+        padding: 16px;
+    }
+    
+    .archive-info-section {
+        padding: 12px;
+    }
+    
+    .readonly-badge {
+        padding: 6px 12px;
+        font-size: 11px;
+    }
+    
+    .google-btn {
+        padding: 8px 16px;
+        font-size: 13px;
+    }
+}
+
+/* Focus states for accessibility */
+.google-btn:focus {
+    outline: 2px solid var(--google-blue);
+    outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+    .page-header {
+        box-shadow: none;
+        border: 1px solid var(--google-grey-300);
+    }
+    
+    .ticket-card {
+        box-shadow: none;
+        border: 1px solid var(--google-grey-300);
+    }
+    
+    .google-btn {
+        display: none;
+    }
 }
 </style>
 {% endblock %}

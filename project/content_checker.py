@@ -1,0 +1,342 @@
+import re
+from typing import Dict, List, Tuple, Optional
+from datetime import datetime
+
+class SensitiveContentChecker:
+    """
+    A comprehensive content checker that uses regex patterns to detect sensitive information
+    such as NRIC, credit card numbers, phone numbers, emails, and other PII.
+    """
+    
+    def __init__(self):
+        self.patterns = self._initialize_patterns()
+        self.severity_levels = {
+            'HIGH': ['nric', 'credit_card', 'ssn', 'passport'],
+            'MEDIUM': ['phone', 'bank_account', 'driving_license'],
+            'LOW': ['email', 'postal_code', 'ip_address']
+        }
+    
+    def _initialize_patterns(self) -> Dict[str, Dict]:
+        """Initialize all regex patterns for sensitive content detection"""
+        return {
+            'nric': {
+                'pattern': r'\b[STFG]\d{7}[A-Z]\b',
+                'description': 'Singapore NRIC/FIN',
+                'examples': ['S1234567A', 'T9876543Z'],
+                'severity': 'HIGH'
+            },
+            'credit_card': {
+                'pattern': r'\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|3[0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})\b',
+                'description': 'Credit Card Numbers (Visa, MasterCard, Amex, Discover)',
+                'examples': ['4111111111111111', '5555555555554444'],
+                'severity': 'HIGH'
+            },
+            'ssn': {
+                'pattern': r'\b\d{3}-\d{2}-\d{4}\b',
+                'description': 'US Social Security Number',
+                'examples': ['123-45-6789'],
+                'severity': 'HIGH'
+            },
+            'singapore_phone': {
+                'pattern': r'\b(?:\+65\s?)?[689]\d{7}\b',
+                'description': 'Singapore Phone Numbers',
+                'examples': ['+65 91234567', '81234567', '65551234'],
+                'severity': 'MEDIUM'
+            },
+            'email': {
+                'pattern': r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
+                'description': 'Email Addresses',
+                'examples': ['user@example.com', 'test.email+tag@domain.org'],
+                'severity': 'LOW'
+            },
+            'bank_account': {
+                'pattern': r'\b\d{10,12}\b(?=.*(?:account|acc|bank|dbs|ocbc|uob))',
+                'description': 'Bank Account Numbers',
+                'examples': ['1234567890 (with context: bank account)'],
+                'severity': 'MEDIUM'
+            },
+            'passport': {
+                'pattern': r'\b[A-Z]{1,2}\d{6,9}\b',
+                'description': 'Passport Numbers',
+                'examples': ['A1234567', 'AB1234567'],
+                'severity': 'HIGH'
+            },
+            'driving_license_sg': {
+                'pattern': r'\b[A-Z]\d{7}[A-Z]\b(?=.*(?:license|licence|driving))',
+                'description': 'Singapore Driving License',
+                'examples': ['S1234567A (with context: driving license)'],
+                'severity': 'MEDIUM'
+            },
+            'postal_code_sg': {
+                'pattern': r'\b\d{6}\b(?=.*(?:postal|zip|singapore|sg))',
+                'description': 'Singapore Postal Code',
+                'examples': ['123456 (with context: postal code)'],
+                'severity': 'LOW'
+            },
+            'ip_address': {
+                'pattern': r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b',
+                'description': 'IP Addresses',
+                'examples': ['192.168.1.1', '10.0.0.1'],
+                'severity': 'LOW'
+            },
+            'mac_address': {
+                'pattern': r'\b[0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}[:-][0-9A-Fa-f]{2}\b',
+                'description': 'MAC Addresses',
+                'examples': ['00:1B:44:11:3A:B7', '00-1B-44-11-3A-B7'],
+                'severity': 'MEDIUM'
+            },
+            'api_key': {
+                'pattern': r'\b(?:api[_-]?key|secret[_-]?key|access[_-]?token)["\'\s]*[:=]["\'\s]*[A-Za-z0-9+/=]{20,}\b',
+                'description': 'API Keys and Secrets',
+                'examples': ['api_key="abcdef123456789"'],
+                'severity': 'HIGH'
+            },
+            'bitcoin_address': {
+                'pattern': r'\b[13][a-km-zA-HJ-NP-Z1-9]{25,34}\b|bc1[a-z0-9]{39,59}\b',
+                'description': 'Bitcoin Addresses',
+                'examples': ['1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'],
+                'severity': 'MEDIUM'
+            }
+        }
+    
+    def check_content(self, text: str) -> Dict:
+        """
+        Check text for sensitive content and return detailed results
+        
+        Args:
+            text (str): Text content to check
+            
+        Returns:
+            Dict: Results containing matches, severity, and recommendations
+        """
+        if not text or not isinstance(text, str):
+            return {
+                'status': 'error',
+                'message': 'Invalid input text',
+                'matches': [],
+                'severity': 'NONE',
+                'risk_score': 0
+            }
+        
+        matches = []
+        highest_severity = 'NONE'
+        risk_score = 0
+        
+        # Check each pattern
+        for pattern_name, pattern_info in self.patterns.items():
+            regex = re.compile(pattern_info['pattern'], re.IGNORECASE | re.MULTILINE)
+            found_matches = regex.finditer(text)
+            
+            for match in found_matches:
+                match_info = {
+                    'type': pattern_name,
+                    'description': pattern_info['description'],
+                    'matched_text': self._mask_sensitive_data(match.group()),
+                    'original_text': match.group(),
+                    'position': {
+                        'start': match.start(),
+                        'end': match.end()
+                    },
+                    'severity': pattern_info['severity'],
+                    'context': self._extract_context(text, match.start(), match.end())
+                }
+                matches.append(match_info)
+                
+                # Update severity and risk score
+                severity = pattern_info['severity']
+                if self._is_higher_severity(severity, highest_severity):
+                    highest_severity = severity
+                
+                risk_score += self._get_severity_score(severity)
+        
+        # Calculate final risk score (0-100)
+        risk_score = min(risk_score * 10, 100)
+        
+        return {
+            'status': 'success',
+            'text_length': len(text),
+            'matches': matches,
+            'match_count': len(matches),
+            'severity': highest_severity,
+            'risk_score': risk_score,
+            'recommendations': self._get_recommendations(matches),
+            'timestamp': datetime.utcnow().isoformat(),
+            'safe_for_storage': len(matches) == 0 or highest_severity == 'LOW'
+        }
+    
+    def _mask_sensitive_data(self, text: str) -> str:
+        """Mask sensitive data for safe display"""
+        if len(text) <= 4:
+            return '*' * len(text)
+        
+        # Show first 2 and last 2 characters
+        return text[:2] + '*' * (len(text) - 4) + text[-2:]
+    
+    def _extract_context(self, text: str, start: int, end: int, window: int = 30) -> str:
+        """Extract context around the matched text"""
+        context_start = max(0, start - window)
+        context_end = min(len(text), end + window)
+        
+        context = text[context_start:context_end]
+        
+        # Mask the sensitive part in the context
+        relative_start = start - context_start
+        relative_end = end - context_start
+        
+        masked_context = (
+            context[:relative_start] + 
+            '[REDACTED]' + 
+            context[relative_end:]
+        )
+        
+        return masked_context.strip()
+    
+    def _is_higher_severity(self, severity1: str, severity2: str) -> bool:
+        """Check if severity1 is higher than severity2"""
+        severity_order = {'NONE': 0, 'LOW': 1, 'MEDIUM': 2, 'HIGH': 3}
+        return severity_order.get(severity1, 0) > severity_order.get(severity2, 0)
+    
+    def _get_severity_score(self, severity: str) -> int:
+        """Get numeric score for severity level"""
+        scores = {'LOW': 1, 'MEDIUM': 3, 'HIGH': 5}
+        return scores.get(severity, 0)
+    
+    def _get_recommendations(self, matches: List[Dict]) -> List[str]:
+        """Generate recommendations based on found matches"""
+        recommendations = []
+        
+        if not matches:
+            recommendations.append("✅ No sensitive content detected. Content appears safe for storage.")
+            return recommendations
+        
+        severity_counts = {'HIGH': 0, 'MEDIUM': 0, 'LOW': 0}
+        for match in matches:
+            severity_counts[match['severity']] += 1
+        
+        if severity_counts['HIGH'] > 0:
+            recommendations.append(f"🚨 HIGH RISK: {severity_counts['HIGH']} highly sensitive items detected (NRIC, Credit Cards, etc.)")
+            recommendations.append("❌ DO NOT store or transmit this content without proper encryption and authorization")
+            recommendations.append("🔒 Implement data masking/tokenization before storage")
+        
+        if severity_counts['MEDIUM'] > 0:
+            recommendations.append(f"⚠️ MEDIUM RISK: {severity_counts['MEDIUM']} moderately sensitive items detected")
+            recommendations.append("🛡️ Consider additional security measures and access controls")
+        
+        if severity_counts['LOW'] > 0:
+            recommendations.append(f"ℹ️ LOW RISK: {severity_counts['LOW']} potentially sensitive items detected")
+            recommendations.append("📝 Review and consider if this information is necessary")
+        
+        recommendations.append("🔍 Manual review recommended before processing")
+        
+        return recommendations
+    
+    def get_pattern_info(self) -> Dict:
+        """Get information about all available patterns"""
+        pattern_info = {}
+        for name, info in self.patterns.items():
+            pattern_info[name] = {
+                'description': info['description'],
+                'severity': info['severity'],
+                'examples': info.get('examples', [])
+            }
+        return pattern_info
+    
+    def validate_luhn(self, card_number: str) -> bool:
+        """Validate credit card number using Luhn algorithm"""
+        def luhn_checksum(card_num):
+            def digits_of(n):
+                return [int(d) for d in str(n)]
+            digits = digits_of(card_num)
+            odd_digits = digits[-1::-2]
+            even_digits = digits[-2::-2]
+            checksum = sum(odd_digits)
+            for d in even_digits:
+                checksum += sum(digits_of(d*2))
+            return checksum % 10
+        
+        return luhn_checksum(card_number.replace(' ', '').replace('-', '')) == 0
+
+def create_content_scanning_middleware():
+    """Create middleware function for automatic content scanning"""
+    
+    def scan_user_content(content_type, content_text, user_id=None, additional_context=None):
+        """
+        Scan user-generated content and return safety assessment
+        
+        Args:
+            content_type (str): Type of content ('ticket', 'message', 'post', etc.)
+            content_text (str): The text content to scan
+            user_id (int): Optional user ID for logging
+            additional_context (dict): Additional context for classification
+            
+        Returns:
+            dict: Safety assessment with recommendations
+        """
+        try:
+            checker = SensitiveContentChecker()
+            results = checker.check_content(content_text)
+            
+            # Add content-specific logic
+            assessment = {
+                'safe_to_process': True,
+                'requires_review': False,
+                'block_content': False,
+                'classification_required': 'public',
+                'warnings': [],
+                'redacted_content': content_text,
+                'original_results': results
+            }
+            
+            if results['match_count'] > 0:
+                if results['severity'] == 'HIGH':
+                    assessment['safe_to_process'] = False
+                    assessment['requires_review'] = True
+                    assessment['block_content'] = True  # Block high-risk content
+                    assessment['classification_required'] = 'secret'
+                    assessment['warnings'].append(f"HIGH RISK: Contains {results['match_count']} highly sensitive items")
+                    
+                elif results['severity'] == 'MEDIUM':
+                    assessment['requires_review'] = True
+                    assessment['classification_required'] = 'confidential'
+                    assessment['warnings'].append(f"MEDIUM RISK: Contains {results['match_count']} moderately sensitive items")
+                    
+                elif results['severity'] == 'LOW':
+                    assessment['classification_required'] = 'internal'
+                    assessment['warnings'].append(f"LOW RISK: Contains {results['match_count']} potentially sensitive items")
+                
+                # Create redacted version for logs
+                redacted_text = content_text
+                for match in results['matches']:
+                    redacted_text = redacted_text.replace(
+                        match['original_text'], 
+                        '[REDACTED]'
+                    )
+                assessment['redacted_content'] = redacted_text
+            
+            return assessment
+            
+        except Exception as e:
+            # On error, err on the side of caution
+            return {
+                'safe_to_process': False,
+                'requires_review': True,
+                'block_content': False,
+                'classification_required': 'internal',
+                'warnings': [f'Content scan failed: {str(e)}'],
+                'redacted_content': '[CONTENT SCAN FAILED]',
+                'original_results': {'status': 'error', 'message': str(e)}
+            }
+    
+    return scan_user_content
+
+# Convenience function for quick checks
+def check_sensitive_content(text: str) -> Dict:
+    """Quick function to check for sensitive content"""
+    checker = SensitiveContentChecker()
+    return checker.check_content(text)
+
+# Create the middleware instance
+content_scanner = create_content_scanning_middleware()
+
+# Export for use in other modules
+__all__ = ['SensitiveContentChecker', 'check_sensitive_content', 'content_scanner', 'create_content_scanning_middleware']

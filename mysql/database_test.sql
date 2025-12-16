@@ -738,7 +738,7 @@ FLUSH PRIVILEGES;
 INSERT INTO user_role_assignments (user_id, role_id)
 SELECT u.user_id, r.role_id
 FROM users u, roles r
-WHERE (u.username = 'admin' AND r.role_name = 'admin')
+WHERE (u.username = 'admin' AND r.role_name IN ('admin', 'user'))
    OR (u.username IN ('user', 'user2', 'user3', 'user4') AND r.role_name = 'user');
 
 -- Support agents get both user and support_agent roles

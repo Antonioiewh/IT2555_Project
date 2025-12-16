@@ -4,123 +4,137 @@
 
 {% block head %}
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@300;400;500;600&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-4">
-    <div class="row">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <div>
-                    <h2><i class="bi bi-clipboard-list"></i> Open Tickets</h2>
-                    <p class="text-muted mb-0">
-                        <span class="badge bg-info">Clearance: L{{ agent.clearance_level }}</span>
-                        Tickets you can access and work on
-                    </p>
-                </div>
-                <div>
-                    <a href="{{ url_for('ticketing.agent_dashboard') }}" class="btn btn-outline-secondary me-2">
-                        <i class="bi bi-arrow-left"></i> Back to Dashboard
-                    </a>
-                    <a href="{{ url_for('ticketing.agent_my_tickets') }}" class="btn btn-primary">
-                        <i class="bi bi-person-check"></i> My Tickets
-                    </a>
+<div class="google-container">
+    <!-- Header Section -->
+    <div class="page-header">
+        <div class="header-main">
+            <div class="header-icon">
+                <span class="material-icons">assignment</span>
+            </div>
+            <div class="header-text">
+                <h1 class="header-title">Open Tickets</h1>
+                <div class="header-subtitle">
+                    <span class="clearance-badge">Clearance: L{{ agent.clearance_level }}</span>
+                    <span class="subtitle-text">Tickets you can access and work on</span>
                 </div>
             </div>
         </div>
+        
+        <div class="header-actions">
+            <a href="{{ url_for('ticketing.agent_dashboard') }}" class="google-btn outline">
+                <span class="material-icons">arrow_back</span>
+                Back to Dashboard
+            </a>
+            <a href="{{ url_for('ticketing.agent_my_tickets') }}" class="google-btn primary">
+                <span class="material-icons">assignment_ind</span>
+                My Tickets
+            </a>
+        </div>
     </div>
-    
-    <div class="row">
-        <div class="col-12">
-            {% if tickets %}
-                <div class="row">
-                    {% for ticket in tickets %}
-                    <div class="col-md-6 col-lg-4 mb-4">
-                        <div class="card h-100 border-start border-{{ 'danger' if ticket.classification == 'top_secret' else 
-                                                                      'warning' if ticket.classification == 'secret' else
-                                                                      'info' if ticket.classification == 'confidential' else
-                                                                      'success' if ticket.classification == 'internal' else
-                                                                      'secondary' }} border-3">
-                            <div class="card-header bg-light">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <h6 class="mb-0">Ticket #{{ ticket.ticket_id }}</h6>
-                                    <div>
-                                        <span class="badge bg-{{ 'danger' if ticket.classification == 'top_secret' else 
-                                                                'warning' if ticket.classification == 'secret' else
-                                                                'info' if ticket.classification == 'confidential' else
-                                                                'success' if ticket.classification == 'internal' else
-                                                                'secondary' }}">
-                                            {{ ticket.classification.replace('_', ' ').title() }}
-                                        </span>
-                                    </div>
-                                </div>
+
+    <!-- Tickets Content -->
+    <div class="tickets-section">
+        {% if tickets %}
+            <div class="tickets-grid">
+                {% for ticket in tickets %}
+                <div class="ticket-card classification-{{ ticket.classification }}">
+                    <div class="card-header">
+                        <div class="ticket-id">#{{ ticket.ticket_id }}</div>
+                        <div class="classification-badge classification-{{ ticket.classification }}">
+                            <span class="material-icons">
+                                {% if ticket.classification == 'top_secret' %}lock
+                                {% elif ticket.classification == 'secret' %}security
+                                {% elif ticket.classification == 'confidential' %}visibility_off
+                                {% elif ticket.classification == 'internal' %}business
+                                {% else %}lock_open{% endif %}
+                            </span>
+                            {{ ticket.classification.replace('_', ' ').title() }}
+                        </div>
+                    </div>
+                    
+                    <div class="card-content">
+                        <h3 class="ticket-title">{{ ticket.title }}</h3>
+                        <p class="ticket-description">
+                            {{ ticket.description[:80] }}{% if ticket.description|length > 80 %}...{% endif %}
+                        </p>
+                        
+                        <div class="ticket-meta">
+                            <div class="user-info">
+                                <span class="material-icons">person</span>
+                                <span>{{ ticket.user.username }}</span>
                             </div>
-                            <div class="card-body">
-                                <h6 class="card-title">{{ ticket.title }}</h6>
-                                <p class="card-text text-muted small preserve-whitespace">
-                                    {{ ticket.description[:100] }}{% if ticket.description|length > 100 %}...{% endif %}
-                                </p>
-                                <div class="mb-3">
-                                    <small class="text-muted">
-                                        <i class="bi bi-person"></i> {{ ticket.user.username }}<br>
-                                        <i class="bi bi-clock"></i> {{ ticket.created_at.strftime('%Y-%m-%d %H:%M') }}
-                                    </small>
-                                </div>
-                                <div class="d-flex gap-2 flex-wrap mb-3">
-                                    <span class="badge bg-{{ 'danger' if ticket.priority == 'security' else 
-                                                             'danger' if ticket.priority == 'critical' else
-                                                             'warning' if ticket.priority == 'high' else
-                                                             'info' if ticket.priority == 'medium' else
-                                                             'secondary' }}">
-                                        {{ ticket.priority.title() }}
-                                    </span>
-                                    <span class="badge bg-{% if ticket.status == 'open' %}warning{% elif ticket.status == 'in_progress' %}info{% elif ticket.status == 'pending' %}secondary{% elif ticket.status == 'closed' %}success{% else %}dark{% endif %}">
-                                        {{ ticket.status.replace('_', ' ').title() }}
-                                    </span>
-                                </div>
+                            <div class="created-info">
+                                <span class="material-icons">schedule</span>
+                                <span>{{ ticket.created_at.strftime('%m/%d %H:%M') }}</span>
                             </div>
-                            <div class="card-footer bg-light">
-                                <div class="d-flex gap-2">
-                                    <a href="{{ url_for('ticketing.view_ticket', ticket_id=ticket.ticket_id) }}" 
-                                       class="btn btn-sm btn-outline-primary">
-                                        <i class="bi bi-eye"></i> View
-                                    </a>
-                                    {% if agent.clearance_level >= 1 %}
-                                    <button class="btn btn-sm btn-outline-success" 
-                                            onclick="takeTicket({{ ticket.ticket_id }})">
-                                        <i class="bi bi-person-plus"></i> Take
-                                    </button>
-                                    {% endif %}
-                                </div>
+                        </div>
+                        
+                        <div class="badge-container">
+                            <div class="priority-badge priority-{{ ticket.priority }}">
+                                <span class="material-icons">
+                                    {% if ticket.priority == 'security' %}security
+                                    {% elif ticket.priority == 'critical' %}error
+                                    {% elif ticket.priority == 'high' %}keyboard_arrow_up
+                                    {% elif ticket.priority == 'medium' %}remove
+                                    {% else %}keyboard_arrow_down{% endif %}
+                                </span>
+                                {{ ticket.priority.title() }}
+                            </div>
+                            
+                            <div class="status-badge status-{{ ticket.status }}">
+                                <span class="material-icons">
+                                    {% if ticket.status == 'open' %}radio_button_unchecked
+                                    {% elif ticket.status == 'in_progress' %}refresh
+                                    {% elif ticket.status == 'pending' %}pause_circle
+                                    {% elif ticket.status == 'closed' %}check_circle
+                                    {% else %}help{% endif %}
+                                </span>
+                                {{ ticket.status.replace('_', ' ').title() }}
                             </div>
                         </div>
                     </div>
-                    {% endfor %}
+                    
+                    <div class="card-actions">
+                        <a href="{{ url_for('ticketing.view_ticket', ticket_id=ticket.ticket_id) }}" 
+                           class="action-btn outline">
+                            <span class="material-icons">visibility</span>
+                            View
+                        </a>
+                        {% if agent.clearance_level >= 1 %}
+                        <button type="button" class="action-btn primary take-btn" 
+                                onclick="takeTicket({{ ticket.ticket_id }})">
+                            <span class="material-icons">person_add</span>
+                            Take
+                        </button>
+                        {% endif %}
+                    </div>
                 </div>
-            {% else %}
-                <div class="text-center py-5">
-                    <i class="bi bi-clipboard-check display-1 text-muted mb-3"></i>
-                    <h4 class="text-muted">No Open Tickets</h4>
-                    <p class="text-muted">
-                        There are no open tickets available for your clearance level (L{{ agent.clearance_level }}).
-                    </p>
-                    <a href="{{ url_for('ticketing.agent_dashboard') }}" class="btn btn-primary">
-                        <i class="bi bi-arrow-left"></i> Return to Dashboard
-                    </a>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <div class="empty-icon">
+                    <span class="material-icons">assignment_turned_in</span>
                 </div>
-            {% endif %}
-        </div>
+                <h3>No Open Tickets</h3>
+                <p>There are no open tickets available for your clearance level (L{{ agent.clearance_level }}).</p>
+                <a href="{{ url_for('ticketing.agent_dashboard') }}" class="google-btn primary">
+                    <span class="material-icons">arrow_back</span>
+                    Return to Dashboard
+                </a>
+            </div>
+        {% endif %}
     </div>
 </div>
 
-<style>
-.preserve-whitespace {
-    white-space: pre-line;
-}
-</style>
-
 <script>
 function takeTicket(ticketId) {
+    console.log('Taking ticket:', ticketId);
     if (confirm('Take ownership of this ticket?')) {
         const csrfToken = document.querySelector('meta[name=csrf-token]')?.getAttribute('content');
         
@@ -134,17 +148,688 @@ function takeTicket(ticketId) {
         .then(response => response.json())
         .then(data => {
             if (data.message) {
-                alert(data.message);
-                location.reload();
+                showAlert('success', data.message);
+                setTimeout(() => location.reload(), 1500);
             } else if (data.error) {
-                alert('Error: ' + data.error);
+                showAlert('error', 'Error: ' + data.error);
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('Error taking ticket');
+            showAlert('error', 'Error taking ticket');
         });
     }
 }
+
+function showAlert(type, message) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `google-alert ${type}`;
+    alertDiv.innerHTML = `
+        <span class="material-icons">${type === 'success' ? 'check_circle' : 'error'}</span>
+        <span>${message}</span>
+        <button onclick="this.parentElement.remove()" class="alert-close">
+            <span class="material-icons">close</span>
+        </button>
+    `;
+    document.querySelector('.google-container').prepend(alertDiv);
+    
+    setTimeout(() => {
+        if (alertDiv.parentElement) {
+            alertDiv.remove();
+        }
+    }, 5000);
+}
 </script>
+
+<style>
+/* Google Material Design Variables */
+:root {
+    --google-blue: #1a73e8;
+    --google-red: #ea4335;
+    --google-yellow: #fbbc04;
+    --google-green: #34a853;
+    --google-grey-50: #f8f9fa;
+    --google-grey-100: #f1f3f4;
+    --google-grey-200: #e8eaed;
+    --google-grey-300: #dadce0;
+    --google-grey-400: #bdc1c6;
+    --google-grey-500: #9aa0a6;
+    --google-grey-600: #80868b;
+    --google-grey-700: #5f6368;
+    --google-grey-800: #3c4043;
+    --google-grey-900: #202124;
+    --google-border-radius: 8px;
+    --google-shadow: 0 1px 3px 0 rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15);
+    --google-shadow-hover: 0 1px 3px 0 rgba(60, 64, 67, 0.3), 0 8px 16px 6px rgba(60, 64, 67, 0.15);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Google Sans', 'Roboto', sans-serif;
+    background-color: var(--google-grey-50);
+    color: var(--google-grey-800);
+    line-height: 1.6;
+}
+
+.google-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+/* Page Header */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: white;
+    border-radius: var(--google-border-radius);
+    box-shadow: var(--google-shadow);
+    padding: 24px 32px;
+    gap: 24px;
+}
+
+.header-main {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.header-icon {
+    width: 56px;
+    height: 56px;
+    background: var(--google-blue);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+}
+
+.header-icon .material-icons {
+    font-size: 28px;
+}
+
+.header-text {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.header-title {
+    font-size: 28px;
+    font-weight: 400;
+    margin: 0;
+    color: var(--google-grey-900);
+}
+
+.header-subtitle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.clearance-badge {
+    background: var(--google-blue);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.subtitle-text {
+    color: var(--google-grey-600);
+    font-size: 16px;
+}
+
+.header-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.google-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 20px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.google-btn.primary {
+    background: var(--google-blue);
+    color: white;
+}
+
+.google-btn.primary:hover {
+    background: #1557b0;
+    color: white;
+}
+
+.google-btn.outline {
+    background: transparent;
+    border: 1px solid var(--google-grey-300);
+    color: var(--google-grey-700);
+}
+
+.google-btn.outline:hover {
+    background: var(--google-grey-50);
+    color: var(--google-grey-800);
+}
+
+.google-btn .material-icons {
+    font-size: 18px;
+}
+
+/* Tickets Section */
+.tickets-section {
+    min-height: 400px;
+}
+
+.tickets-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: 24px;
+    align-items: start;
+}
+
+.ticket-card {
+    background: white;
+    border-radius: var(--google-border-radius);
+    box-shadow: var(--google-shadow);
+    overflow: hidden;
+    transition: all 0.2s ease;
+    border-left: 4px solid transparent;
+    display: flex;
+    flex-direction: column;
+    min-height: 420px;
+    height: auto;
+    position: relative;
+}
+
+.ticket-card:hover {
+    box-shadow: var(--google-shadow-hover);
+    transform: translateY(-2px);
+}
+
+.ticket-card.classification-top_secret {
+    border-left-color: var(--google-red);
+}
+
+.ticket-card.classification-secret {
+    border-left-color: #f57c00;
+}
+
+.ticket-card.classification-confidential {
+    border-left-color: var(--google-blue);
+}
+
+.ticket-card.classification-internal {
+    border-left-color: var(--google-green);
+}
+
+.card-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--google-grey-200);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--google-grey-50);
+    flex-shrink: 0;
+}
+
+.ticket-id {
+    font-family: 'Roboto Mono', monospace;
+    font-weight: 600;
+    color: var(--google-grey-700);
+    background: white;
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 13px;
+    border: 1px solid var(--google-grey-300);
+}
+
+.classification-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.classification-badge.classification-top_secret {
+    background: rgba(234, 67, 53, 0.1);
+    color: var(--google-red);
+}
+
+.classification-badge.classification-secret {
+    background: rgba(251, 188, 4, 0.1);
+    color: #f57c00;
+}
+
+.classification-badge.classification-confidential {
+    background: rgba(26, 115, 232, 0.1);
+    color: var(--google-blue);
+}
+
+.classification-badge.classification-internal {
+    background: rgba(52, 168, 83, 0.1);
+    color: var(--google-green);
+}
+
+.classification-badge .material-icons {
+    font-size: 14px;
+}
+
+.card-content {
+    padding: 20px 20px 0 20px; /* Remove bottom padding */
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow: hidden;
+}
+
+.ticket-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--google-grey-900);
+    margin: 0;
+    line-height: 1.3;
+    overflow-wrap: break-word;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.ticket-description {
+    color: var(--google-grey-600);
+    font-size: 14px;
+    margin: 0;
+    line-height: 1.4;
+    overflow-wrap: break-word;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.ticket-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: auto;
+    padding-bottom: 20px; /* Add padding to bottom of content */
+}
+
+.user-info, .created-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--google-grey-600);
+    font-size: 13px;
+}
+
+.user-info .material-icons,
+.created-info .material-icons {
+    font-size: 14px;
+    color: var(--google-grey-500);
+}
+
+.badge-container {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.priority-badge, .status-badge {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.priority-badge .material-icons,
+.status-badge .material-icons {
+    font-size: 12px;
+}
+
+/* Priority badges */
+.priority-badge.priority-security,
+.priority-badge.priority-critical {
+    background: rgba(234, 67, 53, 0.1);
+    color: var(--google-red);
+}
+
+.priority-badge.priority-high {
+    background: rgba(251, 188, 4, 0.1);
+    color: #f57c00;
+}
+
+.priority-badge.priority-medium {
+    background: rgba(26, 115, 232, 0.1);
+    color: var(--google-blue);
+}
+
+.priority-badge.priority-low {
+    background: rgba(52, 168, 83, 0.1);
+    color: var(--google-green);
+}
+
+/* Status badges */
+.status-badge.status-open {
+    background: rgba(251, 188, 4, 0.1);
+    color: #f57c00;
+}
+
+.status-badge.status-in_progress {
+    background: rgba(26, 115, 232, 0.1);
+    color: var(--google-blue);
+}
+
+.status-badge.status-pending {
+    background: rgba(154, 160, 166, 0.1);
+    color: var(--google-grey-600);
+}
+
+.status-badge.status-closed {
+    background: rgba(52, 168, 83, 0.1);
+    color: var(--google-green);
+}
+
+.card-actions {
+    padding: 20px;
+    border-top: none;
+    background: var(--google-grey-50);
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 10;
+    margin: 0; /* Remove any margin */
+}
+
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 18px;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    flex: 1;
+    min-height: 38px;
+    position: relative;
+    z-index: 100;
+    pointer-events: all;
+}
+
+.action-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.action-btn.primary {
+    background: var(--google-blue);
+    color: white;
+    border: none;
+}
+
+.action-btn.primary:hover {
+    background: #1557b0;
+    color: white;
+}
+
+.action-btn.primary:active {
+    transform: translateY(0);
+}
+
+.action-btn.outline {
+    background: white;
+    border: 1px solid var(--google-grey-300);
+    color: var(--google-grey-700);
+}
+
+.action-btn.outline:hover {
+    background: var(--google-grey-50);
+    color: var(--google-grey-800);
+    border-color: var(--google-grey-400);
+}
+
+.action-btn .material-icons {
+    font-size: 16px;
+}
+
+/* Make sure Take button is always visible */
+.take-btn {
+    background: var(--google-blue) !important;
+    color: white !important;
+    border: 2px solid var(--google-blue) !important;
+    font-weight: 600 !important;
+    box-shadow: 0 2px 8px rgba(26, 115, 232, 0.3) !important;
+}
+
+.take-btn:hover {
+    background: #1557b0 !important;
+    border-color: #1557b0 !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 16px rgba(26, 115, 232, 0.4) !important;
+}
+
+/* Empty State */
+.empty-state {
+    background: white;
+    border-radius: var(--google-border-radius);
+    box-shadow: var(--google-shadow);
+    padding: 80px 40px;
+    text-align: center;
+    margin: 40px auto;
+    max-width: 500px;
+}
+
+.empty-icon {
+    width: 100px;
+    height: 100px;
+    margin: 0 auto 24px;
+    background: var(--google-grey-100);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.empty-icon .material-icons {
+    font-size: 50px;
+    color: var(--google-grey-400);
+}
+
+.empty-state h3 {
+    color: var(--google-grey-700);
+    font-size: 24px;
+    font-weight: 400;
+    margin: 0 0 12px 0;
+}
+
+.empty-state p {
+    color: var(--google-grey-600);
+    font-size: 16px;
+    margin: 0 0 32px 0;
+    line-height: 1.5;
+}
+
+/* Alert Styles */
+.google-alert {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: var(--google-border-radius);
+    margin-bottom: 16px;
+    box-shadow: var(--google-shadow);
+    background: white;
+    position: relative;
+    z-index: 1000;
+}
+
+.google-alert.success {
+    border-left: 4px solid var(--google-green);
+    color: var(--google-green);
+}
+
+.google-alert.error {
+    border-left: 4px solid var(--google-red);
+    color: var(--google-red);
+}
+
+.alert-close {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--google-grey-500);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+}
+
+.alert-close:hover {
+    background: var(--google-grey-100);
+}
+
+.alert-close .material-icons {
+    font-size: 18px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .google-container {
+        padding: 16px;
+        gap: 20px;
+    }
+    
+    .page-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 16px;
+        padding: 20px;
+    }
+    
+    .header-main {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    
+    .header-subtitle {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .header-actions {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .tickets-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    
+    .ticket-card {
+        min-height: 380px;
+    }
+    
+    .card-actions {
+        padding: 16px;
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .action-btn {
+        flex: none;
+        min-height: 44px;
+        padding: 12px 20px;
+    }
+    
+    .badge-container {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+@media (max-width: 480px) {
+    .google-container {
+        padding: 12px;
+    }
+    
+    .tickets-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    
+    .ticket-card {
+        min-height: 360px;
+        border-radius: 6px;
+    }
+    
+    .card-content {
+        padding: 16px 16px 0 16px;
+    }
+    
+    .ticket-meta {
+        padding-bottom: 16px;
+    }
+    
+    .card-header {
+        padding: 12px 16px;
+    }
+    
+    .card-actions {
+        padding: 16px;
+        gap: 8px;
+    }
+    
+    .action-btn {
+        padding: 14px 18px;
+        min-height: 48px;
+        font-size: 14px;
+    }
+}
+
+/* Ensure cards don't get cut off */
+.tickets-grid {
+    align-items: stretch;
+}
+</style>
 {% endblock %}

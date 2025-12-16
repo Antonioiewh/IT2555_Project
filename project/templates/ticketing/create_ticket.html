@@ -3,101 +3,500 @@
 {% block title %}Create Support Ticket{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="card-title mb-0">
-                        <i class="bi bi-ticket-perforated"></i> Create New Support Ticket
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <!-- Help Text -->
-                    <div class="alert alert-info">
-                        <h6><i class="bi bi-info-circle"></i> Ticket Creation Guidelines</h6>
-                        <ul class="mb-0">
-                            <li><strong>Be specific:</strong> Provide clear, detailed descriptions</li>
-                            <li><strong>Security matters:</strong> Security-related tickets will be automatically classified and prioritized</li>
-                            <li><strong>Priority:</strong> System will automatically determine priority based on content and category</li>
-                            <li><strong>Assignment:</strong> Tickets will be auto-assigned to qualified support agents</li>
-                        </ul>
-                    </div>
-                    
-                    <form method="POST" id="ticketForm">
-                        {{ form.hidden_tag() }}
-                        
-                        <!-- Title Field -->
-                        <div class="mb-3">
-                            {{ form.title.label(class="form-label") }}
-                            <span class="text-danger">*</span>
-                            {{ form.title(class="form-control" + (" is-invalid" if form.title.errors else ""), 
-                                placeholder="Brief, clear description of the issue") }}
-                            {% if form.title.errors %}
-                                <div class="invalid-feedback">
-                                    {% for error in form.title.errors %}
-                                        {{ error }}
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
-                            <small class="form-text text-muted">
-                                <span id="titleCounter">0</span>/255 characters
-                            </small>
-                        </div>
-                        
-                        <!-- Category Field -->
-                        <div class="mb-3">
-                            {{ form.category_id.label(class="form-label") }}
-                            <span class="text-danger">*</span>
-                            {{ form.category_id(class="form-select" + (" is-invalid" if form.category_id.errors else "")) }}
-                            {% if form.category_id.errors %}
-                                <div class="invalid-feedback">
-                                    {% for error in form.category_id.errors %}
-                                        {{ error }}
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
-                            <small class="form-text text-muted">
-                                Select the category that best describes your issue. This affects priority and assignment.
-                            </small>
-                        </div>
-                        
-                        <!-- Description Field -->
-                        <div class="mb-3">
-                            {{ form.description.label(class="form-label") }}
-                            <span class="text-danger">*</span>
-                            {{ form.description(class="form-control" + (" is-invalid" if form.description.errors else ""), 
-                                rows="6", 
-                                placeholder="Detailed description of the issue:\n\n• What happened?\n• What were you trying to do?\n• What did you expect to happen?\n• Any error messages?\n• Steps to reproduce (if applicable)") }}
-                            {% if form.description.errors %}
-                                <div class="invalid-feedback">
-                                    {% for error in form.description.errors %}
-                                        {{ error }}
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
-                            <small class="form-text text-muted">
-                                <span id="descriptionCounter">0</span>/5000 characters. 
-                                Be as detailed as possible - more information helps us resolve your issue faster.
-                            </small>
-                        </div>
-                        
-                        <!-- Submit Buttons -->
-                        <div class="d-flex justify-content-between">
-                            <a href="{{ url_for('ticketing.index') }}" class="btn btn-secondary">
-                                <i class="bi bi-arrow-left"></i> Cancel
-                            </a>
-                            
-                            <div>
-                                <button type="button" class="btn btn-outline-primary me-2" id="previewBtn">
-                                    <i class="bi bi-eye"></i> Preview
-                                </button>
-                                {{ form.submit(class="btn btn-primary") }}
-                            </div>
-                        </div>
-                    </form>
-                </div>
+<style>
+/* Google Material Design Styling */
+:root {
+    --google-blue: #1a73e8;
+    --google-blue-dark: #1557b0;
+    --google-blue-light: #e8f0fe;
+    --google-red: #ea4335;
+    --google-green: #34a853;
+    --google-yellow: #fbbc04;
+    --google-grey-50: #f8f9fa;
+    --google-grey-100: #f1f3f4;
+    --google-grey-200: #e8eaed;
+    --google-grey-300: #dadce0;
+    --google-grey-400: #bdc1c6;
+    --google-grey-500: #9aa0a6;
+    --google-grey-600: #80868b;
+    --google-grey-700: #5f6368;
+    --google-grey-800: #3c4043;
+    --google-grey-900: #202124;
+    --shadow-1: 0 1px 2px 0 rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15);
+    --shadow-2: 0 1px 2px 0 rgba(60,64,67,.3), 0 2px 6px 2px rgba(60,64,67,.15);
+    --shadow-3: 0 4px 8px 3px rgba(60,64,67,.15), 0 1px 3px rgba(60,64,67,.3);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Google Sans', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background-color: var(--google-grey-50);
+    color: var(--google-grey-800);
+    line-height: 1.5;
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 24px 16px;
+}
+
+/* Main Card */
+.main-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: var(--shadow-2);
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+
+.card-header {
+    background: linear-gradient(135deg, var(--google-blue) 0%, var(--google-blue-dark) 100%);
+    color: white;
+    padding: 24px;
+    border: none;
+}
+
+.card-header h1 {
+    font-size: 24px;
+    font-weight: 500;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.card-header .material-icons {
+    font-size: 28px;
+}
+
+.card-body {
+    padding: 32px 24px;
+}
+
+/* Info Alert */
+.info-alert {
+    background: var(--google-blue-light);
+    border: 1px solid var(--google-blue);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 32px;
+}
+
+.info-alert h3 {
+    color: var(--google-blue-dark);
+    font-size: 16px;
+    font-weight: 500;
+    margin: 0 0 12px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.info-alert ul {
+    color: var(--google-grey-700);
+    margin: 0;
+    padding-left: 20px;
+}
+
+.info-alert li {
+    margin-bottom: 8px;
+}
+
+.info-alert li:last-child {
+    margin-bottom: 0;
+}
+
+/* Form Groups */
+.form-group {
+    margin-bottom: 28px;
+}
+
+.form-label {
+    display: block;
+    font-weight: 500;
+    color: var(--google-grey-700);
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.required-star {
+    color: var(--google-red);
+    margin-left: 4px;
+}
+
+/* Input Fields */
+.form-control, .form-select {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid var(--google-grey-300);
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    background: white;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    outline: none;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: var(--google-blue);
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+}
+
+.form-control.is-invalid, .form-select.is-invalid {
+    border-color: var(--google-red);
+    box-shadow: 0 0 0 2px rgba(234, 67, 53, 0.2);
+}
+
+.form-control::placeholder {
+    color: var(--google-grey-500);
+}
+
+textarea.form-control {
+    resize: vertical;
+    min-height: 120px;
+    font-family: inherit;
+}
+
+/* Character Counters */
+.char-counter {
+    font-size: 12px;
+    color: var(--google-grey-500);
+    margin-top: 6px;
+    text-align: right;
+}
+
+.char-counter.warning {
+    color: var(--google-yellow);
+}
+
+.char-counter.danger {
+    color: var(--google-red);
+}
+
+/* Help Text */
+.help-text {
+    font-size: 12px;
+    color: var(--google-grey-600);
+    margin-top: 6px;
+    line-height: 1.4;
+}
+
+/* Error Messages */
+.error-message {
+    color: var(--google-red);
+    font-size: 12px;
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Buttons */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    font-family: inherit;
+    white-space: nowrap;
+}
+
+.btn-primary {
+    background: var(--google-blue);
+    color: white;
+    box-shadow: var(--shadow-1);
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: var(--google-blue-dark);
+    box-shadow: var(--shadow-2);
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background: white;
+    color: var(--google-grey-700);
+    border: 1px solid var(--google-grey-300);
+}
+
+.btn-secondary:hover {
+    background: var(--google-grey-50);
+    border-color: var(--google-grey-400);
+}
+
+.btn-outline {
+    background: white;
+    color: var(--google-blue);
+    border: 1px solid var(--google-blue);
+}
+
+.btn-outline:hover {
+    background: var(--google-blue-light);
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: var(--shadow-1) !important;
+}
+
+.btn .material-icons {
+    font-size: 18px;
+}
+
+/* Button Groups */
+.button-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid var(--google-grey-200);
+}
+
+.button-group {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+/* Modal Styling */
+.modal-content {
+    border: none;
+    border-radius: 12px;
+    box-shadow: var(--shadow-3);
+}
+
+.modal-header {
+    background: white;
+    border-bottom: 1px solid var(--google-grey-200);
+    padding: 20px 24px;
+}
+
+.modal-title {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--google-grey-800);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.modal-body {
+    padding: 24px;
+}
+
+.modal-footer {
+    border-top: 1px solid var(--google-grey-200);
+    padding: 16px 24px;
+}
+
+/* Preview Card */
+.preview-card {
+    border: 1px solid var(--google-grey-300);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.preview-header {
+    background: var(--google-grey-50);
+    padding: 16px;
+    border-bottom: 1px solid var(--google-grey-200);
+    font-weight: 500;
+    color: var(--google-grey-800);
+}
+
+.preview-body {
+    padding: 20px;
+}
+
+.preview-meta {
+    background: var(--google-grey-50);
+    padding: 12px 16px;
+    border-top: 1px solid var(--google-grey-200);
+    font-size: 12px;
+    color: var(--google-grey-600);
+    line-height: 1.4;
+}
+
+.preview-description {
+    background: var(--google-grey-50);
+    border: 1px solid var(--google-grey-200);
+    border-radius: 6px;
+    padding: 16px;
+    margin-top: 8px;
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+/* Material Icons */
+.material-icons {
+    font-family: 'Material Icons';
+    font-weight: normal;
+    font-style: normal;
+    font-size: 20px;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
+    vertical-align: middle;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .container {
+        padding: 16px 8px;
+    }
+    
+    .card-body {
+        padding: 24px 16px;
+    }
+    
+    .button-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .button-group {
+        justify-content: center;
+    }
+    
+    .btn {
+        justify-content: center;
+    }
+}
+
+/* Loading States */
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.btn.loading {
+    animation: pulse 1.5s infinite;
+}
+</style>
+
+<!-- Material Icons -->
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+<div class="container">
+    <div class="main-card">
+        <div class="card-header">
+            <h1>
+                <span class="material-icons">confirmation_number</span>
+                Create New Support Ticket
+            </h1>
+        </div>
+        
+        <div class="card-body">
+            <!-- Help Information -->
+            <div class="info-alert">
+                <h3>
+                    <span class="material-icons">info</span>
+                    Ticket Creation Guidelines
+                </h3>
+                <ul>
+                    <li><strong>Be specific:</strong> Provide clear, detailed descriptions</li>
+                    <li><strong>Security matters:</strong> Security-related tickets will be automatically classified and prioritized</li>
+                    <li><strong>Priority:</strong> System will automatically determine priority based on content and category</li>
+                    <li><strong>Assignment:</strong> Tickets will be auto-assigned to qualified support agents</li>
+                </ul>
             </div>
+            
+            <form method="POST" id="ticketForm">
+                {{ form.hidden_tag() }}
+                
+                <!-- Title Field -->
+                <div class="form-group">
+                    {{ form.title.label(class="form-label") }}
+                    <span class="required-star">*</span>
+                    {{ form.title(class="form-control" + (" is-invalid" if form.title.errors else ""), 
+                        placeholder="Brief, clear description of the issue") }}
+                    {% if form.title.errors %}
+                        <div class="error-message">
+                            <span class="material-icons">error</span>
+                            {% for error in form.title.errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <div class="char-counter" id="titleCounter">0/255 characters</div>
+                </div>
+                
+                <!-- Category Field -->
+                <div class="form-group">
+                    {{ form.category_id.label(class="form-label") }}
+                    <span class="required-star">*</span>
+                    {{ form.category_id(class="form-select" + (" is-invalid" if form.category_id.errors else "")) }}
+                    {% if form.category_id.errors %}
+                        <div class="error-message">
+                            <span class="material-icons">error</span>
+                            {% for error in form.category_id.errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <div class="help-text">
+                        Select the category that best describes your issue. This affects priority and assignment.
+                    </div>
+                </div>
+                
+                <!-- Description Field -->
+                <div class="form-group">
+                    {{ form.description.label(class="form-label") }}
+                    <span class="required-star">*</span>
+                    {{ form.description(class="form-control" + (" is-invalid" if form.description.errors else ""), 
+                        rows="6", 
+                        placeholder="Detailed description of the issue:\n\n• What happened?\n• What were you trying to do?\n• What did you expect to happen?\n• Any error messages?\n• Steps to reproduce (if applicable)") }}
+                    {% if form.description.errors %}
+                        <div class="error-message">
+                            <span class="material-icons">error</span>
+                            {% for error in form.description.errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <div class="char-counter" id="descriptionCounter">0/5000 characters</div>
+                    <div class="help-text">
+                        Be as detailed as possible - more information helps us resolve your issue faster.
+                    </div>
+                </div>
+                
+                <!-- Action Buttons -->
+                <div class="button-row">
+                    <a href="{{ url_for('ticketing.index') }}" class="btn btn-secondary">
+                        <span class="material-icons">arrow_back</span>
+                        Cancel
+                    </a>
+                    
+                    <div class="button-group">
+                        <button type="button" class="btn btn-outline" id="previewBtn">
+                            <span class="material-icons">visibility</span>
+                            Preview
+                        </button>
+                        {{ form.submit(class="btn btn-primary", id="submitBtn") }}
+                    </div>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -107,33 +506,37 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-eye"></i> Ticket Preview</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title">
+                    <span class="material-icons">visibility</span>
+                    Ticket Preview
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <div class="card">
-                    <div class="card-header">
-                        <span id="previewTitle" class="fw-bold"></span>
+                <div class="preview-card">
+                    <div class="preview-header">
+                        <span id="previewTitle"></span>
                     </div>
-                    <div class="card-body">
+                    <div class="preview-body">
                         <p><strong>Category:</strong> <span id="previewCategory"></span></p>
                         <p><strong>Description:</strong></p>
-                        <div id="previewDescription" class="border p-3 bg-light"></div>
-                        <hr>
-                        <small class="text-muted">
-                            <strong>Submitted by:</strong> {{ current_user.username }}<br>
-                            <strong>Status:</strong> Open<br>
-                            <strong>Created:</strong> <span id="previewDate"></span>
-                        </small>
+                        <div id="previewDescription" class="preview-description"></div>
+                    </div>
+                    <div class="preview-meta">
+                        <strong>Submitted by:</strong> {{ current_user.username }}<br>
+                        <strong>Status:</strong> Open<br>
+                        <strong>Created:</strong> <span id="previewDate"></span>
                     </div>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="bi bi-pencil"></i> Continue Editing
+                    <span class="material-icons">edit</span>
+                    Continue Editing
                 </button>
                 <button type="button" class="btn btn-primary" id="submitFromPreview">
-                    <i class="bi bi-check"></i> Create Ticket
+                    <span class="material-icons">check</span>
+                    Create Ticket
                 </button>
             </div>
         </div>
@@ -149,19 +552,30 @@ document.addEventListener('DOMContentLoaded', function() {
     const titleCounter = document.getElementById('titleCounter');
     const descriptionCounter = document.getElementById('descriptionCounter');
     const previewBtn = document.getElementById('previewBtn');
+    const submitBtn = document.getElementById('submitBtn');
     const previewModal = new bootstrap.Modal(document.getElementById('previewModal'));
     
     // Character counters
     function updateTitleCounter() {
         const length = titleField.value.length;
-        titleCounter.textContent = length;
-        titleCounter.className = length > 255 ? 'text-danger' : length > 200 ? 'text-warning' : 'text-muted';
+        titleCounter.textContent = `${length}/255 characters`;
+        titleCounter.className = 'char-counter';
+        if (length > 255) {
+            titleCounter.classList.add('danger');
+        } else if (length > 200) {
+            titleCounter.classList.add('warning');
+        }
     }
     
     function updateDescriptionCounter() {
         const length = descriptionField.value.length;
-        descriptionCounter.textContent = length;
-        descriptionCounter.className = length > 5000 ? 'text-danger' : length > 4000 ? 'text-warning' : 'text-muted';
+        descriptionCounter.textContent = `${length}/5000 characters`;
+        descriptionCounter.className = 'char-counter';
+        if (length > 5000) {
+            descriptionCounter.classList.add('danger');
+        } else if (length > 4000) {
+            descriptionCounter.classList.add('warning');
+        }
     }
     
     titleField.addEventListener('input', updateTitleCounter);
@@ -184,7 +598,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         document.getElementById('previewTitle').textContent = title;
         document.getElementById('previewCategory').textContent = categoryText;
-        document.getElementById('previewDescription').innerHTML = description.replace(/\n/g, '<br>');
+        document.getElementById('previewDescription').textContent = description;
         document.getElementById('previewDate').textContent = new Date().toLocaleString();
         
         previewModal.show();
@@ -223,33 +637,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // Show loading state
-        const submitBtn = form.querySelector('input[type="submit"]');
         submitBtn.disabled = true;
-        submitBtn.value = 'Creating...';
+        submitBtn.classList.add('loading');
+        submitBtn.innerHTML = '<span class="material-icons">hourglass_empty</span>Creating...';
     });
 });
 </script>
-
-<style>
-.form-control:focus, .form-select:focus {
-    border-color: #86b7fe;
-    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
-}
-
-.invalid-feedback {
-    font-size: 0.875rem;
-}
-
-.text-danger {
-    color: #dc3545 !important;
-}
-
-.text-warning {
-    color: #ffc107 !important;
-}
-
-.badge {
-    font-size: 0.75rem;
-}
-</style>
 {% endblock %}

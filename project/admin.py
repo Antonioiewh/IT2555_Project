@@ -10,6 +10,8 @@ from forms import UpdateUserStatusForm, UpdateReportStatusForm
 from filters import apply_user_filters, apply_user_sorting, apply_report_filters, apply_user_log_filters
 from parse_test import parse_modsec_audit_log, parse_error_log
 from file_validate import validate_file_security
+from models import db, User, Report, ModSecLog, ErrorLog, UserLog, Notification, Role, user_role_assignments, AdminAction
+from content_checker import SensitiveContentChecker, check_sensitive_content
 
 # Create Blueprint
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
@@ -496,3 +498,74 @@ def test_upload():
     
     return render_template('test_upload.html')
 
+@admin_bp.route('/content_checker', methods=['GET', 'POST'])
+@admin_required
+def admin_content_checker():
+    """Admin-only page for testing sensitive content detection"""
+    try:
+        checker = SensitiveContentChecker()
+        results = None
+        test_text = ""
+        
+        if request.method == 'POST':
+            test_text = request.form.get('test_text', '').strip()
+            
+            if test_text:
+                # Check the content
+                results = checker.check_content(test_text)
+                
+                # Log the admin test action
+                admin_action = AdminAction(
+                    admin_user_id=current_user.user_id,
+                    action_type='content_check_test',
+                    target_entity_type='system',
+                    target_entity_id=None,
+                    details=f"Admin {current_user.username} tested content checker with {len(test_text)} characters",
+                    action_timestamp=datetime.utcnow()
+                )
+                db.session.add(admin_action)
+                db.session.commit()
+                
+                if results['match_count'] > 0:
+                    flash(f"⚠️ Found {results['match_count']} sensitive content matches with {results['severity']} severity.", 'warning')
+                else:
+                    flash("✅ No sensitive content detected.", 'success')
+            else:
+                flash("Please enter some text to test.", 'error')
+        
+        # Get pattern information for the help section
+        pattern_info = checker.get_pattern_info()
+        
+        return render_template('admin/content_checker.html', 
+                             results=results,
+                             test_text=test_text,
+                             pattern_info=pattern_info)
+        
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Error in admin content checker: {str(e)}")
+        flash('An error occurred while testing content.', 'error')
+        return redirect(url_for('admin.manage_users'))
+
+@admin_bp.route('/api/content_check', methods=['POST'])
+@admin_required
+def api_content_check():
+    """API endpoint for content checking"""
+    try:
+        data = request.get_json()
+        if not data or 'text' not in data:
+            return jsonify({'error': 'No text provided'}), 400
+        
+        checker = SensitiveContentChecker()
+        results = checker.check_content(data['text'])
+        
+        # Remove original_text from API response for security
+        for match in results.get('matches', []):
+            match.pop('original_text', None)
+        
+        return jsonify(results)
+        
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Error in content check API: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500

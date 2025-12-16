@@ -2,81 +2,675 @@
 
 {% block title %}Archived Tickets - Support{% endblock %}
 
-{% block content %}
-<div class="container mt-4">
-    <div class="row">
-        <div class="col-md-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2>Archived Tickets</h2>
-                <a href="{{ url_for('ticketing.agent_dashboard') }}" class="btn btn-outline-secondary">
-                    <i class="bi bi-arrow-left"></i> Back to Dashboard
-                </a>
-            </div>
+{% block head %}
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@300;400;500;600&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+{% endblock %}
 
-            {% if archived_tickets %}
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="card-title mb-0">
-                            <i class="bi bi-archive"></i> Archived Tickets 
-                            <span class="badge bg-secondary">{{ archived_tickets|length }}</span>
-                        </h5>
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-striped table-hover mb-0">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Title</th>
-                                        <th>User</th>
-                                        <th>Priority</th>
-                                        <th>Classification</th>
-                                        <th>Status</th>
-                                        <th>Archived</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for ticket in archived_tickets %}
-                                    <tr>
-                                        <td><strong>#{{ ticket.original_ticket_id }}</strong></td>
-                                        <td>{{ ticket.title[:50] }}{% if ticket.title|length > 50 %}...{% endif %}</td>
-                                        <td>{{ ticket.user.username }}</td>
-                                        <td>
-                                            <span class="badge bg-{% if ticket.priority == 'security' %}danger{% elif ticket.priority == 'critical' %}danger{% elif ticket.priority == 'high' %}warning{% elif ticket.priority == 'medium' %}info{% else %}secondary{% endif %}">
-                                                {{ ticket.priority|title }}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <span class="badge bg-{% if ticket.classification == 'top_secret' %}danger{% elif ticket.classification == 'secret' %}warning{% elif ticket.classification == 'confidential' %}info{% else %}secondary{% endif %}">
-                                                {{ ticket.classification|replace('_', ' ')|title }}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <span class="badge bg-success">{{ ticket.status|title }}</span>
-                                        </td>
-                                        <td>
-                                            <small>{{ ticket.archived_at.strftime('%Y-%m-%d') }}</small>
-                                        </td>
-                                        <td>
-                                            <a href="{{ url_for('ticketing.view_archived_ticket', archived_ticket_id=ticket.archived_ticket_id) }}" 
-                                               class="btn btn-sm btn-outline-primary">
-                                                <i class="bi bi-eye"></i> View
-                                            </a>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            {% else %}
-                <div class="alert alert-info">
-                    <i class="bi bi-info-circle"></i> No archived tickets found for your clearance level.
-                </div>
-            {% endif %}
+{% block content %}
+<div class="google-container">
+    <!-- Header Section -->
+    <div class="page-header">
+        <div class="header-main">
+            <div class="header-icon">
+                <span class="material-icons">archive</span>
+            </div>
+            <div class="header-text">
+                <h1 class="header-title">Archived Tickets</h1>
+                <p class="header-subtitle">View archived tickets based on your clearance level</p>
+            </div>
+        </div>
+        
+        <div class="header-actions">
+            <a href="{{ url_for('ticketing.agent_dashboard') }}" class="google-btn outline">
+                <span class="material-icons">arrow_back</span>
+                Back to Dashboard
+            </a>
         </div>
     </div>
+
+    <!-- Content Section -->
+    <div class="content-section">
+        {% if archived_tickets %}
+            <div class="tickets-card">
+                <div class="card-header">
+                    <div class="header-title">
+                        <span class="material-icons">archive</span>
+                        <h2>Archived Tickets</h2>
+                    </div>
+                    <div class="ticket-count">
+                        <span class="count-number">{{ archived_tickets|length }}</span>
+                        <span class="count-label">Total Archived</span>
+                    </div>
+                </div>
+                
+                <div class="tickets-table-container">
+                    <div class="table-responsive">
+                        <table class="tickets-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Title</th>
+                                    <th>User</th>
+                                    <th>Priority</th>
+                                    <th>Classification</th>
+                                    <th>Status</th>
+                                    <th>Archived Date</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for ticket in archived_tickets %}
+                                <tr class="ticket-row">
+                                    <td>
+                                        <div class="ticket-id">#{{ ticket.original_ticket_id }}</div>
+                                    </td>
+                                    <td>
+                                        <div class="ticket-title">{{ ticket.title[:50] }}{% if ticket.title|length > 50 %}...{% endif %}</div>
+                                    </td>
+                                    <td>
+                                        <div class="user-info">
+                                            <span class="material-icons">person</span>
+                                            <span>{{ ticket.user.username }}</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="priority-badge priority-{{ ticket.priority }}">
+                                            <span class="material-icons">
+                                                {% if ticket.priority == 'security' %}security
+                                                {% elif ticket.priority == 'critical' %}error
+                                                {% elif ticket.priority == 'high' %}keyboard_arrow_up
+                                                {% elif ticket.priority == 'medium' %}remove
+                                                {% else %}keyboard_arrow_down{% endif %}
+                                            </span>
+                                            {{ ticket.priority|title }}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="classification-badge classification-{{ ticket.classification }}">
+                                            <span class="material-icons">
+                                                {% if ticket.classification == 'top_secret' %}lock
+                                                {% elif ticket.classification == 'secret' %}security
+                                                {% elif ticket.classification == 'confidential' %}visibility_off
+                                                {% else %}lock_open{% endif %}
+                                            </span>
+                                            {{ ticket.classification|replace('_', ' ')|title }}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="status-badge status-resolved">
+                                            <span class="material-icons">check_circle</span>
+                                            {{ ticket.status|title }}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="date-info">
+                                            <span class="material-icons">schedule</span>
+                                            <span>{{ ticket.archived_at.strftime('%Y-%m-%d') }}</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('ticketing.view_archived_ticket', archived_ticket_id=ticket.archived_ticket_id) }}" 
+                                           class="action-btn primary">
+                                            <span class="material-icons">visibility</span>
+                                            View
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <div class="empty-icon">
+                    <span class="material-icons">archive</span>
+                </div>
+                <h3>No Archived Tickets</h3>
+                <p>No archived tickets found for your clearance level.</p>
+                <a href="{{ url_for('ticketing.agent_dashboard') }}" class="google-btn primary">
+                    <span class="material-icons">arrow_back</span>
+                    Return to Dashboard
+                </a>
+            </div>
+        {% endif %}
+    </div>
 </div>
+
+<style>
+/* Google Material Design Variables */
+:root {
+    --google-blue: #1a73e8;
+    --google-red: #ea4335;
+    --google-yellow: #fbbc04;
+    --google-green: #34a853;
+    --google-grey-50: #f8f9fa;
+    --google-grey-100: #f1f3f4;
+    --google-grey-200: #e8eaed;
+    --google-grey-300: #dadce0;
+    --google-grey-400: #bdc1c6;
+    --google-grey-500: #9aa0a6;
+    --google-grey-600: #80868b;
+    --google-grey-700: #5f6368;
+    --google-grey-800: #3c4043;
+    --google-grey-900: #202124;
+    --google-border-radius: 8px;
+    --google-shadow: 0 1px 3px 0 rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15);
+    --google-shadow-hover: 0 1px 3px 0 rgba(60, 64, 67, 0.3), 0 8px 16px 6px rgba(60, 64, 67, 0.15);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Google Sans', 'Roboto', sans-serif;
+    background-color: var(--google-grey-50);
+    color: var(--google-grey-800);
+    line-height: 1.6;
+}
+
+.google-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+/* Page Header */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: white;
+    border-radius: var(--google-border-radius);
+    box-shadow: var(--google-shadow);
+    padding: 24px 32px;
+    gap: 24px;
+}
+
+.header-main {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.header-icon {
+    width: 56px;
+    height: 56px;
+    background: var(--google-grey-600);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+}
+
+.header-icon .material-icons {
+    font-size: 28px;
+}
+
+.header-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.header-title {
+    font-size: 28px;
+    font-weight: 400;
+    margin: 0;
+    color: var(--google-grey-900);
+}
+
+.header-subtitle {
+    color: var(--google-grey-600);
+    font-size: 16px;
+    margin: 0;
+}
+
+.header-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.google-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 20px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.google-btn.primary {
+    background: var(--google-blue);
+    color: white;
+}
+
+.google-btn.primary:hover {
+    background: #1557b0;
+    color: white;
+}
+
+.google-btn.outline {
+    background: transparent;
+    border: 1px solid var(--google-grey-300);
+    color: var(--google-grey-700);
+}
+
+.google-btn.outline:hover {
+    background: var(--google-grey-50);
+    color: var(--google-grey-800);
+}
+
+.google-btn .material-icons {
+    font-size: 18px;
+}
+
+/* Content Section */
+.content-section {
+    min-height: 400px;
+}
+
+.tickets-card {
+    background: white;
+    border-radius: var(--google-border-radius);
+    box-shadow: var(--google-shadow);
+    overflow: hidden;
+}
+
+.card-header {
+    padding: 24px 32px;
+    border-bottom: 1px solid var(--google-grey-200);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--google-grey-50);
+}
+
+.header-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.header-title h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--google-grey-900);
+}
+
+.header-title .material-icons {
+    color: var(--google-grey-600);
+    font-size: 24px;
+}
+
+.ticket-count {
+    text-align: center;
+}
+
+.count-number {
+    display: block;
+    font-size: 24px;
+    font-weight: 300;
+    color: var(--google-grey-700);
+    line-height: 1;
+}
+
+.count-label {
+    display: block;
+    font-size: 12px;
+    color: var(--google-grey-600);
+    text-transform: uppercase;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+/* Table Styles */
+.tickets-table-container {
+    overflow: hidden;
+}
+
+.table-responsive {
+    overflow-x: auto;
+}
+
+.tickets-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.tickets-table thead {
+    background: var(--google-grey-100);
+}
+
+.tickets-table th {
+    padding: 16px 20px;
+    text-align: left;
+    font-weight: 500;
+    color: var(--google-grey-700);
+    border: none;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.tickets-table td {
+    padding: 16px 20px;
+    border: none;
+    border-bottom: 1px solid var(--google-grey-200);
+}
+
+.ticket-row {
+    transition: background-color 0.2s ease;
+}
+
+.ticket-row:hover {
+    background-color: var(--google-grey-50);
+}
+
+.ticket-row:last-child td {
+    border-bottom: none;
+}
+
+.ticket-id {
+    font-family: 'Roboto Mono', monospace;
+    font-weight: 600;
+    color: var(--google-grey-700);
+    background: var(--google-grey-100);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    display: inline-block;
+}
+
+.ticket-title {
+    font-weight: 500;
+    color: var(--google-grey-900);
+    line-height: 1.4;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--google-grey-700);
+}
+
+.user-info .material-icons {
+    font-size: 16px;
+    color: var(--google-grey-500);
+}
+
+.date-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--google-grey-600);
+    font-size: 13px;
+}
+
+.date-info .material-icons {
+    font-size: 16px;
+    color: var(--google-grey-500);
+}
+
+/* Badge Styles */
+.priority-badge, .classification-badge, .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.priority-badge .material-icons,
+.classification-badge .material-icons,
+.status-badge .material-icons {
+    font-size: 14px;
+}
+
+/* Priority badges */
+.priority-badge.priority-security,
+.priority-badge.priority-critical {
+    background: rgba(234, 67, 53, 0.1);
+    color: var(--google-red);
+}
+
+.priority-badge.priority-high {
+    background: rgba(251, 188, 4, 0.1);
+    color: #f57c00;
+}
+
+.priority-badge.priority-medium {
+    background: rgba(26, 115, 232, 0.1);
+    color: var(--google-blue);
+}
+
+.priority-badge.priority-low {
+    background: rgba(52, 168, 83, 0.1);
+    color: var(--google-green);
+}
+
+/* Classification badges */
+.classification-badge.classification-top_secret {
+    background: rgba(234, 67, 53, 0.1);
+    color: var(--google-red);
+}
+
+.classification-badge.classification-secret {
+    background: rgba(251, 188, 4, 0.1);
+    color: #f57c00;
+}
+
+.classification-badge.classification-confidential {
+    background: rgba(26, 115, 232, 0.1);
+    color: var(--google-blue);
+}
+
+.classification-badge.classification-internal,
+.classification-badge.classification-public {
+    background: rgba(52, 168, 83, 0.1);
+    color: var(--google-green);
+}
+
+/* Status badge */
+.status-badge.status-resolved {
+    background: rgba(52, 168, 83, 0.1);
+    color: var(--google-green);
+}
+
+/* Action Button */
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 18px;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.action-btn.primary {
+    background: var(--google-blue);
+    color: white;
+}
+
+.action-btn.primary:hover {
+    background: #1557b0;
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(26, 115, 232, 0.3);
+}
+
+.action-btn .material-icons {
+    font-size: 16px;
+}
+
+/* Empty State */
+.empty-state {
+    background: white;
+    border-radius: var(--google-border-radius);
+    box-shadow: var(--google-shadow);
+    padding: 80px 40px;
+    text-align: center;
+    margin: 40px auto;
+    max-width: 500px;
+}
+
+.empty-icon {
+    width: 100px;
+    height: 100px;
+    margin: 0 auto 24px;
+    background: var(--google-grey-100);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.empty-icon .material-icons {
+    font-size: 50px;
+    color: var(--google-grey-400);
+}
+
+.empty-state h3 {
+    color: var(--google-grey-700);
+    font-size: 24px;
+    font-weight: 400;
+    margin: 0 0 12px 0;
+}
+
+.empty-state p {
+    color: var(--google-grey-600);
+    font-size: 16px;
+    margin: 0 0 32px 0;
+    line-height: 1.5;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .google-container {
+        padding: 16px;
+        gap: 20px;
+    }
+    
+    .page-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 16px;
+        padding: 20px;
+    }
+    
+    .header-main {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    
+    .card-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+        padding: 20px;
+    }
+    
+    .tickets-table {
+        font-size: 13px;
+    }
+    
+    .tickets-table th,
+    .tickets-table td {
+        padding: 12px 16px;
+    }
+    
+    .empty-state {
+        padding: 60px 20px;
+    }
+}
+
+@media (max-width: 480px) {
+    .google-container {
+        padding: 12px;
+    }
+    
+    .page-header {
+        padding: 16px;
+    }
+    
+    .header-title {
+        font-size: 24px;
+    }
+    
+    .header-subtitle {
+        font-size: 14px;
+    }
+    
+    .card-header {
+        padding: 16px;
+    }
+    
+    .tickets-table th,
+    .tickets-table td {
+        padding: 8px 12px;
+    }
+    
+    .priority-badge, 
+    .classification-badge, 
+    .status-badge {
+        padding: 4px 8px;
+        font-size: 10px;
+    }
+    
+    .action-btn {
+        padding: 6px 12px;
+        font-size: 12px;
+    }
+}
+
+/* Table scroll on small screens */
+@media (max-width: 1024px) {
+    .table-responsive {
+        overflow-x: auto;
+    }
+    
+    .tickets-table {
+        min-width: 800px;
+    }
+}
+
+/* Focus states for accessibility */
+.google-btn:focus,
+.action-btn:focus {
+    outline: 2px solid var(--google-blue);
+    outline-offset: 2px;
+}
+
+/* Hover effects for better UX */
+.tickets-table tbody tr:hover .action-btn {
+    transform: translateY(-1px);
+}
+</style>
 {% endblock %}

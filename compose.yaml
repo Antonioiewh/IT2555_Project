@@ -187,11 +187,11 @@ services:
   redis:
     image: "redis:alpine"
     ports:
-      - "6374:6374"
+      - "6666:6666"
     networks:
       - flask-sql
     environment:
-      - REDIS_URL=redis://redis:6374/0
+      - REDIS_URL=redis://redis:6666/0
   nginx:
     build: ./nginxproxy
     ports:

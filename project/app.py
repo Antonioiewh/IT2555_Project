@@ -154,7 +154,7 @@ class Config:
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
     
     # Redis configuration
-    REDIS_URL = os.getenv('REDIS_URL', 'redis://redis:6374/0')
+    REDIS_URL = os.getenv('REDIS_URL', 'redis://redis:6666/0')
 
     # Splunk Configuration
     SPLUNK_HOST = 'splunk'  # Docker service name
@@ -287,7 +287,7 @@ def initialize_extensions(app):
     socketio = SocketIO()
     socketio.init_app(app, 
                      cors_allowed_origins=app.config.get('SOCKETIO_CORS_ORIGINS', "*"),
-                     message_queue=app.config.get('REDIS_URL', 'redis://redis:6374/0'),
+                     message_queue=app.config.get('REDIS_URL', 'redis://redis:6666/0'),
                      ping_interval=25,
                      ping_timeout=60)
     

@@ -378,11 +378,11 @@ CREATE TABLE post_images (
     image_url VARCHAR(255) NOT NULL,
     order_index INT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    visibility VARCHAR(16) NOT NULL DEFAULT 'friends',
     FOREIGN KEY (post_id) REFERENCES posts(post_id) ON DELETE CASCADE
 );
 
-ALTER TABLE posts
-  visibility ENUM('public','friends','private') NOT NULL DEFAULT 'friends';
+
 
 -- ---------------------------------------------------------------------------------
 -- Post Likes System

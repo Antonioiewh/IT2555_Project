@@ -379,6 +379,9 @@ CREATE TABLE post_images (
     FOREIGN KEY (post_id) REFERENCES posts(post_id) ON DELETE CASCADE
 );
 
+ALTER TABLE posts
+  visibility ENUM('public','friends','private') NOT NULL DEFAULT 'friends';
+
 -- ---------------------------------------------------------------------------------
 -- Post Likes System
 -- ---------------------------------------------------------------------------------

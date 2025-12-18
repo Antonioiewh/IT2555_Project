@@ -18,7 +18,7 @@ import hashlib
 from PIL import Image
 
 # --- Flask Core Imports ---
-from flask import Flask, render_template, redirect, url_for, flash, request, current_app, abort, jsonify, session,make_response
+from flask import Flask, render_template, redirect, url_for, flash, request, current_app, abort, jsonify, session,make_response, send_file 
 from flask_wtf import CSRFProtect, FlaskForm
 from flask_wtf.csrf import CSRFError
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
@@ -30,6 +30,10 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicNumbers, SECP256R1
+
+# ---watermark imports---
+from PIL import Image, ImageDraw, ImageFont
+from io import BytesIO
 
 # -- profile imports --
 import imghdr
@@ -508,12 +512,98 @@ def register_error_handlers(app):
         
         # For AJAX/API requests
         if request.is_xhr or request.content_type == 'application/json':
+            
             return jsonify({'error': 'CSRF token missing or invalid'}), 400
         
         # For regular requests, redirect to login with clear session
         session.clear()
         flash('Security violation detected. Please log in again.', 'error')
         return redirect(url_for('login'))
+
+# --- watermark functions ---
+def _get_font(size=32):
+    """Try to use a truetype font if available, otherwise fallback to default."""
+    try:
+        return ImageFont.truetype("arial.ttf", size)
+    except Exception:
+        return ImageFont.load_default()
+
+def apply_tiled_watermark(input_path: str, watermark_text: str, opacity: int = 128, angle: int = 30, font_size: int = 36) -> str:
+    """
+    Apply a translucent tiled watermark (50% opacity for screenshots).
+    Overwrites the file at input_path and returns the same path.
+    """
+    try:
+        img = Image.open(input_path).convert("RGBA")
+        watermark = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(watermark)
+        font = _get_font(font_size)
+
+        # Measure text dimensions
+        bbox = draw.textbbox((0, 0), watermark_text, font=font)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+
+        # Spacing for tiled watermark
+        x_step = max(200, text_w + 60)
+        y_step = max(120, text_h + 40)
+
+        # Draw repeated watermark across canvas
+        for y in range(-img.size[1], img.size[1] * 2, y_step):
+            for x in range(-img.size[0], img.size[0] * 2, x_step):
+                draw.text((x, y), watermark_text, font=font, fill=(255, 255, 255, opacity))
+
+        # Rotate and composite
+        rotated = watermark.rotate(angle, expand=False)
+        combined = Image.alpha_composite(img, rotated)
+
+        # Save as JPEG
+        out = combined.convert('RGB')
+        out.save(input_path, quality=85)
+        return input_path
+    except Exception as e:
+        app.logger.exception(f"apply_tiled_watermark failed for {input_path}: {e}")
+        return input_path
+
+def apply_bottom_right_overlay_bytes(input_path: str, username: str, font_size: int = 32) -> BytesIO:
+    """
+    Return BytesIO with username overlaid bottom-right at 100% opacity.
+    Used for download responses.
+    """
+    buf = BytesIO()
+    try:
+        img = Image.open(input_path).convert("RGBA")
+        draw = ImageDraw.Draw(img)
+        font = _get_font(font_size)
+
+        text = username
+        margin = 12
+        bbox = draw.textbbox((0, 0), text, font=font)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+
+        x = img.width - text_w - margin
+        y = img.height - text_h - margin
+
+        # Draw outline for readability
+        outline_color = (0, 0, 0, 255)
+        for dx, dy in [(-1, -1), (1, -1), (-1, 1), (1, 1)]:
+            draw.text((x + dx, y + dy), text, font=font, fill=outline_color)
+
+        # Draw username in white
+        draw.text((x, y), text, font=font, fill=(255, 255, 255, 255))
+
+        # Save to buffer
+        img.convert('RGB').save(buf, format='JPEG', quality=90)
+        buf.seek(0)
+        return buf
+    except Exception as e:
+        app.logger.exception(f"apply_bottom_right_overlay failed for {input_path}: {e}")
+        with open(input_path, 'rb') as f:
+            buf.write(f.read())
+            buf.seek(0)
+        return buf
+
 
 # --- Create Flask Application ---
 app = create_app()
@@ -656,9 +746,21 @@ def load_more_posts():
         # Include current user's own posts
         friend_ids.append(current_user.user_id)
         
-        # Query posts only from friends and current user
+        # # Query posts only from friends and current user
+        # posts_query = Post.query.filter(
+        #     Post.user_id.in_(friend_ids)
+        # ).order_by(Post.created_at.desc())
+
+        # Visibility rules:
+        # - public: visible to everyone
+        # - friends: visible to owner and accepted friends
+        # - private: visible only to owner
         posts_query = Post.query.filter(
-            Post.user_id.in_(friend_ids)
+            or_(
+                Post.visibility == 'public',
+                and_(Post.visibility == 'friends', Post.user_id.in_(friend_ids)),
+                Post.user_id == current_user.user_id
+            )
         ).order_by(Post.created_at.desc())
         
         posts = posts_query.paginate(
@@ -796,16 +898,42 @@ def home():
         # Include current user's own posts
         friend_ids.append(current_user.user_id)
         
-        # Query posts only from friends and current user
-        posts_query = Post.query.filter(
-            Post.user_id.in_(friend_ids)
-        ).order_by(Post.created_at.desc())
-        
-        posts = posts_query.paginate(
-            page=page, 
-            per_page=per_page, 
-            error_out=False
-        )
+        # posts from friends, public and self with visibility check
+        # posts_query = Post.query.filter(
+        #     Post.user_id.in_(friend_ids),
+        # #     or_(
+        # #         Post.user_id == current_user.user_id,
+        # #         Post.visibility == 'public',
+        # #         Post.visibility == 'friends'
+        # #     )
+        # # ).order_by(Post.created_at.desc())
+
+        # Build posts query enforcing visibility rules.
+        # Wrap in try-except in case the visibility column doesn't exist in DB yet.
+        try:
+            posts_query = Post.query.filter(
+                or_(
+                    Post.visibility == 'public',
+                    and_(Post.visibility == 'friends', Post.user_id.in_(friend_ids)),
+                    Post.user_id == current_user.user_id
+                )
+            ).order_by(Post.created_at.desc())
+            posts = posts_query.paginate(
+                page=page, 
+                per_page=per_page, 
+                error_out=False
+            )
+        except Exception as e:
+            # If visibility column doesn't exist, fallback to simpler query
+            app.logger.warning(f"Visibility-based query failed: {e}. Falling back to friend-based query.")
+            posts_query = Post.query.filter(
+                Post.user_id.in_(friend_ids)
+            ).order_by(Post.created_at.desc())
+            posts = posts_query.paginate(
+                page=page, 
+                per_page=per_page, 
+                error_out=False
+            )
         
         # Get current user's actual stats
         current_user_post_count = Post.query.filter_by(user_id=current_user.user_id).count()
@@ -3291,15 +3419,30 @@ def view_profile(user_id):
                 friendship_status = friendship.status
                 friendship_id = friendship.friendship_id
         
-        # Get user's posts (only their own posts)
-        posts_query = Post.query.filter_by(user_id=user_id)
-        posts = posts_query.order_by(Post.created_at.desc()).all()
+        # # Get user's posts (only their own posts)
+        # posts_query = Post.query.filter_by(user_id=user_id)
+        # posts = posts_query.order_by(Post.created_at.desc()).all()
         
-        # Get accurate friend count (accepted friendships only)
-        accepted_friendships = Friendship.query.filter(
-            ((Friendship.user_id1 == user_id) | (Friendship.user_id2 == user_id)),
-            Friendship.status == 'accepted'
-        ).count()
+        # # Get accurate friend count (accepted friendships only)
+        # accepted_friendships = Friendship.query.filter(
+        #     ((Friendship.user_id1 == user_id) | (Friendship.user_id2 == user_id)),
+        #     Friendship.status == 'accepted'
+        # ).count()
+
+        # Get user's posts (visibility-filtered)
+        if is_own_profile:
+            posts_query = Post.query.filter_by(user_id=user_id)
+        else:
+            # If friend, allow 'friends' + 'public'; if not friend, only 'public'
+            if friendship_status == 'accepted':
+                posts_query = Post.query.filter(
+                    Post.user_id == user_id,
+                    or_(Post.visibility == 'public', Post.visibility == 'friends')
+                )
+            else:
+                posts_query = Post.query.filter_by(user_id=user_id, visibility='public')
+        
+        posts = posts_query.order_by(Post.created_at.desc()).all()
         
         # Get accurate post count for this user
         user_post_count = Post.query.filter_by(user_id=user_id).count()
@@ -3341,6 +3484,10 @@ def create_post():
     if request.method == 'POST':
         try:
             post_content = request.form.get('post_content', '').strip()
+            # get visibility from form (default 'friends') and validate
+            visibility_value = request.form.get('visibility', 'friends')
+            if visibility_value not in ('private', 'friends', 'public'):
+                visibility_value = 'friends'
             
             if not post_content:
                 flash('Post content cannot be empty.', 'error')
@@ -3350,6 +3497,7 @@ def create_post():
             new_post = Post(
                 user_id=current_user.user_id,
                 post_content=post_content,
+                visibility=visibility_value,
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow()
             )
@@ -3357,7 +3505,7 @@ def create_post():
             db.session.add(new_post)
             db.session.flush()
             
-            # Handle uploaded files with modular validation
+            # Handle uploaded files
             uploaded_files = request.files.getlist('image')
             
             if uploaded_files and uploaded_files[0].filename:
@@ -3366,29 +3514,44 @@ def create_post():
                 upload_dir = app.config['UPLOAD_FOLDER']
                 result = validate_post_images(uploaded_files, new_post.post_id, upload_dir)
                 
-                # Add warnings/errors to flash messages
+                # Add warnings/errors
                 for error in result['errors']:
                     flash(error, 'warning')
                 
                 for warning in result['warnings']:
                     flash(warning, 'info')
                 
-                # Create PostImage objects for successfully processed files
-                for file_info in result['processed_files']:
+                # # Create PostImage objects and apply watermark
+                # for file_info in result['processed_files']:
+                #     rel_url = file_info['url']
+                #     abs_path = os.path.join(app.static_folder, rel_url)
+
+                #     # Build watermark: username | post_id | created_at (date)
+                #     created_str = new_post.created_at.strftime('%Y-%m-%d')
+                #     watermark_text = f"{current_user.username} | post:{new_post.post_id} | {created_str}"
+
+                #     # Apply tiled translucent watermark (50% opacity)
+                #     try:
+                #         apply_tiled_watermark(abs_path, watermark_text, opacity=128, angle=30, font_size=36)
+                #         app.logger.info(f"Applied watermark to {abs_path}")
+                #     except Exception:
+                #         app.logger.exception(f"Failed to apply watermark to {abs_path}")
+
+                    # Save to database
                     post_image = PostImage(
                         post_id=new_post.post_id,
-                        image_url=file_info['url'],
+                        image_url=rel_url,
                         order_index=0,
                         created_at=datetime.utcnow()
                     )
                     db.session.add(post_image)
-                    app.logger.info(f"User {current_user.user_id} uploaded post image: {file_info['filename']}")
+                    app.logger.info(f"User {current_user.user_id} uploaded: {file_info['filename']}")
             
             db.session.commit()
             
             valid_file_count = len(result['processed_files']) if 'result' in locals() else 0
             if valid_file_count > 0:
-                flash(f'Post created successfully with {valid_file_count} images!', 'success')
+                flash(f'Post created with {valid_file_count} images!', 'success')
             else:
                 flash('Post created successfully!', 'success')
             
@@ -3512,6 +3675,33 @@ def delete_post(post_id):
         flash('An error occurred while deleting the post.', 'error')
     
     return redirect(url_for('account'))
+
+# -- download post image ---
+@app.route('/download_post_image/<int:post_id>/<path:filename>')
+@login_required
+def download_post_image(post_id, filename):
+    """
+    Serve downloadable image with username at bottom-right (100% opacity).
+    """
+    # Validate post exists and image belongs to post
+    post = Post.query.get_or_404(post_id)
+    post_image = PostImage.query.filter_by(post_id=post_id, image_url=filename).first()
+    if not post_image:
+        abort(404)
+
+    file_path = os.path.join(app.static_folder, filename)
+    if not os.path.exists(file_path):
+        abort(404)
+
+    # Apply username overlay and return
+    buf = apply_bottom_right_overlay_bytes(file_path, post.user.username)
+    return send_file(
+        buf,
+        mimetype='image/jpeg',
+        as_attachment=True,
+        download_name=os.path.basename(filename)
+    )
+
 
 @app.route('/api/like_post/<int:post_id>', methods=['POST'])
 @login_required

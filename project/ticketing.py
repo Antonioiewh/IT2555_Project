@@ -1,18 +1,36 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, abort, current_app
+# Core Flask imports
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, abort, current_app, session
 from flask_login import login_required, current_user
+
+# Standard library imports
 from datetime import datetime, timedelta
+import logging
+import time
+import traceback
+
+# Third-party imports
+from sqlalchemy import and_, or_, func
+from werkzeug.security import check_password_hash
+import pyotp
+
+# Local imports
 from models import (
     db, User, Ticket, TicketMessage, SupportAgent, TicketAssignment, 
-    TicketEscalation, TicketCategory, KnowledgeBaseArticle, ClearanceLevel,ArchivedTicket
+    TicketEscalation, TicketCategory, KnowledgeBaseArticle, ClearanceLevel, ArchivedTicket, WebAuthnCredential
 )
 from forms import TicketForm, TicketReplyForm, TicketAssignForm, KnowledgeBaseForm
 from decorators import role_required, admin_required, agent_required
-from sqlalchemy import and_, or_, func
-import logging
+
+# Optional imports that might not be available
+try:
+    from splunk_logger import splunk_logger
+except ImportError:
+    splunk_logger = None
 
 # Create Blueprint
 ticketing_bp = Blueprint('ticketing', __name__, url_prefix='/tickets')
 
+# helper funcs
 def check_ticket_access(ticket, user, action='view'):
     """
     Check if user has access to ticket based on classification and ownership
@@ -94,10 +112,57 @@ def get_available_escalation_tiers(current_clearance_level, ticket_classificatio
         })
     
     return tiers
+
+
+def check_additional_auth_required(ticket_id, user):
+    """Check if additional authentication is required and valid"""
+    try:
+        ticket = Ticket.query.get(ticket_id)
+        if not ticket:
+            return True  # Require auth if ticket not found
+        
+        # Check classification level
+        classification_levels = {
+            'public': 1,
+            'internal': 2,
+            'confidential': 3,
+            'secret': 4,
+            'top_secret': 5
+        }
+        
+        ticket_level = classification_levels.get(ticket.classification, 1)
+        
+        # No additional auth needed for level 1-2
+        if ticket_level < 3:
+            return False
+        
+        # Check session for verification
+        if 'verified_tickets' not in session:
+            return True
+        
+        verification_time = session['verified_tickets'].get(str(ticket_id))
+        if not verification_time:
+            return True
+        
+        # Check if verification is still valid (10 minutes)
+        if time.time() - verification_time > 600:  # 10 minutes
+            # Remove expired verification
+            del session['verified_tickets'][str(ticket_id)]
+            # Also clean up any partial verification data
+            if 'ticket_verification' in session and str(ticket_id) in session['ticket_verification']:
+                del session['ticket_verification'][str(ticket_id)]
+            return True
+        
+        return False
+        
+    except Exception as e:
+        current_app.logger.error(f"Error checking additional auth: {str(e)}")
+        return True  # Require auth on error
+
 # --- User Routes ---
 
 @ticketing_bp.route('/')
-@login_required
+@agent_required
 def index():
     """Main ticketing index - redirect based on user type"""
     try:
@@ -248,69 +313,9 @@ def agent_my_tickets():
         flash('An error occurred while loading your tickets.', 'error')
         return redirect(url_for('ticketing.agent_dashboard'))
 
-@ticketing_bp.route('/create', methods=['GET', 'POST'])
-@login_required
-def create_ticket():
-    """Create new support ticket"""
-    form = TicketForm()
-    
-    # Populate categories
-    categories = TicketCategory.query.filter_by(is_active=True).all()
-    form.category_id.choices = [(c.category_id, c.name) for c in categories]
-    
-    if form.validate_on_submit():
-        try:
-            # Determine priority based on category and content
-            category = TicketCategory.query.get(form.category_id.data)
-            priority = determine_ticket_priority(form.description.data, category)
-            
-            # Create ticket
-            ticket = Ticket(
-                user_id=current_user.user_id,
-                title=form.title.data,
-                description=form.description.data,
-                category_id=form.category_id.data,
-                priority=priority,
-                status='open',
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
-            )
-            
-            # Set classification based on priority
-            ticket.classification = ticket.determine_classification()
-            
-            db.session.add(ticket)
-            db.session.flush()
-            
-            # Auto-assign based on priority and agent availability
-            auto_assign_ticket(ticket)
-            
-            db.session.commit()
-            
-            # Log ticket creation
-            try:
-                from splunk_logger import splunk_logger
-                splunk_logger.log_security_event('ticket_created', {
-                    'ticket_id': ticket.ticket_id,
-                    'priority': priority,
-                    'classification': ticket.classification,
-                    'category': category.name if category else 'Unknown'
-                })
-            except ImportError:
-                pass
-            
-            flash(f'Ticket #{ticket.ticket_id} created successfully!', 'success')
-            return redirect(url_for('ticketing.view_ticket', ticket_id=ticket.ticket_id))
-            
-        except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f"Error creating ticket: {str(e)}")
-            flash('An error occurred while creating the ticket.', 'error')
-    
-    return render_template('ticketing/create_ticket.html', form=form)
 
 @ticketing_bp.route('/view/<int:ticket_id>')
-@login_required
+@agent_required
 def view_ticket(ticket_id):
     """View ticket details"""
     try:
@@ -319,6 +324,11 @@ def view_ticket(ticket_id):
         # Check access permissions
         if not check_ticket_access(ticket, current_user):
             abort(403)
+        
+        # Check if additional authentication is required
+        if check_additional_auth_required(ticket_id, current_user):
+            current_app.logger.info(f"SECURITY: Redirecting user {current_user.username} to additional auth for ticket {ticket_id}")
+            return redirect(url_for('ticketing.verify_access', ticket_id=ticket_id))
         
         # Get ticket messages
         messages = TicketMessage.query.filter_by(ticket_id=ticket_id)\
@@ -332,7 +342,7 @@ def view_ticket(ticket_id):
         # Check if current user is support agent
         agent = SupportAgent.query.filter_by(user_id=current_user.user_id, is_active=True).first()
         
-       # Get available escalation tiers for this agent
+        # Get available escalation tiers for this agent
         escalation_tiers = []
         if agent:
             escalation_tiers = get_available_escalation_tiers(agent.clearance_level, ticket.classification)
@@ -352,8 +362,9 @@ def view_ticket(ticket_id):
         flash('An error occurred while loading the ticket.', 'error')
         return redirect(url_for('ticketing.index'))
 
+# unused
 @ticketing_bp.route('/reply/<int:ticket_id>', methods=['POST'])
-@login_required
+@agent_required
 def reply_ticket(ticket_id):
     """Add reply to ticket"""
     try:
@@ -715,16 +726,13 @@ def escalate_ticket(ticket_id):
         db.session.commit()
         
         # Log escalation
-        try:
-            from splunk_logger import splunk_logger
+        if splunk_logger:
             splunk_logger.log_security_event('ticket_escalated', {
                 'ticket_id': ticket_id,
                 'escalation_type': escalation_type,
                 'escalated_by': current_user.username,
                 'target_tier': target_tier if escalation_type == 'tier' else None
             }, 'HIGH')
-        except ImportError:
-            pass
         
     except Exception as e:
         db.session.rollback()
@@ -734,7 +742,7 @@ def escalate_ticket(ticket_id):
     return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
 
 @ticketing_bp.route('/close/<int:ticket_id>', methods=['POST'])
-@login_required
+@agent_required
 def close_ticket(ticket_id):
     """Close ticket with optional archiving"""
     try:
@@ -743,6 +751,26 @@ def close_ticket(ticket_id):
         # Check access
         if not check_ticket_access(ticket, current_user, 'modify'):
             flash('Access denied.', 'error')
+            return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
+        
+        # Check if ticket is assigned before allowing closure
+        assignment = TicketAssignment.query.filter_by(
+            ticket_id=ticket_id, is_active=True
+        ).first()
+        
+        if not assignment:
+            flash('Cannot close an unassigned ticket. Please take ownership of the ticket first.', 'error')
+            return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
+        
+        # Get current agent
+        current_agent = SupportAgent.query.filter_by(user_id=current_user.user_id, is_active=True).first()
+        if not current_agent:
+            flash('Only support agents can close tickets.', 'error')
+            return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
+        
+        # Check if the current agent is the one assigned to this ticket
+        if assignment.agent_id != current_agent.agent_id:
+            flash('Only the agent assigned to this ticket can close it.', 'error')
             return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
         
         resolution = request.form.get('resolution', '').strip()
@@ -756,6 +784,7 @@ def close_ticket(ticket_id):
         current_app.logger.info(f"Archive ticket boolean: {archive_ticket}")
         current_app.logger.info(f"Resolution: '{resolution}'")
         current_app.logger.info(f"Current user: {current_user.username} (ID: {current_user.user_id})")
+        current_app.logger.info(f"Assigned agent: {assignment.agent.user.username}")
         
         if not resolution:
             flash('Resolution is required to close the ticket.', 'error')
@@ -772,7 +801,6 @@ def close_ticket(ticket_id):
         if archive_ticket:
             try:
                 current_app.logger.info(f"ARCHIVING: Starting archive process for ticket {ticket_id}")
-                
                 
                 # Create archived ticket record with explicit field validation
                 archived_ticket = ArchivedTicket(
@@ -810,7 +838,6 @@ def close_ticket(ticket_id):
             except Exception as archive_error:
                 current_app.logger.error(f"ARCHIVING ERROR: {str(archive_error)}")
                 current_app.logger.error(f"ARCHIVING ERROR TYPE: {type(archive_error).__name__}")
-                import traceback
                 current_app.logger.error(f"ARCHIVING TRACEBACK: {traceback.format_exc()}")
                 
                 # Don't rollback here, just continue with closing the ticket
@@ -840,11 +867,11 @@ def close_ticket(ticket_id):
         db.session.rollback()
         current_app.logger.error(f"CRITICAL ERROR closing ticket {ticket_id}: {str(e)}")
         current_app.logger.error(f"ERROR TYPE: {type(e).__name__}")
-        import traceback
         current_app.logger.error(f"FULL TRACEBACK: {traceback.format_exc()}")
         flash('An error occurred while closing the ticket.', 'error')
     
     return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
+
 @ticketing_bp.route('/agent/archived-tickets')
 @agent_required
 def agent_archived_tickets():
@@ -893,6 +920,289 @@ def view_archived_ticket(archived_ticket_id):
         current_app.logger.error(f"Error viewing archived ticket: {str(e)}")
         flash('An error occurred while loading the archived ticket.', 'error')
         return redirect(url_for('ticketing.agent_archived_tickets'))
+
+@ticketing_bp.route('/terminate/<int:ticket_id>', methods=['POST'])
+@agent_required
+def terminate_ticket(ticket_id):
+    """Permanently delete ticket from database"""
+    try:
+        ticket = Ticket.query.get_or_404(ticket_id)
+        
+        # Check access
+        if not check_ticket_access(ticket, current_user, 'modify'):
+            flash('Access denied.', 'error')
+            return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
+        
+        # Get current agent for additional permission check
+        agent = SupportAgent.query.filter_by(user_id=current_user.user_id, is_active=True).first()
+        if not agent:
+            flash('Only support agents can terminate tickets.', 'error')
+            return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
+        
+        # Higher clearance agents can terminate any ticket they can view
+        # Lower clearance agents can only terminate tickets they created or are assigned to
+        can_terminate = False
+        
+        if agent.clearance_level >= 4:  # L4 SECRET and L5 TOP SECRET can terminate any viewable ticket
+            can_terminate = True
+        else:
+            # Check if agent is assigned to this ticket or created it
+            assignment = TicketAssignment.query.filter_by(
+                ticket_id=ticket_id, 
+                agent_id=agent.agent_id, 
+                is_active=True
+            ).first()
+            
+            if assignment or ticket.user_id == current_user.user_id:
+                can_terminate = True
+        
+        if not can_terminate:
+            flash('Insufficient permissions to terminate this ticket.', 'error')
+            return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
+        
+        current_app.logger.info(f"=== TERMINATE TICKET {ticket_id} ===")
+        current_app.logger.info(f"Terminated by: {current_user.username} (Agent ID: {agent.agent_id})")
+        current_app.logger.info(f"Ticket details - Title: {ticket.title}, Priority: {ticket.priority}, Classification: {ticket.classification}")
+        
+        # Store ticket info for flash message before deletion
+        ticket_title = ticket.title
+        ticket_number = ticket.ticket_id
+        
+        # Delete related records first (to maintain referential integrity)
+        # Delete ticket assignments
+        TicketAssignment.query.filter_by(ticket_id=ticket_id).delete()
+        
+        # Delete ticket escalations
+        TicketEscalation.query.filter_by(ticket_id=ticket_id).delete()
+        
+        # Delete ticket messages
+        TicketMessage.query.filter_by(ticket_id=ticket_id).delete()
+        
+        # Finally delete the ticket itself
+        db.session.delete(ticket)
+        
+        # Commit all deletions
+        db.session.commit()
+        
+        current_app.logger.info(f"TERMINATE: Ticket #{ticket_number} permanently deleted from database")
+        
+        flash(f'Ticket #{ticket_number} "{ticket_title}" has been permanently terminated and removed from the database.', 'warning')
+        
+        # Redirect to agent dashboard since ticket no longer exists
+        return redirect(url_for('ticketing.agent_dashboard'))
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"CRITICAL ERROR terminating ticket {ticket_id}: {str(e)}")
+        current_app.logger.error(f"ERROR TYPE: {type(e).__name__}")
+        current_app.logger.error(f"FULL TRACEBACK: {traceback.format_exc()}")
+        flash('An error occurred while terminating the ticket.', 'error')
+        return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
+
+
+# --- agent authentication --
+@ticketing_bp.route('/verify-access/<int:ticket_id>', methods=['GET', 'POST'])
+@agent_required
+def verify_access(ticket_id):
+    """Additional authentication for high-classification tickets"""
+    try:
+        ticket = Ticket.query.get_or_404(ticket_id)
+        
+        # Check basic access first
+        if not check_ticket_access(ticket, current_user):
+            abort(403)
+        
+        # Check if additional auth is needed
+        classification_levels = {
+            'public': 1,
+            'internal': 2,
+            'confidential': 3,
+            'secret': 4,
+            'top_secret': 5
+        }
+        
+        ticket_level = classification_levels.get(ticket.classification, 1)
+        
+        # Only require additional auth for level 3+ (confidential and above)
+        if ticket_level < 3:
+            return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
+        
+        # Determine user's security setup
+        has_password = bool(current_user.password_hash)
+        has_2fa = bool(current_user.totp_secret)
+        has_passkey = WebAuthnCredential.query.filter_by(user_id=current_user.user_id).first() is not None
+        
+        # Determine required authentication methods
+        if has_password and has_2fa and has_passkey:
+            required_methods = ['2fa', 'passkey']  # Skip password, use 2FA + passkey
+        elif has_password and has_2fa:
+            required_methods = ['password', '2fa']  # Use password + 2FA
+        elif has_password:
+            required_methods = ['password']  # Password only
+        else:
+            flash('No valid authentication methods configured.', 'error')
+            return redirect(url_for('ticketing.agent_dashboard'))
+        
+        if request.method == 'POST':
+            # Handle different authentication methods
+            auth_method = request.form.get('auth_method')
+            
+            if auth_method == 'password':
+                return handle_password_verification(ticket_id, ticket, required_methods)
+            elif auth_method == 'totp':
+                return handle_2fa_verification(ticket_id, ticket, required_methods)
+            elif auth_method == 'passkey':
+                return handle_passkey_verification(ticket_id, ticket, required_methods)
+        
+        # GET request - show appropriate authentication form
+        return render_template('ticketing/agent_verify_access.html', 
+                             ticket=ticket,
+                             required_methods=required_methods,
+                             has_password=has_password,
+                             has_2fa=has_2fa,
+                             has_passkey=has_passkey)
+        
+    except Exception as e:
+        current_app.logger.error(f"Error in access verification: {str(e)}")
+        flash('An error occurred during access verification.', 'error')
+        return redirect(url_for('ticketing.index'))
+
+def handle_password_verification(ticket_id, ticket, required_methods):
+    """Handle password verification step"""
+    password = request.form.get('password', '').strip()
+    
+    if not password:
+        flash('Password is required.', 'error')
+        return render_template('ticketing/verify_access.html', 
+                             ticket=ticket, 
+                             required_methods=required_methods,
+                             show_password_error=True)
+    
+    # Verify password
+    if not check_password_hash(current_user.password_hash, password):
+        current_app.logger.warning(f"SECURITY: Failed password verification for user {current_user.username} accessing ticket {ticket_id}")
+        flash('Incorrect password. Access denied.', 'error')
+        return render_template('ticketing/verify_access.html', 
+                             ticket=ticket, 
+                             required_methods=required_methods,
+                             show_password_error=True)
+    
+    # Store password verification in session
+    if 'ticket_verification' not in session:
+        session['ticket_verification'] = {}
+    
+    if str(ticket_id) not in session['ticket_verification']:
+        session['ticket_verification'][str(ticket_id)] = {}
+    
+    session['ticket_verification'][str(ticket_id)]['password'] = time.time()
+    
+    # Check if password was the only required method
+    if len(required_methods) == 1 and 'password' in required_methods:
+        return complete_verification(ticket_id, ticket)
+    
+    # Password verified, show next step
+    flash('Password verified. Please complete additional authentication.', 'info')
+    return render_template('ticketing/agent_' \
+    'verify_access.html', 
+                         ticket=ticket, 
+                         required_methods=required_methods,
+                         password_verified=True)
+
+def handle_2fa_verification(ticket_id, ticket, required_methods):
+    """Handle 2FA verification step"""
+    totp_code = request.form.get('totp_code', '').strip()
+    
+    if not totp_code:
+        flash('2FA code is required.', 'error')
+        return render_template('ticketing/agent_verify_access.html', 
+                             ticket=ticket, 
+                             required_methods=required_methods,
+                             show_2fa_error=True)
+    
+    # Verify TOTP code
+    totp = pyotp.TOTP(current_user.totp_secret)
+    if not totp.verify(totp_code, valid_window=1):
+        current_app.logger.warning(f"SECURITY: Failed 2FA verification for user {current_user.username} accessing ticket {ticket_id}")
+        flash('Invalid 2FA code. Access denied.', 'error')
+        return render_template('ticketing/agent_verify_access.html', 
+                             ticket=ticket, 
+                             required_methods=required_methods,
+                             show_2fa_error=True)
+    
+    # Store 2FA verification in session
+    if 'ticket_verification' not in session:
+        session['ticket_verification'] = {}
+    
+    if str(ticket_id) not in session['ticket_verification']:
+        session['ticket_verification'][str(ticket_id)] = {}
+    
+    session['ticket_verification'][str(ticket_id)]['2fa'] = time.time()
+    
+    # Check if all required methods are now verified
+    if is_verification_complete(ticket_id, required_methods):
+        return complete_verification(ticket_id, ticket)
+    
+    # 2FA verified, show next step or completion
+    flash('2FA verified. Please complete passkey authentication.', 'info')
+    return render_template('ticketing/verify_access.html', 
+                         ticket=ticket, 
+                         required_methods=required_methods,
+                         totp_verified=True)
+
+def handle_passkey_verification(ticket_id, ticket, required_methods):
+    """Handle passkey verification step"""
+    # This would integrate with your existing passkey verification logic
+    # For now, we'll mark it as verified (you'll need to implement the actual passkey verification)
+    
+    if 'ticket_verification' not in session:
+        session['ticket_verification'] = {}
+    
+    if str(ticket_id) not in session['ticket_verification']:
+        session['ticket_verification'][str(ticket_id)] = {}
+    
+    session['ticket_verification'][str(ticket_id)]['passkey'] = time.time()
+    
+    # Check if all required methods are now verified
+    if is_verification_complete(ticket_id, required_methods):
+        return complete_verification(ticket_id, ticket)
+    
+    flash('Passkey verified.', 'info')
+    return render_template('ticketing/verify_access.html', 
+                         ticket=ticket, 
+                         required_methods=required_methods,
+                         passkey_verified=True)
+
+def is_verification_complete(ticket_id, required_methods):
+    """Check if all required authentication methods have been verified"""
+    if 'ticket_verification' not in session:
+        return False
+    
+    ticket_verification = session['ticket_verification'].get(str(ticket_id), {})
+    
+    for method in required_methods:
+        if method not in ticket_verification:
+            return False
+    
+    return True
+
+def complete_verification(ticket_id, ticket):
+    """Complete the verification process and grant access"""
+    # Store final verification
+    if 'verified_tickets' not in session:
+        session['verified_tickets'] = {}
+    
+    session['verified_tickets'][str(ticket_id)] = time.time()
+    session.permanent = True
+    
+    # Clear temporary verification data
+    if 'ticket_verification' in session and str(ticket_id) in session['ticket_verification']:
+        del session['ticket_verification'][str(ticket_id)]
+    
+    current_app.logger.info(f"SECURITY: User {current_user.username} completed verification for {ticket.classification} ticket {ticket_id}")
+    
+    flash(f'Access verified for {ticket.classification} classified ticket.', 'success')
+    return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
+
 # --- Admin Routes ---
 
 @ticketing_bp.route('/admin/agents')
@@ -916,88 +1226,107 @@ def manage_agents():
         flash('An error occurred while loading agents.', 'error')
         return redirect(url_for('ticketing.index'))
 
-@ticketing_bp.route('/admin/agents/create', methods=['POST'])
-@admin_required
-def create_agent():
-    """Create new support agent"""
-    try:
-        user_id = request.form.get('user_id', type=int)
-        clearance_level = request.form.get('clearance_level', type=int)
-        department = request.form.get('department', '').strip()
-        specialization = request.form.get('specialization', '').strip()
-        
-        if not all([user_id, clearance_level, department]):
-            flash('User, clearance level, and department are required.', 'error')
-            return redirect(url_for('ticketing.manage_agents'))
-        
-        if clearance_level < 1 or clearance_level > 5:
-            flash('Clearance level must be between 1 and 5.', 'error')
-            return redirect(url_for('ticketing.manage_agents'))
-        
-        # Check if user already has agent record
-        existing_agent = SupportAgent.query.filter_by(user_id=user_id).first()
-        if existing_agent:
-            flash('User is already a support agent.', 'error')
-            return redirect(url_for('ticketing.manage_agents'))
-        
-        # Create agent
-        agent = SupportAgent(
-            user_id=user_id,
-            clearance_level=clearance_level,
-            department=department,
-            specialization=specialization if specialization else None,
-            created_by=current_user.user_id,
-            created_at=datetime.utcnow(),
-            is_active=True
-        )
-        
-        db.session.add(agent)
-        db.session.commit()
-        
-        user = User.query.get(user_id)
-        clearance = ClearanceLevel.query.get(clearance_level)
-        clearance_name = clearance.level_name if clearance else f'L{clearance_level}'
-        flash(f'Support agent created for {user.username} with {clearance_name} clearance.', 'success')
-        
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Error creating agent: {str(e)}")
-        flash('An error occurred while creating the agent.', 'error')
+@ticketing_bp.route('/create', methods=['GET', 'POST'])
+@agent_required
+def create_ticket():
+    """Create new support ticket"""
+    form = TicketForm()
     
-    return redirect(url_for('ticketing.manage_agents'))
-
+    # Populate categories
+    categories = TicketCategory.query.filter_by(is_active=True).all()
+    form.category_id.choices = [(c.category_id, c.name) for c in categories]
+    
+    if form.validate_on_submit():
+        try:
+            # Get selected category to determine clearance and priority
+            category = TicketCategory.query.get(form.category_id.data)
+            if not category:
+                flash('Invalid category selected.', 'error')
+                return render_template('ticketing/create_ticket.html', form=form)
+            
+            # Use category's default priority and required_clearance
+            priority = category.default_priority
+            clearance_level = category.required_clearance
+            
+            # Map clearance level to classification
+            clearance_to_classification = {
+                1: 'public',
+                2: 'internal', 
+                3: 'confidential',
+                4: 'secret',
+                5: 'top_secret'
+            }
+            classification = clearance_to_classification.get(clearance_level, 'public')
+            
+            # Create ticket with category-based classification
+            ticket = Ticket(
+                user_id=current_user.user_id,
+                title=form.title.data,
+                description=form.description.data,
+                category_id=form.category_id.data,
+                priority=priority,
+                classification=classification,
+                status='open',
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            
+            db.session.add(ticket)
+            db.session.flush()  # Get the ticket_id
+            
+            # Don't auto-assign - leave unassigned as requested
+            # auto_assign_ticket(ticket)  # Commented out
+            
+            db.session.commit()
+            
+            # Log ticket creation
+            if splunk_logger:
+                splunk_logger.log_security_event('ticket_created', {
+                    'user_id': current_user.user_id,
+                    'username': current_user.username,
+                    'ticket_id': ticket.ticket_id,
+                    'title': ticket.title,
+                    'priority': priority,
+                    'classification': classification,
+                    'category': category.name,
+                    'clearance_level': clearance_level,
+                    'status': ticket.status
+                })
+            
+            flash(f'Ticket #{ticket.ticket_id} created successfully with {classification} classification!', 'success')
+            return redirect(url_for('ticketing.view_ticket', ticket_id=ticket.ticket_id))
+            
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error creating ticket: {str(e)}")
+            flash('An error occurred while creating the ticket. Please try again.', 'error')
+    
+    return render_template('ticketing/create_ticket.html', form=form)
 # --- Utility Functions ---
-
-def determine_ticket_priority(description, category):
-    """Determine ticket priority based on content and category"""
-    description_lower = description.lower()
-    
-    # Security-related keywords
-    security_keywords = ['hack', 'breach', 'unauthorized', 'malware', 'phishing', 'security', 'exploit']
-    if any(keyword in description_lower for keyword in security_keywords):
-        return 'security'
-    
-    # Critical keywords  
-    critical_keywords = ['cannot login', 'system down', 'data loss', 'urgent', 'critical']
-    if any(keyword in description_lower for keyword in critical_keywords):
-        return 'critical'
-    
-    # High priority keywords
-    high_keywords = ['error', 'bug', 'broken', 'not working', 'issue']
-    if any(keyword in description_lower for keyword in high_keywords):
-        return 'high'
-    
-    # Category-based priority
-    if category:
-        if 'security' in category.name.lower():
-            return 'security'
-        elif 'critical' in category.name.lower() or 'urgent' in category.name.lower():
-            return 'critical'
-        elif 'technical' in category.name.lower():
-            return 'high'
-    
-    return 'medium'
-
+def determine_classification(self):
+    """Determine appropriate classification based on category, content, and priority"""
+    # Security priority always gets confidential or higher classification
+    if hasattr(self, 'priority') and self.priority == 'security':
+        return 'confidential'
+        
+    # Critical priority gets internal classification
+    if hasattr(self, 'priority') and self.priority == 'critical':
+        return 'internal'
+        
+    # Security-related categories should be at least confidential
+    if self.category and 'security' in self.category.name.lower():
+        return 'confidential'
+        
+    # Emergency or critical categories get internal classification
+    if self.category and any(keyword in self.category.name.lower() for keyword in ['critical', 'emergency']):
+        return 'internal'
+        
+    # High priority tickets get internal classification
+    if hasattr(self, 'priority') and self.priority == 'high':
+        return 'internal'
+        
+    # Default to public for low/medium priority
+    return 'public'
 def auto_assign_ticket(ticket):
     """Auto-assign ticket to available agent based on classification and workload"""
     try:
@@ -1039,7 +1368,7 @@ def auto_assign_ticket(ticket):
         current_app.logger.error(f"Error auto-assigning ticket: {str(e)}")
         # Don't raise exception, just log it
 
-
+# --- test archive ----
 @ticketing_bp.route('/test-archive', methods=['GET'])
 @agent_required
 def test_archive():
@@ -1069,5 +1398,4 @@ def test_archive():
         
     except Exception as e:
         db.session.rollback()
-        import traceback
         return f"Error creating test archived ticket: {str(e)}<br>{traceback.format_exc()}"

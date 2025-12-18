@@ -24,7 +24,6 @@ DROP TABLE IF EXISTS ticket_assignments;
 DROP TABLE IF EXISTS ticket_escalations;
 DROP TABLE IF EXISTS ticket_messages;
 DROP TABLE IF EXISTS chat_participants;
-DROP TABLE IF EXISTS chat_key_envelopes;
 DROP TABLE IF EXISTS friend_chat_map;
 DROP TABLE IF EXISTS event_participants;
 DROP TABLE IF EXISTS post_images;
@@ -55,7 +54,6 @@ DROP TABLE IF EXISTS support_agents;
 DROP TABLE IF EXISTS clearance_levels;
 DROP TABLE IF EXISTS permissions;
 DROP TABLE IF EXISTS roles;
-DROP TABLE IF EXISTS user_public_keys;
 DROP TABLE IF EXISTS ModSecLog;
 DROP TABLE IF EXISTS ErrorLog;
 
@@ -83,7 +81,11 @@ CREATE TABLE users (
     last_active_at DATETIME DEFAULT NULL,
     failed_login_attempts INT NOT NULL DEFAULT 0,
     lockout_until DATETIME NULL,
-    totp_secret VARCHAR(32)
+    totp_secret VARCHAR(32),
+    -- Encryption Keys for Messaging ---
+    public_key TEXT NULL,
+    encrypted_private_key TEXT NULL,
+    key_salt VARCHAR(64) NULL -- To derive key from password for private key encryption
 );
 
 -- ---------------------------------------------------------------------------------
@@ -446,6 +448,11 @@ CREATE TABLE messages (
     sent_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     is_deleted_by_sender BOOLEAN NOT NULL DEFAULT FALSE,
     is_deleted_by_receiver BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Encryption Fields ---
+    iv VARCHAR(64) NULL, -- Initialization Vector for AES
+    sender_enc_key TEXT NULL, -- The AES key encrypted with Sender's Public Key
+    receiver_enc_key TEXT NULL, -- The AES key encrypted with Receiver's Public Key
+    -- End Encryption Fields ---
     FOREIGN KEY (chat_id) REFERENCES chats(chat_id) ON DELETE CASCADE,
     FOREIGN KEY (sender_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
@@ -471,27 +478,6 @@ CREATE TABLE blocked_users (
 -- ---------------------------------------------------------------------------------
 -- Encryption & Security Tables
 -- ---------------------------------------------------------------------------------
-CREATE TABLE user_public_keys (
-    user_id INT NOT NULL PRIMARY KEY,
-    alg VARCHAR(32) NOT NULL DEFAULT 'P-256',
-    public_key_spki_b64 TEXT NOT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT fk_upk_user FOREIGN KEY (user_id) REFERENCES users(user_id)
-);
-
-CREATE TABLE chat_key_envelopes (
-    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    chat_id INT NOT NULL,
-    user_id INT NOT NULL,
-    key_version INT NOT NULL DEFAULT 1,
-    envelope_b64 TEXT NOT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_chat_user_version (chat_id, user_id, key_version),
-    CONSTRAINT fk_cke_chat FOREIGN KEY (chat_id) REFERENCES chats(chat_id),
-    CONSTRAINT fk_cke_user FOREIGN KEY (user_id) REFERENCES users(user_id)
-);
 
 -- =================================================================================
 -- SOCIAL FEATURES TABLES
@@ -778,7 +764,10 @@ INSERT INTO ticket_categories (name, description, default_priority, required_cle
 ('Critical System Issues', 'System outages and critical problems', 'critical', 3),
 ('Data Privacy', 'Data protection and privacy concerns', 'high', 3),
 ('API Support', 'Developer and API related questions', 'medium', 2),
-('Emergency Support', 'Urgent emergency situations', 'critical', 4);
+('Emergency Support', 'Urgent emergency situations', 'critical', 4),
+('Security Breach Investigation', 'Active security breaches and forensic investigations', 'security', 5),
+('Classified Data Incidents', 'Incidents involving classified or top secret information', 'security', 5),
+('Intelligence Operations Support', 'Support for intelligence and surveillance operations', 'security', 5);
 
 -- ---------------------------------------------------------------------------------
 -- Support Agents with Clearance Levels

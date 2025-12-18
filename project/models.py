@@ -42,6 +42,11 @@ class User(UserMixin, db.Model):
     failed_login_attempts = db.Column(db.Integer, default=0)
     lockout_until = db.Column(db.DateTime, nullable=True)
     totp_secret = db.Column(db.String(32), nullable=True)
+
+    # --- E2EE Columns ---
+    public_key = db.Column(db.Text, nullable=True)
+    encrypted_private_key = db.Column(db.Text, nullable=True)
+    key_salt = db.Column(db.String(64), nullable=True)
     
     # Relationships
     roles = db.relationship('Role', secondary=user_role_assignments,
@@ -397,12 +402,18 @@ class Message(db.Model):
     chat_id = db.Column(db.Integer, db.ForeignKey('chats.chat_id'), nullable=False)
     sender_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     message_text = db.Column(db.Text, nullable=False)
+
+    # --- E2EE Metadata ---
+    iv = db.Column(db.String(64), nullable=True) # Base64
+    sender_enc_key = db.Column(db.Text, nullable=True) # AES key encrypted with Sender Public Key
+    receiver_enc_key = db.Column(db.Text, nullable=True) # AES key encrypted with Receiver Public Key
+    
     sent_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     is_deleted_by_sender = db.Column(db.Boolean, nullable=False, default=False)
     is_deleted_by_receiver = db.Column(db.Boolean, nullable=False, default=False)
 
     def __repr__(self):
-        return f"<Message {self.message_id} in Chat:{self.chat_id} from User:{self.sender_id}>"
+        return f"<Message {self.message_id} in Chat:{self.chat_id} from User:{self.sender_id}, Message {self.message_id} E2EE>"
     
 class BlockedUser(db.Model):
     __tablename__ = 'blocked_users'
@@ -422,30 +433,6 @@ class BlockedUser(db.Model):
 
     __table_args__ = (
         db.UniqueConstraint('blocker_id', 'blocked_id', name='uq_blocker_blocked'),
-    )
-
-class UserPublicKey(db.Model):
-    __tablename__ = 'user_public_keys'
-    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), primary_key=True)
-    alg = db.Column(db.String(32), nullable=False, default='P-256')
-    public_key_spki_b64 = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    user = db.relationship('User', backref=db.backref('public_key', uselist=False))
-
-class ChatKeyEnvelope(db.Model):
-    __tablename__ = 'chat_key_envelopes'
-    id = db.Column(db.Integer, primary_key=True)
-    chat_id = db.Column(db.Integer, db.ForeignKey('chats.chat_id'), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
-    key_version = db.Column(db.Integer, nullable=False, default=1)
-    envelope_b64 = db.Column(db.Text, nullable=False)  # chat key encrypted to this user's public key (base64)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    __table_args__ = (
-        db.UniqueConstraint('chat_id', 'user_id', 'key_version', name='uq_chat_user_version'),
     )
 
 # **************************************

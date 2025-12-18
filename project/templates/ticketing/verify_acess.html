@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Access - Ticket #{{ ticket.ticket_id }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card mt-5">
+                    <div class="card-header bg-primary text-white">
+                        <h4><i class="fas fa-shield-alt"></i> Access Verification Required</h4>
+                    </div>
+                    <div class="card-body">
+                        <!-- Ticket Info -->
+                        <div class="alert alert-info">
+                            <strong>Ticket #{{ ticket.ticket_id }}</strong><br>
+                            <span class="badge bg-secondary">{{ ticket.classification.upper() }}</span>
+                            {{ ticket.title }}
+                        </div>
+
+                        <!-- Flash Messages -->
+                        {% with messages = get_flashed_messages(with_categories=true) %}
+                            {% if messages %}
+                                {% for category, message in messages %}
+                                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                                        {{ message }}
+                                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                    </div>
+                                {% endfor %}
+                            {% endif %}
+                        {% endwith %}
+
+                        <!-- Authentication Forms -->
+                        {% if 'password' in required_methods and not password_verified %}
+                            <form method="post">
+                                <input type="hidden" name="auth_method" value="password">
+                                <div class="mb-3">
+                                    <label for="password" class="form-label">Password</label>
+                                    <input type="password" class="form-control {% if show_password_error %}is-invalid{% endif %}" 
+                                           id="password" name="password" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Verify Password</button>
+                            </form>
+                        {% endif %}
+
+                        {% if '2fa' in required_methods and (password_verified or 'password' not in required_methods) and not totp_verified %}
+                            <form method="post">
+                                <input type="hidden" name="auth_method" value="totp">
+                                <div class="mb-3">
+                                    <label for="totp_code" class="form-label">2FA Code</label>
+                                    <input type="text" class="form-control {% if show_2fa_error %}is-invalid{% endif %}" 
+                                           id="totp_code" name="totp_code" maxlength="6" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Verify 2FA</button>
+                            </form>
+                        {% endif %}
+
+                        {% if 'passkey' in required_methods and (totp_verified or '2fa' not in required_methods) and not passkey_verified %}
+                            <form method="post">
+                                <input type="hidden" name="auth_method" value="passkey">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-fingerprint"></i> Authenticate with Passkey
+                                </button>
+                            </form>
+                        {% endif %}
+
+                        <!-- Progress Indicator -->
+                        {% if required_methods|length > 1 %}
+                        <div class="mt-3">
+                            <small class="text-muted">
+                                Progress: 
+                                {% set verified_count = 0 %}
+                                {% if password_verified %}{% set verified_count = verified_count + 1 %}{% endif %}
+                                {% if totp_verified %}{% set verified_count = verified_count + 1 %}{% endif %}
+                                {% if passkey_verified %}{% set verified_count = verified_count + 1 %}{% endif %}
+                                {{ verified_count }}/{{ required_methods|length }} steps completed
+                            </small>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="card-footer">
+                        <a href="{{ url_for('ticketing.agent_dashboard') }}" class="btn btn-outline-secondary">
+                            Back to Dashboard
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

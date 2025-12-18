@@ -1,19 +1,71 @@
 services:
   
-  mysql:
+  mysql-master:
     image: mysql:8.0.35
-    hostname: mysql  
+    hostname: mysql-master  
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: flaskdb
       MYSQL_USER: flaskuser
       MYSQL_PASSWORD: password
-    command: --log-bin=mysql-bin --server-id=1 --binlog-format=ROW --log-slave-updates=1 --report-host=mysql
+    command: --log-bin=mysql-bin --server-id=1 --binlog-format=ROW --log-slave-updates=1 --report-host=mysql-master --gtid-mode=ON --enforce-gtid-consistency=ON
     volumes:
       - ./mysql:/docker-entrypoint-initdb.d
-      - mysql-data:/var/lib/mysql
+      - mysql-master-data:/var/lib/mysql
     ports:
       - "33600:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 5s
+    networks:
+      - flask-sql
+
+  mysql-slave1:
+    image: mysql:8.0.35
+    hostname: mysql-slave1
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: flaskdb
+      MYSQL_USER: flaskuser
+      MYSQL_PASSWORD: password
+    command: --log-bin=mysql-bin --server-id=2 --binlog-format=ROW --log-slave-updates=1 --report-host=mysql-slave1 --read-only=1 --gtid-mode=ON --enforce-gtid-consistency=ON
+    volumes:
+      - ./mysql:/docker-entrypoint-initdb.d
+      - mysql-slave1-data:/var/lib/mysql
+    ports:
+      - "33602:3306"
+    depends_on:
+      mysql-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 5s
+    networks:
+      - flask-sql
+
+  mysql-slave2:
+    image: mysql:8.0.35
+    hostname: mysql-slave2
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: flaskdb
+      MYSQL_USER: flaskuser
+      MYSQL_PASSWORD: password
+    command: --log-bin=mysql-bin --server-id=3 --binlog-format=ROW --log-slave-updates=1 --report-host=mysql-slave2 --read-only=1 --gtid-mode=ON --enforce-gtid-consistency=ON
+    volumes:
+      - ./mysql:/docker-entrypoint-initdb.d
+      - mysql-slave2-data:/var/lib/mysql
+    ports:
+      - "33603:3306"
+    depends_on:
+      mysql-master:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
       interval: 10s
@@ -66,7 +118,7 @@ services:
     depends_on:
       orchestrator-db:
         condition: service_healthy
-      mysql:
+      mysql-master:
         condition: service_healthy
     networks:
       - flask-sql
@@ -88,7 +140,7 @@ services:
       - ./nginx_logs:/code/shared_logs
       - ./certs:/code/certs
     depends_on:
-      mysql:
+      mysql-master:
         condition: service_healthy
     networks:
       - flask-sql
@@ -106,7 +158,7 @@ services:
       - ./nginx_logs:/code/shared_logs
       - ./certs:/code/certs
     depends_on:
-      mysql:
+      mysql-master:
         condition: service_healthy
     networks:
       - flask-sql
@@ -124,7 +176,7 @@ services:
       - ./nginx_logs:/code/shared_logs
       - ./certs:/code/certs
     depends_on:
-      mysql:
+      mysql-master:
         condition: service_healthy
     networks:
       - flask-sql
@@ -165,7 +217,6 @@ services:
     networks:
       - flask-sql
 
-    # Splunk Enterprise - FIXED
   splunk:
     image: splunk/splunk:8.2
     container_name: splunk-enterprise
@@ -184,7 +235,6 @@ services:
     restart: unless-stopped
     command: start-service
   
-  # Universal Forwarder - FIXED
   splunk-forwarder:
     image: splunk/universalforwarder:latest
     container_name: splunk-forwarder
@@ -204,8 +254,11 @@ services:
     networks:
       - flask-sql
     restart: unless-stopped
+
 volumes:
-  mysql-data:
+  mysql-master-data:
+  mysql-slave1-data:
+  mysql-slave2-data:
   orchestrator-data:
   orchestrator-db-data:
   orchestrator-logs:

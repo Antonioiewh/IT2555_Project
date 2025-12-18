@@ -218,6 +218,8 @@ class Post(db.Model):
     post_content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Added visibility column: 'private' | 'friends' | 'public'
+    visibility = db.Column(db.String(16), nullable=False, server_default='friends')
     
     # Relationships
     user = db.relationship("User", back_populates="posts")

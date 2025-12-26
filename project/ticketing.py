@@ -20,6 +20,7 @@ from models import (
 )
 from forms import TicketForm, TicketReplyForm, TicketAssignForm, KnowledgeBaseForm
 from decorators import role_required, admin_required, agent_required
+from content_checker import content_scanner, check_sensitive_content
 
 # Optional imports that might not be available
 try:
@@ -540,63 +541,6 @@ def view_ticket(ticket_id):
         flash('An error occurred while loading the ticket.', 'error')
         return redirect(url_for('ticketing.index'))
 
-# unused
-@ticketing_bp.route('/reply/<int:ticket_id>', methods=['POST'])
-@agent_required
-def reply_ticket(ticket_id):
-    """Add reply to ticket"""
-    try:
-        ticket = Ticket.query.get_or_404(ticket_id)
-        
-        # Check access permissions
-        if not check_ticket_access(ticket, current_user):
-            abort(403)
-        
-        form = TicketReplyForm()
-        
-        if form.validate_on_submit():
-            # Check if user is support agent
-            agent = SupportAgent.query.filter_by(user_id=current_user.user_id, is_active=True).first()
-            is_agent_reply = agent is not None
-            
-            # Create message
-            message = TicketMessage(
-                ticket_id=ticket_id,
-                user_id=current_user.user_id,
-                message=form.message.data,
-                is_internal=form.is_internal.data if is_agent_reply else False,
-                created_at=datetime.utcnow()
-            )
-            
-            db.session.add(message)
-            
-            # Update ticket status and timestamp
-            ticket.updated_at = datetime.utcnow()
-            
-            # If agent reply, update status to in_progress
-            if is_agent_reply and ticket.status == 'open':
-                ticket.status = 'in_progress'
-            
-            # If user reply and ticket was pending, reopen it
-            elif not is_agent_reply and ticket.status == 'pending':
-                ticket.status = 'in_progress'
-            
-            db.session.commit()
-            
-            flash('Reply added successfully!', 'success')
-            
-        else:
-            for field, errors in form.errors.items():
-                for error in errors:
-                    flash(f'{field}: {error}', 'error')
-        
-        return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
-        
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Error replying to ticket: {str(e)}")
-        flash('An error occurred while adding your reply.', 'error')
-        return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
 
 @ticketing_bp.route('/take/<int:ticket_id>', methods=['POST'])
 @agent_required
@@ -1467,7 +1411,7 @@ def manage_agents():
 @ticketing_bp.route('/create', methods=['GET', 'POST'])
 @agent_required
 def create_ticket():
-    """Create new support ticket"""
+    """Create new support ticket with content scanning"""
     form = TicketForm()
     
     # Populate categories
@@ -1482,9 +1426,34 @@ def create_ticket():
                 flash('Invalid category selected.', 'error')
                 return render_template('ticketing/create_ticket.html', form=form)
             
+            # Scan content for sensitive information
+            combined_content = f"{form.title.data} {form.description.data}"
+            content_assessment = content_scanner(
+                content_type='ticket',
+                content_text=combined_content,
+                user_id=current_user.user_id,
+                additional_context={
+                    'category': category.name,
+                    'user_agent': request.headers.get('User-Agent', 'Unknown')
+                }
+            )
+            
+            # Check if content should be blocked
+            if content_assessment['block_content']:
+                current_app.logger.warning(f"SECURITY: Blocked ticket submission from user {current_user.username} due to high-risk content")
+                flash(
+                    'Your ticket contains highly sensitive information that cannot be processed through this system. '
+                    'Please remove sensitive data (NRIC, credit card numbers, etc.) or contact support directly for secure handling.',
+                    'error'
+                )
+                return render_template('ticketing/create_ticket.html', form=form, content_warnings=content_assessment['warnings'])
+            
             # Use category's default priority and required_clearance
             priority = category.default_priority
-            clearance_level = category.required_clearance
+            base_clearance_level = category.required_clearance
+            
+            # Determine final classification based on content scan and category
+            content_classification = content_assessment['classification_required']
             
             # Map clearance level to classification
             clearance_to_classification = {
@@ -1494,16 +1463,33 @@ def create_ticket():
                 4: 'secret',
                 5: 'top_secret'
             }
-            classification = clearance_to_classification.get(clearance_level, 'public')
+            category_classification = clearance_to_classification.get(base_clearance_level, 'public')
             
-            # Create ticket with category-based classification
+            # Use the higher of the two classifications
+            classification_levels = {
+                'public': 1,
+                'internal': 2,
+                'confidential': 3,
+                'secret': 4,
+                'top_secret': 5
+            }
+            
+            content_level = classification_levels.get(content_classification, 1)
+            category_level = classification_levels.get(category_classification, 1)
+            final_level = max(content_level, category_level)
+            
+            # Get final classification
+            level_to_classification = {v: k for k, v in classification_levels.items()}
+            final_classification = level_to_classification[final_level]
+            
+            # Create ticket with content-aware classification
             ticket = Ticket(
                 user_id=current_user.user_id,
                 title=form.title.data,
                 description=form.description.data,
                 category_id=form.category_id.data,
                 priority=priority,
-                classification=classification,
+                classification=final_classification,
                 status='open',
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow()
@@ -1512,26 +1498,46 @@ def create_ticket():
             db.session.add(ticket)
             db.session.flush()  # Get the ticket_id
             
-            # Don't auto-assign - leave unassigned as requested
-            # auto_assign_ticket(ticket)  # Commented out
+            # Auto-assign ticket based on classification
+            auto_assign_ticket(ticket)
             
             db.session.commit()
             
-            # Log ticket creation
-            if splunk_logger:
-                splunk_logger.log_security_event('ticket_created', {
-                    'user_id': current_user.user_id,
-                    'username': current_user.username,
-                    'ticket_id': ticket.ticket_id,
-                    'title': ticket.title,
-                    'priority': priority,
-                    'classification': classification,
-                    'category': category.name,
-                    'clearance_level': clearance_level,
-                    'status': ticket.status
-                })
+            # Log ticket creation with content scan results
+            log_data = {
+                'user_id': current_user.user_id,
+                'username': current_user.username,
+                'ticket_id': ticket.ticket_id,
+                'title': ticket.title,
+                'priority': priority,
+                'classification': final_classification,
+                'category': category.name,
+                'base_clearance_level': base_clearance_level,
+                'content_classification': content_classification,
+                'content_risk_score': content_assessment['risk_score'],
+                'sensitive_content_detected': content_assessment['match_count'] > 0,
+                'content_warnings': content_assessment['warnings'],
+                'status': ticket.status
+            }
             
-            flash(f'Ticket #{ticket.ticket_id} created successfully with {classification} classification!', 'success')
+            if splunk_logger:
+                splunk_logger.log_security_event('ticket_created_with_content_scan', log_data)
+            
+            current_app.logger.info(f"Ticket created: ID={ticket.ticket_id}, Classification={final_classification}, Content Risk={content_assessment['risk_score']}")
+            
+            # Show appropriate success message
+            success_msg = f'Ticket #{ticket.ticket_id} created successfully with {final_classification} classification!'
+            if content_assessment['requires_review']:
+                success_msg += f" Note: Your ticket has been flagged for review due to potentially sensitive content."
+            if final_classification != category_classification:
+                success_msg += f" Classification was upgraded from {category_classification} to {final_classification} due to content analysis."
+                
+            flash(success_msg, 'success')
+            
+            # Show content warnings if any
+            for warning in content_assessment['warnings']:
+                flash(f"Content Warning: {warning}", 'warning')
+            
             return redirect(url_for('ticketing.view_ticket', ticket_id=ticket.ticket_id))
             
         except Exception as e:

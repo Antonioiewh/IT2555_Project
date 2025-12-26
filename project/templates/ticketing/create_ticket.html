@@ -110,6 +110,64 @@ body {
     margin-bottom: 0;
 }
 
+/* Content Warnings Alert */
+.content-warnings-alert {
+    background: #fef7e0;
+    border: 2px solid var(--google-yellow);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 4px rgba(251, 188, 4, 0.1);
+}
+
+.content-warnings-alert h3 {
+    color: #f57c00;
+    font-size: 16px;
+    font-weight: 500;
+    margin: 0 0 12px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.content-warnings-alert .material-icons {
+    color: #f57c00;
+    font-size: 20px;
+}
+
+.warning-intro {
+    color: var(--google-grey-800);
+    margin: 0 0 12px 0;
+    font-weight: 500;
+}
+
+.warnings-list {
+    color: var(--google-grey-700);
+    margin: 0 0 16px 0;
+    padding-left: 20px;
+}
+
+.warnings-list li {
+    margin-bottom: 8px;
+}
+
+.warnings-list li:last-child {
+    margin-bottom: 0;
+}
+
+.warning-actions {
+    background: rgba(245, 124, 0, 0.1);
+    border: 1px solid rgba(245, 124, 0, 0.3);
+    border-radius: 6px;
+    padding: 12px;
+    color: #f57c00;
+    font-size: 14px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 /* Form Groups */
 .form-group {
     margin-bottom: 28px;
@@ -408,6 +466,28 @@ textarea.form-control {
         </div>
         
         <div class="card-body">
+            <!-- Content Warnings Section -->
+            {% if content_warnings %}
+            <div class="content-warnings-alert">
+                <h3>
+                    <span class="material-icons">warning</span>
+                    Content Security Warnings
+                </h3>
+                <p class="warning-intro">
+                    Your ticket content has been flagged for potential security concerns:
+                </p>
+                <ul class="warnings-list">
+                    {% for warning in content_warnings %}
+                    <li>{{ warning }}</li>
+                    {% endfor %}
+                </ul>
+                <div class="warning-actions">
+                    <span class="material-icons">info</span>
+                    Please review and remove any sensitive information (NRIC, credit card numbers, passwords) before submitting.
+                </div>
+            </div>
+            {% endif %}
+            
             <!-- Help Information -->
             <div class="info-alert">
                 <h3>
@@ -417,6 +497,7 @@ textarea.form-control {
                 <ul>
                     <li><strong>Be specific:</strong> Provide clear, detailed descriptions</li>
                     <li><strong>Security matters:</strong> Security-related tickets will be automatically classified and prioritized</li>
+                    <li><strong>Content scanning:</strong> All tickets are scanned for sensitive content and classified accordingly</li>
                     <li><strong>Priority:</strong> System will automatically determine priority based on content and category</li>
                     <li><strong>Assignment:</strong> Tickets will be auto-assigned to qualified support agents</li>
                 </ul>

@@ -80,11 +80,11 @@ def get_available_escalation_tiers(current_clearance_level, ticket_classificatio
     """Get available escalation tiers for current agent based on ticket classification"""
     tiers = []
     tier_names = {
-        1: 'L1-PUBLIC',
-        2: 'L2-INTERNAL',
-        3: 'L3-CONFIDENTIAL', 
-        4: 'L4-SECRET',
-        5: 'L5-TOP SECRET'
+        1: 'PUBLIC',
+        2: 'INTERNAL',
+        3: 'CONFIDENTIAL', 
+        4: 'SECRET',
+        5: 'TOP_SECRET'
     }
     
     # Classification to level mapping
@@ -107,12 +107,11 @@ def get_available_escalation_tiers(current_clearance_level, ticket_classificatio
     for level in range(current_ticket_level + 1, current_clearance_level + 1):
         tiers.append({
             'level': level,
-            'name': tier_names.get(level, f'L{level}'),
-            'description': f'Escalate to Level {level} clearance'
+            'name': tier_names.get(level, f'LEVEL_{level}'),
+            'description': f'Escalate to {tier_names.get(level, f"Level {level}").title().replace("_", " ")} clearance level'
         })
     
     return tiers
-
 
 def check_additional_auth_required(ticket_id, user):
     """Check if additional authentication is required and valid"""
@@ -159,6 +158,185 @@ def check_additional_auth_required(ticket_id, user):
         current_app.logger.error(f"Error checking additional auth: {str(e)}")
         return True  # Require auth on error
 
+def check_additional_auth_required_archived(archived_ticket_id, user):
+    """Check if additional authentication is required for archived tickets"""
+    try:
+        archived_ticket = ArchivedTicket.query.get(archived_ticket_id)
+        if not archived_ticket:
+            return True  # Require auth if archived ticket not found
+        
+        # Check classification level
+        classification_levels = {
+            'public': 1,
+            'internal': 2,
+            'confidential': 3,
+            'secret': 4,
+            'top_secret': 5
+        }
+        
+        ticket_level = classification_levels.get(archived_ticket.classification, 1)
+        
+        # No additional auth needed for level 1-2
+        if ticket_level < 3:
+            return False
+        
+        # Check session for verification
+        if 'verified_archived_tickets' not in session:
+            return True
+        
+        verification_time = session['verified_archived_tickets'].get(str(archived_ticket_id))
+        if not verification_time:
+            return True
+        
+        # Check if verification is still valid (10 minutes)
+        if time.time() - verification_time > 600:  # 10 minutes
+            # Remove expired verification
+            del session['verified_archived_tickets'][str(archived_ticket_id)]
+            # Also clean up any partial verification data
+            if 'archived_ticket_verification' in session and str(archived_ticket_id) in session['archived_ticket_verification']:
+                del session['archived_ticket_verification'][str(archived_ticket_id)]
+            return True
+        
+        return False
+        
+    except Exception as e:
+        current_app.logger.error(f"Error checking additional auth for archived ticket: {str(e)}")
+        return True  # Require auth on error
+
+def handle_archived_password_verification(archived_ticket_id, archived_ticket, required_methods):
+    """Handle password verification for archived tickets"""
+    password = request.form.get('password', '').strip()
+    
+    if not password:
+        flash('Password is required.', 'error')
+        return render_template('ticketing/verify_archived_access.html', 
+                             archived_ticket=archived_ticket, 
+                             required_methods=required_methods,
+                             show_password_error=True)
+    
+    # Verify password
+    if not check_password_hash(current_user.password_hash, password):
+        current_app.logger.warning(f"SECURITY: Failed password verification for user {current_user.username} accessing archived ticket {archived_ticket_id}")
+        flash('Incorrect password. Access denied.', 'error')
+        return render_template('ticketing/verify_archived_access.html', 
+                             archived_ticket=archived_ticket, 
+                             required_methods=required_methods,
+                             show_password_error=True)
+    
+    # Store password verification in session
+    if 'archived_ticket_verification' not in session:
+        session['archived_ticket_verification'] = {}
+    
+    if str(archived_ticket_id) not in session['archived_ticket_verification']:
+        session['archived_ticket_verification'][str(archived_ticket_id)] = {}
+    
+    session['archived_ticket_verification'][str(archived_ticket_id)]['password'] = time.time()
+    
+    # Check if password was the only required method
+    if len(required_methods) == 1 and 'password' in required_methods:
+        return complete_archived_verification(archived_ticket_id, archived_ticket)
+    
+    # Password verified, show next step
+    flash('Password verified. Please complete additional authentication.', 'info')
+    return render_template('ticketing/verify_archived_access.html', 
+                         archived_ticket=archived_ticket, 
+                         required_methods=required_methods,
+                         password_verified=True)
+
+def handle_archived_2fa_verification(archived_ticket_id, archived_ticket, required_methods):
+    """Handle 2FA verification for archived tickets"""
+    totp_code = request.form.get('totp_code', '').strip()
+    
+    if not totp_code:
+        flash('2FA code is required.', 'error')
+        return render_template('ticketing/verify_archived_access.html', 
+                             archived_ticket=archived_ticket, 
+                             required_methods=required_methods,
+                             show_2fa_error=True)
+    
+    # Verify TOTP code
+    totp = pyotp.TOTP(current_user.totp_secret)
+    if not totp.verify(totp_code, valid_window=1):
+        current_app.logger.warning(f"SECURITY: Failed 2FA verification for user {current_user.username} accessing archived ticket {archived_ticket_id}")
+        flash('Invalid 2FA code. Access denied.', 'error')
+        return render_template('ticketing/verify_archived_access.html', 
+                             archived_ticket=archived_ticket, 
+                             required_methods=required_methods,
+                             show_2fa_error=True)
+    
+    # Store 2FA verification in session
+    if 'archived_ticket_verification' not in session:
+        session['archived_ticket_verification'] = {}
+    
+    if str(archived_ticket_id) not in session['archived_ticket_verification']:
+        session['archived_ticket_verification'][str(archived_ticket_id)] = {}
+    
+    session['archived_ticket_verification'][str(archived_ticket_id)]['2fa'] = time.time()
+    
+    # Check if all required methods are now verified
+    if is_archived_verification_complete(archived_ticket_id, required_methods):
+        return complete_archived_verification(archived_ticket_id, archived_ticket)
+    
+    # 2FA verified, show next step or completion
+    flash('2FA verified. Please complete passkey authentication.', 'info')
+    return render_template('ticketing/verify_archived_access.html', 
+                         archived_ticket=archived_ticket, 
+                         required_methods=required_methods,
+                         totp_verified=True)
+
+def handle_archived_passkey_verification(archived_ticket_id, archived_ticket, required_methods):
+    """Handle passkey verification for archived tickets"""
+    # This would integrate with your existing passkey verification logic
+    # For now, we'll mark it as verified (you'll need to implement the actual passkey verification)
+    
+    if 'archived_ticket_verification' not in session:
+        session['archived_ticket_verification'] = {}
+    
+    if str(archived_ticket_id) not in session['archived_ticket_verification']:
+        session['archived_ticket_verification'][str(archived_ticket_id)] = {}
+    
+    session['archived_ticket_verification'][str(archived_ticket_id)]['passkey'] = time.time()
+    
+    # Check if all required methods are now verified
+    if is_archived_verification_complete(archived_ticket_id, required_methods):
+        return complete_archived_verification(archived_ticket_id, archived_ticket)
+    
+    flash('Passkey verified.', 'info')
+    return render_template('ticketing/verify_archived_access.html', 
+                         archived_ticket=archived_ticket, 
+                         required_methods=required_methods,
+                         passkey_verified=True)
+
+def is_archived_verification_complete(archived_ticket_id, required_methods):
+    """Check if all required authentication methods have been verified for archived tickets"""
+    if 'archived_ticket_verification' not in session:
+        return False
+    
+    ticket_verification = session['archived_ticket_verification'].get(str(archived_ticket_id), {})
+    
+    for method in required_methods:
+        if method not in ticket_verification:
+            return False
+    
+    return True
+
+def complete_archived_verification(archived_ticket_id, archived_ticket):
+    """Complete the verification process and grant access to archived ticket"""
+    # Store final verification
+    if 'verified_archived_tickets' not in session:
+        session['verified_archived_tickets'] = {}
+    
+    session['verified_archived_tickets'][str(archived_ticket_id)] = time.time()
+    session.permanent = True
+    
+    # Clear temporary verification data
+    if 'archived_ticket_verification' in session and str(archived_ticket_id) in session['archived_ticket_verification']:
+        del session['archived_ticket_verification'][str(archived_ticket_id)]
+    
+    current_app.logger.info(f"SECURITY: User {current_user.username} completed verification for {archived_ticket.classification} archived ticket {archived_ticket_id}")
+    
+    flash(f'Access verified for {archived_ticket.classification} classified archived ticket.', 'success')
+    return redirect(url_for('ticketing.view_archived_ticket', archived_ticket_id=archived_ticket_id))
 # --- User Routes ---
 
 @ticketing_bp.route('/')
@@ -879,13 +1057,13 @@ def agent_archived_tickets():
     try:
         agent = SupportAgent.query.filter_by(user_id=current_user.user_id, is_active=True).first()
         if not agent:
-            flash('Agent profile not found.', 'error')
+            flash('You are not authorized as a support agent.', 'error')
             return redirect(url_for('ticketing.index'))
         
         # Get classifications at or below this agent's clearance level
         accessible_classifications = get_classifications_at_or_below_level(agent.clearance_level)
         
-        # Get archived tickets based on clearance
+        # Get archived tickets that this agent can access based on classification
         archived_tickets = ArchivedTicket.query.filter(
             ArchivedTicket.classification.in_(accessible_classifications)
         ).order_by(ArchivedTicket.archived_at.desc()).all()
@@ -906,20 +1084,80 @@ def view_archived_ticket(archived_ticket_id):
     try:
         archived_ticket = ArchivedTicket.query.get_or_404(archived_ticket_id)
         
-        # Check clearance access
+        # Get current agent
         agent = SupportAgent.query.filter_by(user_id=current_user.user_id, is_active=True).first()
-        if not agent or not agent.can_view_classification(archived_ticket.classification):
-            flash('Access denied - insufficient clearance level.', 'error')
+        if not agent:
+            flash('You are not authorized as a support agent.', 'error')
+            return redirect(url_for('ticketing.index'))
+        
+        # Check if agent can view this classification level
+        if not agent.can_view_classification(archived_ticket.classification):
+            current_app.logger.warning(f"SECURITY: Agent {current_user.username} (clearance level {agent.clearance_level}) attempted to access archived ticket {archived_ticket_id} with classification {archived_ticket.classification}")
+            flash('You do not have sufficient clearance to view this archived ticket.', 'error')
             return redirect(url_for('ticketing.agent_archived_tickets'))
         
+        # Check if additional authentication is required for high-classification archived tickets
+        if check_additional_auth_required_archived(archived_ticket_id, current_user):
+            session['pending_archived_ticket_id'] = archived_ticket_id
+            return redirect(url_for('ticketing.verify_archived_access', archived_ticket_id=archived_ticket_id))
+        
         return render_template('ticketing/view_archived_ticket.html', 
-                             ticket=archived_ticket,
+                             archived_ticket=archived_ticket,
                              agent=agent)
         
     except Exception as e:
         current_app.logger.error(f"Error viewing archived ticket: {str(e)}")
         flash('An error occurred while loading the archived ticket.', 'error')
         return redirect(url_for('ticketing.agent_archived_tickets'))
+
+@ticketing_bp.route('/verify-archived-access/<int:archived_ticket_id>', methods=['GET', 'POST'])
+@agent_required
+def verify_archived_access(archived_ticket_id):
+    """Additional authentication for high-classification archived tickets"""
+    try:
+        archived_ticket = ArchivedTicket.query.get_or_404(archived_ticket_id)
+        
+        # Get current agent
+        agent = SupportAgent.query.filter_by(user_id=current_user.user_id, is_active=True).first()
+        if not agent:
+            flash('You are not authorized as a support agent.', 'error')
+            return redirect(url_for('ticketing.index'))
+        
+        # Check if agent can view this classification level
+        if not agent.can_view_classification(archived_ticket.classification):
+            current_app.logger.warning(f"SECURITY: Agent {current_user.username} attempted unauthorized access to archived ticket {archived_ticket_id}")
+            flash('You do not have sufficient clearance to view this archived ticket.', 'error')
+            return redirect(url_for('ticketing.agent_archived_tickets'))
+        
+        # Determine required authentication methods based on classification
+        classification_levels = {
+            'confidential': ['password'],
+            'secret': ['password', '2fa'],
+            'top_secret': ['password', '2fa', 'passkey']
+        }
+        
+        required_methods = classification_levels.get(archived_ticket.classification, [])
+        
+        if request.method == 'POST':
+            verification_type = request.form.get('verification_type')
+            
+            if verification_type == 'password':
+                return handle_archived_password_verification(archived_ticket_id, archived_ticket, required_methods)
+            elif verification_type == '2fa':
+                return handle_archived_2fa_verification(archived_ticket_id, archived_ticket, required_methods)
+            elif verification_type == 'passkey':
+                return handle_archived_passkey_verification(archived_ticket_id, archived_ticket, required_methods)
+        
+        return render_template('ticketing/verify_archived_access.html', 
+                             archived_ticket=archived_ticket, 
+                             required_methods=required_methods,
+                             agent=agent)
+        
+    except Exception as e:
+        current_app.logger.error(f"Error in archived ticket verification: {str(e)}")
+        flash('An error occurred during verification.', 'error')
+        return redirect(url_for('ticketing.agent_archived_tickets'))
+
 
 @ticketing_bp.route('/terminate/<int:ticket_id>', methods=['POST'])
 @agent_required

@@ -152,7 +152,8 @@ def account_security():
                          user_passkeys=user_passkeys)
 
 # --- User Reporting ---
-@user_bp.route('/report_user', methods=['GET', 'POST'])
+# REMOVED
+#@user_bp.route('/report_user', methods=['GET', 'POST'])
 @user_required
 def report_user():
     form = ReportForm()

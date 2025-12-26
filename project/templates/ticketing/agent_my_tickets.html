@@ -43,7 +43,15 @@
             <div class="agent-details">
                 <h3>{{ agent.user.username }}</h3>
                 <div class="agent-meta">
-                    <span class="clearance-badge">Level {{ agent.clearance_level }}</span>
+                    <div class="clearance-badge clearance-{{ agent.clearance_level_info.level_name.lower() }}">
+                        <span class="material-icons">
+                            {% if agent.clearance_level_info.level_name == 'TOP_SECRET' %}lock
+                            {% elif agent.clearance_level_info.level_name == 'SECRET' %}security
+                            {% elif agent.clearance_level_info.level_name == 'CONFIDENTIAL' %}visibility_off
+                            {% else %}lock_open{% endif %}
+                        </span>
+                        {{ agent.clearance_level_info.level_name.replace('_', ' ') }} CLEARANCE
+                    </div>
                     <span class="department">{{ agent.department }}</span>
                 </div>
             </div>

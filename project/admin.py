@@ -134,8 +134,9 @@ def reactivate_user(user_id):
     flash(f'User {user.username} has been reactivated.', 'success')
     return redirect(url_for('admin.manage_users'))
 
-@admin_bp.route('/reports_dashboard', methods=['GET'])
-@admin_required
+# REMOVED
+#@admin_bp.route('/reports_dashboard', methods=['GET'])
+#@admin_required
 def manage_reports():
     # Get query parameters for filtering and sorting
     search_query = request.args.get('search', '').strip()
@@ -176,8 +177,9 @@ def manage_reports():
         rejected_reports=rejected_reports
     )
 
-@admin_bp.route('/manage_report/<int:report_id>', methods=['GET', 'POST'])
-@admin_required
+# REMOVED
+#@admin_bp.route('/manage_report/<int:report_id>', methods=['GET', 'POST'])
+#@admin_required
 def manage_report(report_id):
     report = Report.query.get(report_id)
     form = UpdateReportStatusForm()

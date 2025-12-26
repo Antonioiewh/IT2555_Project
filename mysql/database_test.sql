@@ -630,12 +630,13 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- ---------------------------------------------------------------------------------
 -- Clearance Levels Configuration
 -- ---------------------------------------------------------------------------------
+
 INSERT INTO clearance_levels (level_id, level_name, level_description, can_view_public, can_view_internal, can_view_confidential, can_view_secret, can_view_top_secret) VALUES
-(1, 'L1-PUBLIC', 'Basic support - public information only', TRUE, FALSE, FALSE, FALSE, FALSE),
-(2, 'L2-INTERNAL', 'Standard support - internal information access', TRUE, TRUE, FALSE, FALSE, FALSE),
-(3, 'L3-CONFIDENTIAL', 'Senior support - confidential information access', TRUE, TRUE, TRUE, FALSE, FALSE),
-(4, 'L4-SECRET', 'Critical support - secret information access', TRUE, TRUE, TRUE, TRUE, FALSE),
-(5, 'L5-TOP_SECRET', 'Security team - top secret information access', TRUE, TRUE, TRUE, TRUE, TRUE);
+(1, 'PUBLIC', 'Public clearance - can view public tickets only', TRUE, FALSE, FALSE, FALSE, FALSE),
+(2, 'INTERNAL', 'Internal clearance - can view public and internal tickets', TRUE, TRUE, FALSE, FALSE, FALSE),
+(3, 'CONFIDENTIAL', 'Confidential clearance - can view public, internal, and confidential tickets', TRUE, TRUE, TRUE, FALSE, FALSE),
+(4, 'SECRET', 'Secret clearance - can view public, internal, confidential, and secret tickets', TRUE, TRUE, TRUE, TRUE, FALSE),
+(5, 'TOP_SECRET', 'Top Secret clearance - can view all ticket classifications', TRUE, TRUE, TRUE, TRUE, TRUE);
 
 -- ---------------------------------------------------------------------------------
 -- System Roles
@@ -717,11 +718,11 @@ INSERT INTO users (username, phone_number, password_hash) VALUES
 
 -- Support Agent Accounts
 INSERT INTO users (username, phone_number, password_hash) VALUES
-('support_l1_agent', '98765421', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
-('support_l2_agent', '98765422', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
-('support_l3_agent', '98765423', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
-('support_l4_agent', '98765424', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
-('support_l5_agent', '98765425', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b');
+('support_public_agent', '98765421', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
+('support_internal_agent', '98765422', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
+('support_confidential_agent', '98765423', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
+('support_secret_agent', '98765424', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b'),
+('support_topsecret_agent', '98765425', 'scrypt:32768:8:1$YdRtcucyAyW3tI1d$899340e99d8dbb95933503f9b6e8e89613bfb9c96d0069d1db13d1a4e32b231bb3b29a29db2b0e231b3a29599f9a2809c960c01edf2b916d075dc4343d69db1b');
 
 -- ---------------------------------------------------------------------------------
 -- Database Management User
@@ -748,7 +749,7 @@ WHERE (u.username = 'admin' AND r.role_name IN ('admin', 'user'))
 INSERT INTO user_role_assignments (user_id, role_id)
 SELECT u.user_id, r.role_id
 FROM users u, roles r
-WHERE u.username IN ('support_l1_agent', 'support_l2_agent', 'support_l3_agent', 'support_l4_agent', 'support_l5_agent') 
+WHERE u.username IN ('support_public_agent', 'support_internal_agent', 'support_confidential_agent', 'support_secret_agent', 'support_topsecret_agent') 
 AND r.role_name IN ('user', 'support_agent');
 
 -- ---------------------------------------------------------------------------------
@@ -773,11 +774,11 @@ INSERT INTO ticket_categories (name, description, default_priority, required_cle
 -- Support Agents with Clearance Levels
 -- ---------------------------------------------------------------------------------
 INSERT INTO support_agents (user_id, clearance_level, department, specialization, created_by) VALUES
-((SELECT user_id FROM users WHERE username = 'support_l1_agent'), 1, 'Customer Service', 'General Inquiries, Account Issues, Basic Troubleshooting', 1),
-((SELECT user_id FROM users WHERE username = 'support_l2_agent'), 2, 'Technical Support', 'Software Issues, API Support, Integration Problems', 1),
-((SELECT user_id FROM users WHERE username = 'support_l3_agent'), 3, 'Senior Technical Support', 'Complex Technical Issues, System Administration, Advanced Troubleshooting', 1),
-((SELECT user_id FROM users WHERE username = 'support_l4_agent'), 4, 'Critical Response Team', 'System Outages, Critical Bugs, Emergency Response, Infrastructure Issues', 1),
-((SELECT user_id FROM users WHERE username = 'support_l5_agent'), 5, 'Security Team', 'Security Incidents, Breach Response, Vulnerability Management, Compliance', 1);
+((SELECT user_id FROM users WHERE username = 'support_public_agent'), 1, 'Customer Service', 'General Inquiries, Account Issues, Basic Troubleshooting', 1),
+((SELECT user_id FROM users WHERE username = 'support_internal_agent'), 2, 'Technical Support', 'Software Issues, API Support, Integration Problems', 1),
+((SELECT user_id FROM users WHERE username = 'support_confidential_agent'), 3, 'Senior Technical Support', 'Complex Technical Issues, System Administration, Advanced Troubleshooting', 1),
+((SELECT user_id FROM users WHERE username = 'support_secret_agent'), 4, 'Critical Response Team', 'System Outages, Critical Bugs, Emergency Response, Infrastructure Issues', 1),
+((SELECT user_id FROM users WHERE username = 'support_topsecret_agent'), 5, 'Security Team', 'Security Incidents, Breach Response, Vulnerability Management, Compliance', 1);
 
 -- ---------------------------------------------------------------------------------
 -- Sample Tickets with Classifications
@@ -796,11 +797,11 @@ INSERT INTO tickets (user_id, title, description, category_id, priority, classif
 -- Sample Ticket Assignments
 -- ---------------------------------------------------------------------------------
 INSERT INTO ticket_assignments (ticket_id, agent_id, assigned_by, assigned_at, is_active) VALUES
-(1, 1, 1, NOW(), TRUE),  -- Public ticket to L1 agent
-(2, 2, 1, NOW(), TRUE),  -- Internal ticket to L2 agent  
-(3, 3, 1, NOW(), TRUE),  -- Confidential ticket to L3 agent
-(4, 4, 1, NOW(), TRUE),  -- Secret ticket to L4 agent
-(5, 5, 1, NOW(), TRUE);  -- Top secret ticket to L5 agent
+(1, 1, 1, NOW(), TRUE),  -- Public ticket to PUBLIC agent
+(2, 2, 1, NOW(), TRUE),  -- Internal ticket to INTERNAL agent  
+(3, 3, 1, NOW(), TRUE),  -- Confidential ticket to CONFIDENTIAL agent
+(4, 4, 1, NOW(), TRUE),  -- Secret ticket to SECRET agent
+(5, 5, 1, NOW(), TRUE);  -- Top secret ticket to TOP_SECRET agent
 
 -- ---------------------------------------------------------------------------------
 -- Sample Archived Tickets (Closed tickets moved to archive)

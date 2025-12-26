@@ -1,6 +1,6 @@
 {% extends "UserBase.html" %}
 
-{% block title %}Archived Ticket #{{ ticket.original_ticket_id }} - Support{% endblock %}
+{% block title %}Archived Ticket #{{ archived_ticket.original_ticket_id }} - Support{% endblock %}
 
 {% block head %}
     <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@300;400;500;600&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
@@ -16,8 +16,8 @@
                 <span class="material-icons">archive</span>
             </div>
             <div class="header-text">
-                <h1 class="header-title">Archived Ticket #{{ ticket.original_ticket_id }}</h1>
-                <p class="header-subtitle">{{ ticket.title }}</p>
+                <h1 class="header-title">Archived Ticket #{{ archived_ticket.original_ticket_id }}</h1>
+                <p class="header-subtitle">{{ archived_ticket.title }}</p>
             </div>
         </div>
         
@@ -41,8 +41,8 @@
         <div class="notice-content">
             <h3>Archived Ticket</h3>
             <p>
-                This ticket was archived on {{ ticket.archived_at.strftime('%Y-%m-%d at %H:%M:%S') }}
-                {% if ticket.archiver %} by {{ ticket.archiver.username }}{% endif %}
+                This ticket was archived on {{ archived_ticket.archived_at.strftime('%Y-%m-%d at %H:%M:%S') }}
+                {% if archived_ticket.archiver %} by {{ archived_ticket.archiver.username }}{% endif %}
             </p>
         </div>
     </div>
@@ -51,19 +51,19 @@
     <div class="ticket-card">
         <div class="card-header">
             <div class="ticket-status">
-                <div class="status-badge status-{{ ticket.status }}">
+                <div class="status-badge status-{{ archived_ticket.status }}">
                     <span class="material-icons">check_circle</span>
-                    {{ ticket.status.replace('_', ' ').title() }}
+                    {{ archived_ticket.status.replace('_', ' ').title() }}
                 </div>
-                <div class="priority-badge priority-{{ ticket.priority }}">
+                <div class="priority-badge priority-{{ archived_ticket.priority }}">
                     <span class="material-icons">
-                        {% if ticket.priority == 'security' %}security
-                        {% elif ticket.priority == 'critical' %}error
-                        {% elif ticket.priority == 'high' %}keyboard_arrow_up
-                        {% elif ticket.priority == 'medium' %}remove
+                        {% if archived_ticket.priority == 'security' %}security
+                        {% elif archived_ticket.priority == 'critical' %}error
+                        {% elif archived_ticket.priority == 'high' %}keyboard_arrow_up
+                        {% elif archived_ticket.priority == 'medium' %}remove
                         {% else %}keyboard_arrow_down{% endif %}
                     </span>
-                    {{ ticket.priority.title() }} Priority
+                    {{ archived_ticket.priority.title() }} Priority
                 </div>
                 <div class="archived-indicator">
                     <span class="material-icons">history</span>
@@ -85,21 +85,21 @@
                             <span class="item-label">Created by:</span>
                             <div class="user-chip">
                                 <span class="material-icons">account_circle</span>
-                                {{ ticket.user.username }}
+                                {{ archived_ticket.user.username }}
                             </div>
                         </div>
                         <div class="info-item">
                             <span class="item-label">Created at:</span>
                             <div class="date-info">
                                 <span class="material-icons">schedule</span>
-                                {{ ticket.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                                {{ archived_ticket.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
                             </div>
                         </div>
                         <div class="info-item">
                             <span class="item-label">Last updated:</span>
                             <div class="date-info">
                                 <span class="material-icons">update</span>
-                                {{ ticket.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                                {{ archived_ticket.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}
                             </div>
                         </div>
                     </div>
@@ -111,32 +111,32 @@
                         Ticket Details
                     </h3>
                     <div class="info-items">
-                        {% if ticket.category %}
+                        {% if archived_ticket.category %}
                         <div class="info-item">
                             <span class="item-label">Category:</span>
                             <div class="category-chip">
                                 <span class="material-icons">category</span>
-                                {{ ticket.category.name }}
+                                {{ archived_ticket.category.name }}
                             </div>
                         </div>
                         {% endif %}
                         <div class="info-item">
                             <span class="item-label">Classification:</span>
-                            <div class="classification-badge classification-{{ ticket.classification }}">
+                            <div class="classification-badge classification-{{ archived_ticket.classification }}">
                                 <span class="material-icons">
-                                    {% if ticket.classification == 'top_secret' %}lock
-                                    {% elif ticket.classification == 'secret' %}security
-                                    {% elif ticket.classification == 'confidential' %}visibility_off
+                                    {% if archived_ticket.classification == 'top_secret' %}lock
+                                    {% elif archived_ticket.classification == 'secret' %}security
+                                    {% elif archived_ticket.classification == 'confidential' %}visibility_off
                                     {% else %}lock_open{% endif %}
                                 </span>
-                                {{ ticket.classification|replace('_', ' ')|title }}
+                                {{ archived_ticket.classification|replace('_', ' ')|title }}
                             </div>
                         </div>
                         <div class="info-item">
                             <span class="item-label">Final Status:</span>
                             <div class="final-status">
                                 <span class="material-icons">flag</span>
-                                {{ ticket.status|title }}
+                                {{ archived_ticket.status|title }}
                             </div>
                         </div>
                     </div>
@@ -150,24 +150,24 @@
                     Description
                 </h3>
                 <div class="content-box description-content">
-                    {{ ticket.description }}
+                    {{ archived_ticket.description }}
                 </div>
             </div>
 
             <!-- Resolution Section -->
-            {% if ticket.resolution %}
+            {% if archived_ticket.resolution %}
                 <div class="content-section">
                     <h3 class="section-title">
                         <span class="material-icons">task_alt</span>
                         Resolution
                     </h3>
                     <div class="content-box resolution-content">
-                        {{ ticket.resolution }}
+                        {{ archived_ticket.resolution }}
                     </div>
-                    {% if ticket.resolved_at %}
+                    {% if archived_ticket.resolved_at %}
                         <div class="resolution-date">
                             <span class="material-icons">event_available</span>
-                            Resolved on: {{ ticket.resolved_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                            Resolved on: {{ archived_ticket.resolved_at.strftime('%Y-%m-%d %H:%M:%S') }}
                         </div>
                     {% endif %}
                 </div>
@@ -184,15 +184,15 @@
                         <span class="material-icons">schedule</span>
                         <div class="archive-item-content">
                             <div class="archive-label">Archived Date</div>
-                            <div class="archive-value">{{ ticket.archived_at.strftime('%Y-%m-%d %H:%M:%S') }}</div>
+                            <div class="archive-value">{{ archived_ticket.archived_at.strftime('%Y-%m-%d %H:%M:%S') }}</div>
                         </div>
                     </div>
-                    {% if ticket.archiver %}
+                    {% if archived_ticket.archiver %}
                     <div class="archive-item">
                         <span class="material-icons">person</span>
                         <div class="archive-item-content">
                             <div class="archive-label">Archived By</div>
-                            <div class="archive-value">{{ ticket.archiver.username }}</div>
+                            <div class="archive-value">{{ archived_ticket.archiver.username }}</div>
                         </div>
                     </div>
                     {% endif %}

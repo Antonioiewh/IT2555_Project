@@ -19,8 +19,8 @@
             <div class="header-text">
                 <h1 class="header-title">Open Tickets</h1>
                 <div class="header-subtitle">
-                    <span class="clearance-badge">Clearance: L{{ agent.clearance_level }}</span>
-                    <span class="subtitle-text">Tickets you can access and work on</span>
+                    <span class="clearance-badge">{{ agent.clearance_level_info.level_name.replace('_', ' ') }} CLEARANCE</span>
+                    <span class="subtitle-text">Open tickets you can access based on your clearance level</span>
                 </div>
             </div>
         </div>

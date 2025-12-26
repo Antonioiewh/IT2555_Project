@@ -163,6 +163,10 @@ class ClearanceLevel(db.Model):
     # Relationship
     agents = db.relationship('SupportAgent', backref='clearance_level_info')
     
+    def get_display_name(self):
+        """Get formatted display name for clearance level"""
+        return self.level_name.replace('_', ' ').title()
+    
     def __repr__(self):
         return f"<ClearanceLevel {self.level_name}>"
 

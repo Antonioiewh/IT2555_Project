@@ -204,26 +204,22 @@
                                     
                                     <div id="tier-options" class="tier-options" style="display: none;">
                                         <div class="form-group">
-                                            <label class="form-label">Target Tier</label>
+                                            <label class="form-label">Escalate to Clearance Level</label>
                                             <select name="target_tier" id="target_tier" class="google-select">
                                                 {% set classification_levels = {'public': 1, 'internal': 2, 'confidential': 3, 'secret': 4, 'top_secret': 5} %}
                                                 {% set current_ticket_level = classification_levels.get(ticket.classification, 1) %}
                                                 {% set available_tiers = [] %}
+                                                {% set tier_names = {1: 'PUBLIC', 2: 'INTERNAL', 3: 'CONFIDENTIAL', 4: 'SECRET', 5: 'TOP SECRET'} %}
                                                 
                                                 {% for level in range(current_ticket_level + 1, 6) %}
                                                     {% set _ = available_tiers.append(level) %}
-                                                    <option value="{{ level }}">L{{ level }} - 
-                                                        {% if level == 1 %}PUBLIC
-                                                        {% elif level == 2 %}INTERNAL
-                                                        {% elif level == 3 %}CONFIDENTIAL  
-                                                        {% elif level == 4 %}SECRET
-                                                        {% elif level == 5 %}TOP SECRET
-                                                        {% endif %}
+                                                    <option value="{{ level }}">
+                                                        {{ tier_names.get(level, 'UNKNOWN') }} (Level {{ level }})
                                                     </option>
                                                 {% endfor %}
                                                 
                                                 {% if available_tiers|length == 0 %}
-                                                    <option value="" disabled>No higher tiers available</option>
+                                                    <option value="" disabled>No higher clearance levels available</option>
                                                 {% endif %}
                                             </select>
                                         </div>

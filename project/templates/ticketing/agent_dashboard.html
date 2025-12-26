@@ -20,7 +20,7 @@
                 <div class="header-text">
                     <h1 class="header-title">Support Agent Dashboard</h1>
                     <div class="header-subtitle">
-                        <span class="agent-badge">{{ agent.clearance_level_info.level_name }}</span>
+                        <span class="agent-badge">{{ agent.clearance_level_info.level_name.replace('_', ' ') }}</span>
                         <span class="department-text">{{ agent.department }}</span>
                         {% if agent.specialization %}<span class="specialization-text">{{ agent.specialization }}</span>{% endif %}
                     </div>
@@ -78,9 +78,9 @@
                 <span class="material-icons">verified_user</span>
             </div>
             <div class="stat-content">
-                <div class="stat-number">L{{ agent.clearance_level }}</div>
+                <div class="stat-number">{{ agent.clearance_level_info.level_name.replace('_', ' ') }}</div>
                 <div class="stat-label">Clearance Level</div>
-                <div class="stat-description">{{ agent.clearance_level_info.level_name }}</div>
+                <div class="stat-description">{{ agent.clearance_level_info.level_name.replace('_', ' ').title() }} Access</div>
             </div>
             <div class="stat-action">
                 <div class="clearance-description">{{ agent.clearance_level_info.level_description }}</div>

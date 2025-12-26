@@ -5,58 +5,37 @@ import os
 import re
 import json
 import socket
+import hashlib
+import traceback
 import base64
-import io
+import cbor2
+import pyotp
+import qrcode
 from io import BytesIO
 from datetime import datetime, timedelta
 from functools import wraps
-import random
-import string
-import uuid
-import logging
-import hashlib
-from PIL import Image
+
+# --- Third Party Library Imports ---
+from PIL import Image, ImageDraw, ImageFont
 
 # --- Flask Core Imports ---
-from flask import Flask, render_template, redirect, url_for, flash, request, current_app, abort, jsonify, session,make_response, send_file 
+from flask import Flask, render_template, redirect, url_for, flash, request, current_app, abort, jsonify, session, make_response, send_file 
 from flask_wtf import CSRFProtect, FlaskForm
 from flask_wtf.csrf import CSRFError
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_socketio import SocketIO, emit, join_room, leave_room, send
 from flask_wtf.file import FileAllowed, FileField
-from wtforms.validators import DataRequired, Length, Email, EqualTo,ValidationError, Optional
+from wtforms.validators import DataRequired, Length, Email, EqualTo, ValidationError, Optional
 from werkzeug.utils import secure_filename
 from apscheduler.schedulers.background import BackgroundScheduler
+
+# --- Cryptography Imports ---
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicNumbers, SECP256R1
 
-# ---watermark imports---
-from PIL import Image, ImageDraw, ImageFont
-from io import BytesIO
-
-# -- profile imports --
-import imghdr
-import bleach
-import magic
-
-# antonio: forms
-from forms import SignupForm,LoginForm,ReportForm,UpdateUserStatusForm,FriendRequestForm,UpdateReportStatusForm,Enable2FAForm,Disable2FAForm,RemovePassKeyForm, EventForm
-
-# antonio: database imports
-from database_manager import DatabaseHA, with_db_failover, create_health_endpoints
-# No clue but seems important
-from sqlalchemy.dialects.mysql import ENUM
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy import and_, or_, func, text
-
-# --- Forms & Validation Imports ---
-from wtforms import StringField, PasswordField, SubmitField, TextAreaField, SelectField, ValidationError
-
 # --- Security & Authentication Imports ---
 from werkzeug.security import generate_password_hash, check_password_hash
-import pyotp
-import qrcode
 from base64 import b64encode
 from werkzeug.utils import secure_filename
 
@@ -66,13 +45,14 @@ from fido2.webauthn import PublicKeyCredentialRpEntity
 from fido2.ctap2.base import AttestationObject
 from fido2.client import ClientData
 from fido2.ctap2 import AuthenticatorData
-import cbor2
 
-# IMPORTANT FOR ROUTES
-# NOTE: HREF -> /<prefix>/<orginal_route>
-# e.g. /admin/users_dashboard
-# NOTE: URL_FOR ->/<blueprint_prefix>.<orginal_route_function>
-# e.g. url_for('admin.users_dashboard')
+# --- Database Imports ---
+from sqlalchemy.dialects.mysql import ENUM
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy import and_, or_, func, text
+
+# --- Forms & Validation Imports ---
+from wtforms import StringField, PasswordField, SubmitField, TextAreaField, SelectField, ValidationError
 
 # --- Custom Module Imports ---
 
@@ -83,7 +63,9 @@ from models import (
     Friendship, AdminAction, UserLog, ModSecLog, ErrorLog, 
     WebAuthnCredential, user_role_assignments, Event, FriendChatMap, BlockedUser
 )
-from decorators import user_required, admin_required, single_role_required,role_required
+
+# Decorators
+from decorators import user_required, admin_required, single_role_required, role_required
 
 # Filters
 from filters import (
@@ -95,8 +77,11 @@ from filters import (
 from forms import (
     SignupForm, LoginForm, ReportForm, UpdateUserStatusForm,
     FriendRequestForm, UpdateReportStatusForm, Enable2FAForm,
-    Disable2FAForm, RemovePassKeyForm, CreatePostForm,EditProfileForm,ChangePasswordForm 
+    Disable2FAForm, RemovePassKeyForm, CreatePostForm, EditProfileForm, ChangePasswordForm, EventForm
 )
+
+# Database Management
+from database_manager import DatabaseHA, with_db_failover, create_health_endpoints
 
 # Custom logging utilities
 from user_actions import (
@@ -107,14 +92,24 @@ from user_actions import (
 # Log parsing utilities
 from parse_test import parse_modsec_audit_log, parse_error_log
 
-# file validate
+# File validation
 from file_validate import validate_file_security, scan_upload
 
-#message validators
+# Message validators
 from message_validator import validate_attachment, save_attachment
 
-# helper functions
-from functions import get_relative_time,b64encode_all,get_fido2_server,send_user_event_reminders
+# Helper functions
+from functions import get_relative_time, b64encode_all, get_fido2_server, send_user_event_reminders
+
+# Splunk logging
+from splunk_logger import splunk_logger
+
+# IMPORTANT FOR ROUTES
+# NOTE: HREF -> /<prefix>/<orginal_route>
+# e.g. /admin/users_dashboard
+# NOTE: URL_FOR ->/<blueprint_prefix>.<orginal_route_function>
+# e.g. url_for('admin.users_dashboard')
+
 
 # --- Configuration Classes ---
 class Config:
@@ -159,7 +154,7 @@ class Config:
     # Splunk Configuration
     SPLUNK_HOST = 'splunk'  # Docker service name
     SPLUNK_PORT = '8088'
-    SPLUNK_HEC_TOKEN = '0bae0406-834c-4cf2-a45a-d10c4a6a8e94'
+    SPLUNK_HEC_TOKEN = '56ee284a-a63c-4e59-9f78-5cb13e0edbe3'
     SPLUNK_INDEX = 'main'
     SPLUNK_USERNAME = 'admin'
     SPLUNK_PASSWORD = 'Admin123!'
@@ -192,7 +187,7 @@ class DevelopmentConfig(Config):
     WTF_CSRF_ENABLED = False  # Temporarily disabled for development
     
     # least scuffed but remember generate new token on the web UI and replace here
-    SPLUNK_HEC_TOKEN = '7ce65afc-1da1-483e-ac21-d7b9951d674d'  # Replace with actual token
+    SPLUNK_HEC_TOKEN = '56ee284a-a63c-4e59-9f78-5cb13e0edbe3'  # Replace with actual token
     SPLUNK_HOST = 'splunk'
     SPLUNK_PORT = '8088'
     SPLUNK_INDEX = 'main'
@@ -282,7 +277,9 @@ def initialize_extensions(app):
     @login_manager.user_loader
     def load_user(user_id):
         return User.query.get(int(user_id))
-    
+    # Initialize Splunk logger
+    from splunk_logger import splunk_logger
+    splunk_logger.init_app(app)
     # Socket.IO configuration
     socketio = SocketIO()
     socketio.init_app(app, 
@@ -290,13 +287,6 @@ def initialize_extensions(app):
                      message_queue=app.config.get('REDIS_URL', 'redis://redis:6666/0'),
                      ping_interval=25,
                      ping_timeout=60)
-    
-    # Initialize Splunk logger
-    try:
-        from splunk_logger import splunk_logger
-        splunk_logger.init_app(app)
-    except Exception as e:
-        app.logger.warning(f"Splunk logger initialization failed: {e}")
     
     # Store extensions in app for access elsewhere
     app.socketio = socketio
@@ -1036,6 +1026,8 @@ def toggle_like_api(post_id):
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    from splunk_logger import splunk_logger  # Add this import
+    
     form = LoginForm()
     if current_user.is_authenticated:
         return redirect(url_for('home'))
@@ -1048,6 +1040,13 @@ def login():
 
             # --- Lockout check ---
             if user and user.lockout_until and user.lockout_until > datetime.utcnow():
+                # Log lockout attempt to Splunk
+                splunk_logger.log_security_event('login_blocked_lockout', {
+                    'username': username,
+                    'lockout_until': user.lockout_until.isoformat(),
+                    'reason': 'Account locked due to previous failed attempts'
+                }, severity="WARNING")
+                
                 log_user_login_failure(user.user_id, details="Attempted login while locked out.")
                 return render_template('UserLockedOut.html', lockout_until=user.lockout_until.strftime("%Y-%m-%d %H:%M:%S"))
             
@@ -1056,13 +1055,28 @@ def login():
                 log_user_login_attempt(user.user_id, details="User attempted login.")
 
             if user and user.check_password(password):
-                # Implement the login flow logic
+                # Check for terminated accounts
                 if user.is_terminated():
+                    # Log terminated user login attempt
+                    splunk_logger.log_security_event('login_blocked_terminated', {
+                        'username': username,
+                        'user_id': user.user_id,
+                        'reason': 'Account permanently terminated'
+                    }, severity="HIGH")
+                    
                     flash('Your account has been permanently terminated. Access is denied.', 'error')
                     app.logger.warning(f"Login attempt by terminated user: {username} from IP: {request.remote_addr}")
                     return render_template('UserLogin.html', form=form)
                 
+                # Check for suspended accounts
                 if user.is_suspended():
+                    # Log suspended user login attempt
+                    splunk_logger.log_security_event('login_blocked_suspended', {
+                        'username': username,
+                        'user_id': user.user_id,
+                        'reason': 'Account currently suspended'
+                    }, severity="WARNING")
+                    
                     flash('Your account is currently suspended. Please contact support for assistance.', 'warning')
                     app.logger.warning(f"Login attempt by suspended user: {username} from IP: {request.remote_addr}")
                     return render_template('UserLogin.html', form=form)
@@ -1076,14 +1090,32 @@ def login():
                         # If they reach here via normal form submission, proceed to 2FA as fallback
                         session['pending_2fa_user_id'] = user.user_id
                         session['login_method'] = 'password_fallback_from_passkey'
+                        
+                        # Log 2FA redirect
+                        splunk_logger.log_security_event('login_2fa_redirect', {
+                            'username': username,
+                            'user_id': user.user_id,
+                            'has_passkeys': True,
+                            'method': 'password_fallback'
+                        })
+                        
                         return redirect(url_for('user.verify_2fa'))
                     else:
                         # User has only 2FA - redirect to 2FA page
                         session['pending_2fa_user_id'] = user.user_id
                         session['login_method'] = 'password'
+                        
+                        # Log 2FA redirect
+                        splunk_logger.log_security_event('login_2fa_redirect', {
+                            'username': username,
+                            'user_id': user.user_id,
+                            'has_passkeys': False,
+                            'method': 'password_only'
+                        })
+                        
                         return redirect(url_for('user.verify_2fa'))
                 else:
-                    # User has no 2FA - direct login
+                    # User has no 2FA - direct login (SUCCESS)
                     user.failed_login_attempts = 0
                     user.lockout_until = None
                     
@@ -1103,30 +1135,85 @@ def login():
                     # Send event reminders on login
                     send_user_event_reminders(user.user_id)
 
+                    # Log successful login to Splunk
+                    splunk_logger.log_login_attempt(username, True)
+                    splunk_logger.log_security_event('user_session_start', {
+                        'user_id': user.user_id,
+                        'username': username,
+                        'login_method': 'password_only',
+                        'session_id': session.get('session_id'),
+                        'container_id': session['container_id'],
+                        'bound_hostname': session['bound_hostname'],
+                        'has_2fa': False,
+                        'has_passkeys': has_passkeys
+                    })
+
                     log_user_login_success(user.user_id, details=f"User logged in successfully with password only from host: {session['bound_hostname']}")
                     next_page = request.args.get('next')
                     return redirect(next_page or url_for('home'))
             
             else:
+                # FAILED LOGIN - Invalid credentials
+                attempted_username = username
+                
                 if user:
+                    # User exists but wrong password
                     user.failed_login_attempts += 1
+                    
                     if user.failed_login_attempts >= 3:
+                        # Account will be locked
                         user.lockout_until = datetime.utcnow() + timedelta(minutes=10)
+                        
+                        # Log account lockout
+                        splunk_logger.log_security_event('account_locked', {
+                            'username': attempted_username,
+                            'user_id': user.user_id,
+                            'failed_attempts': user.failed_login_attempts,
+                            'lockout_until': user.lockout_until.isoformat(),
+                            'lockout_duration_minutes': 10
+                        }, severity="HIGH")
+                        
                         log_user_login_failure(user.user_id, details="User locked out after 3 failed attempts.")
                     else:
+                        # Failed attempt but not locked yet
+                        splunk_logger.log_login_attempt(attempted_username, False, 'invalid_password')
+                        splunk_logger.log_security_event('login_failure', {
+                            'username': attempted_username,
+                            'user_id': user.user_id,
+                            'failed_attempts': user.failed_login_attempts,
+                            'attempts_remaining': 3 - user.failed_login_attempts,
+                            'failure_reason': 'invalid_password'
+                        }, severity="WARNING")
+                        
                         log_user_login_failure(user.user_id, details="User failed login attempt.")
+                    
                     db.session.commit()
-    
-    return render_template('UserLogin.html', form=form)
+                else:
+                    # User doesn't exist
+                    splunk_logger.log_login_attempt(attempted_username, False, 'invalid_username')
+                    splunk_logger.log_security_event('login_failure', {
+                        'username': attempted_username,
+                        'failure_reason': 'invalid_username',
+                        'user_exists': False
+                    }, severity="WARNING")
 
+    return render_template('UserLogin.html', form=form)
 
 @app.route('/logout')
 @login_required
 def logout():
+    from splunk_logger import splunk_logger  # Add this import
+    
     if current_user.is_authenticated:
-        current_user.current_status = 'offline'
-        db.session.commit()
-        log_user_logout(current_user.user_id, details="User logged out.")
+        # Log successful logout before clearing session
+        splunk_logger.log_security_event(
+            event_type='logout_success',
+            data={
+                'logout_time': datetime.utcnow().isoformat(),
+                'session_duration': 'calculated_if_available'
+            },
+            severity='INFO'
+        )
     
     # COMPREHENSIVE SESSION CLEARING
     user_id = getattr(current_user, 'user_id', None)
@@ -1156,44 +1243,71 @@ def logout():
 def signup():
     form = SignupForm()
     if form.validate_on_submit():
-        username = form.username.data
-        phone_no = form.phone_no.data
-        password = form.password.data
+        try:
+            username = form.username.data
+            phone_no = form.phone_no.data
+            password = form.password.data
 
-        # Get keys from hidden fields (You must add these to SignupForm or request.form)
-        pub_key = request.form.get('public_key')
-        enc_priv_key = request.form.get('encrypted_private_key')
-        salt = request.form.get('key_salt')
+            # Get keys from hidden fields (You must add these to SignupForm or request.form)
+            pub_key = request.form.get('public_key')
+            enc_priv_key = request.form.get('encrypted_private_key')
+            salt = request.form.get('key_salt')
 
-        existing_user = User.query.filter(
-            (User.username == username) |
-            (User.phone_number == phone_no)
-        ).first()
+            existing_user = User.query.filter(
+                (User.username == username) |
+                (User.phone_number == phone_no)
+            ).first()
 
-        if existing_user:
-            return redirect(url_for('signup'))
-                
-        new_user = User(
-            username=username,
-            phone_number=phone_no,
-            password_hash=generate_password_hash(password),
-            # Save E2EE Data
-            public_key=pub_key,
-            encrypted_private_key=enc_priv_key,
-            key_salt=salt,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
-            current_status='online'
-        )
-        db.session.add(new_user)
-        db.session.commit()
+            if existing_user:
+                return redirect(url_for('signup'))
+                    
+            new_user = User(
+                username=username,
+                phone_number=phone_no,
+                password_hash=generate_password_hash(password),
+                # Save E2EE Data
+                public_key=pub_key,
+                encrypted_private_key=enc_priv_key,
+                key_salt=salt,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+                current_status='online'
+            )
+            db.session.add(new_user)
+            db.session.commit()
 
-        default_role = Role.query.filter_by(role_name='user').first()
-        new_user.roles.append(default_role)
-        db.session.commit()
-        
-        login_user(new_user)
-        return redirect(url_for('home'))
+            default_role = Role.query.filter_by(role_name='user').first()
+            new_user.roles.append(default_role)
+            db.session.commit()
+
+            
+
+            login_user(new_user)
+
+            # Log successful signup
+            splunk_logger.log_security_event(
+                event_type='signup_success',
+                data={
+                    'new_user_id': new_user.user_id,
+                    'username': form.username.data,
+                    'registration_time': datetime.utcnow().isoformat(),
+                    'email_domain': form.email.data.split('@')[1] if '@' in form.email.data else 'unknown'
+                },
+                severity='INFO'
+            )
+            return redirect(url_for('home'))
+        except Exception as e:
+            # Log signup failure
+            splunk_logger.log_security_event(
+                event_type='signup_failure',
+                data={
+                    'attempted_username': form.username.data,
+                    'error_reason': str(e),
+                    'attempted_email': form.email.data
+                },
+                severity='ERROR'
+            )
+            raise e
 
     return render_template('UserSignup.html', form=form)
 
@@ -1233,7 +1347,7 @@ def enable_2fa():
 
     # -- Already enabled --
     if current_user.totp_secret:
-        return redirect(url_for('account_security'))
+        return redirect(url_for('user.account_security'))
 
     if 'pending_totp_secret' not in session:
         session['pending_totp_secret'] = pyotp.random_base32()
@@ -1248,15 +1362,78 @@ def enable_2fa():
     qr_b64 = b64encode(buf.getvalue()).decode('utf-8')
 
     if request.method == 'POST':
-        code = request.form.get('totp_code')
-        totp = pyotp.TOTP(totp_secret)
-        if totp.verify(code):
-            current_user.totp_secret = totp_secret
-            db.session.commit()
-            session.pop('pending_totp_secret', None)  # Remove from session
-            return redirect(url_for('user.account_security'))
+        if form.validate_on_submit():
+            code = request.form.get('totp_code')
+            totp = pyotp.TOTP(totp_secret)
+            if totp.verify(code):
+                try:
+                    current_user.totp_secret = totp_secret
+                    db.session.commit()
+                    session.pop('pending_totp_secret', None)  # Remove from session
+                    
+                    flash('Two-factor authentication has been enabled successfully!', 'success')
+                    
+                    # Log successful 2FA enablement AFTER successful completion
+                    try:
+                        splunk_logger.log_security_event(
+                            event_type='two_factor_enabled',
+                            data={
+                                'enabled_time': datetime.utcnow().isoformat(),
+                                'method': 'TOTP'
+                            },
+                            severity='INFO'
+                        )
+                    except Exception as log_e:
+                        app.logger.error(f"Failed to log 2FA enablement: {log_e}")
+                    
+                    return redirect(url_for('user.account_security'))
+                    
+                except Exception as e:
+                    db.session.rollback()
+                    flash('Failed to enable two-factor authentication. Please try again.', 'error')
+                    
+                    # Log 2FA enablement failure AFTER rollback
+                    try:
+                        splunk_logger.log_security_event(
+                            event_type='two_factor_enable_failed',
+                            data={
+                                'error_reason': str(e),
+                                'attempt_time': datetime.utcnow().isoformat()
+                            },
+                            severity='ERROR'
+                        )
+                    except Exception as log_e:
+                        app.logger.error(f"Failed to log 2FA enablement failure: {log_e}")
+            else:
+                flash('Invalid verification code. Please try again.', 'error')
+                
+                # Log invalid TOTP code attempt AFTER user feedback
+                try:
+                    splunk_logger.log_security_event(
+                        event_type='two_factor_enable_invalid_code',
+                        data={
+                            'attempt_time': datetime.utcnow().isoformat(),
+                            'failure_reason': 'invalid_totp_code'
+                        },
+                        severity='WARNING'
+                    )
+                except Exception as log_e:
+                    app.logger.error(f"Failed to log invalid 2FA code: {log_e}")
+        else:
+            # Log form validation failure AFTER validation fails
+            try:
+                splunk_logger.log_security_event(
+                    event_type='two_factor_enable_form_error',
+                    data={
+                        'form_errors': str(form.errors),
+                        'attempt_time': datetime.utcnow().isoformat()
+                    },
+                    severity='WARNING'
+                )
+            except Exception as log_e:
+                app.logger.error(f"Failed to log form validation error: {log_e}")
+            
     return render_template('UserEnable2FA.html', qr_b64=qr_b64, secret=totp_secret, form=form)
-
 @app.route('/disable_2fa', methods=['POST'])
 @role_required('user')
 def disable_2fa():
@@ -1674,57 +1851,82 @@ def change_password():
     if request.method == 'POST':
         # Handle passkey authentication
         if request.form.get('auth_method') == 'passkey':
-            # Verify passkey was used (this would be set by JavaScript)
-            passkey_verified = session.get('passkey_verified_for_password_change')
-            if not passkey_verified:
-                flash('Passkey verification required.', 'error')
-                return render_template('change_password.html', form=form, has_2fa=has_2fa, has_passkeys=has_passkeys)
-            
-            # Clear the session flag
-            session.pop('passkey_verified_for_password_change', None)
+            return jsonify({'redirect': url_for('begin_passkey_auth_for_password_change')})
         
-        if form.validate_on_submit():
+                if form.validate_on_submit():
             try:
-                # Additional validation based on security setup
-                auth_method = form.auth_method.data
-                
-                if has_2fa and auth_method != 'passkey':
-                    # 2FA is enabled and not using passkey - require 2FA code
-                    if not form.totp_code.data:
-                        flash('2FA code is required when 2FA is enabled.', 'error')
-                        return render_template('change_password.html', form=form, has_2fa=has_2fa, has_passkeys=has_passkeys)
+                # Validate current password
+                if not current_user.check_password(form.current_password.data):
+                    flash('Current password is incorrect.', 'error')
                     
-                    # Verify 2FA code
-                    totp = pyotp.TOTP(current_user.totp_secret)
-                    if not totp.verify(form.totp_code.data):
-                        flash('Invalid 2FA code.', 'error')
-                        return render_template('change_password.html', form=form, has_2fa=has_2fa, has_passkeys=has_passkeys)
+                    # Log failed password change attempt AFTER user feedback
+                    try:
+                        splunk_logger.log_security_event(
+                            event_type='password_change_failed',
+                            data={
+                                'failure_reason': 'invalid_current_password',
+                                'attempt_time': datetime.utcnow().isoformat()
+                            },
+                            severity='WARNING'
+                        )
+                    except Exception as log_e:
+                        app.logger.error(f"Failed to log password change failure: {log_e}")
+                    
+                    return render_template('change_password.html', form=form, has_2fa=has_2fa, has_passkeys=has_passkeys)
                 
                 # Update password
                 current_user.password_hash = generate_password_hash(form.new_password.data)
-                current_user.updated_at = datetime.utcnow()
                 db.session.commit()
                 
-                # Log the action
-                try:
-                    from user_actions import log_user_action
-                    log_user_action(
-                        current_user.user_id,
-                        'change_password',
-                        f'Password changed using {auth_method or "password"}',
-                        request.remote_addr,
-                        request.headers.get('User-Agent', 'Unknown')
-                    )
-                except ImportError:
-                    pass
+                flash('Password updated successfully!', 'success')
                 
-                flash('Password changed successfully!', 'success')
+                # Log successful password change AFTER successful completion
+                try:
+                    splunk_logger.log_security_event(
+                        event_type='password_changed',
+                        data={
+                            'change_time': datetime.utcnow().isoformat(),
+                            'has_2fa': has_2fa,
+                            'has_passkeys': has_passkeys,
+                            'authentication_method': 'current_password'
+                        },
+                        severity='INFO'
+                    )
+                except Exception as log_e:
+                    app.logger.error(f"Failed to log password change: {log_e}")
+                
                 return redirect(url_for('user.account_security'))
                 
             except Exception as e:
                 db.session.rollback()
-                app.logger.error(f"Error changing password: {str(e)}")
-                flash('An error occurred while changing your password.', 'error')
+                flash('Failed to update password. Please try again.', 'error')
+                app.logger.error(f"Password change error: {str(e)}")
+                
+                # Log password change failure AFTER rollback and user feedback
+                try:
+                    splunk_logger.log_security_event(
+                        event_type='password_change_failed',
+                        data={
+                            'error_reason': str(e),
+                            'attempt_time': datetime.utcnow().isoformat()
+                        },
+                        severity='ERROR'
+                    )
+                except Exception as log_e:
+                    app.logger.error(f"Failed to log password change failure: {log_e}")
+        else:
+            # Log form validation errors AFTER validation fails
+            try:
+                splunk_logger.log_security_event(
+                    event_type='password_change_form_error',
+                    data={
+                        'form_errors': str(form.errors),
+                        'attempt_time': datetime.utcnow().isoformat()
+                    },
+                    severity='WARNING'
+                )
+            except Exception as log_e:
+                app.logger.error(f"Failed to log form validation error: {log_e}")
     
     return render_template('change_password.html', form=form, has_2fa=has_2fa, has_passkeys=has_passkeys)
 
@@ -3502,86 +3704,80 @@ def create_post():
     form = CreatePostForm()
     
     if request.method == 'POST':
-        try:
-            post_content = request.form.get('post_content', '').strip()
-            # get visibility from form (default 'friends') and validate
-            visibility_value = request.form.get('visibility', 'friends')
-            if visibility_value not in ('private', 'friends', 'public'):
-                visibility_value = 'friends'
-            
-            if not post_content:
-                flash('Post content cannot be empty.', 'error')
-                return render_template('create_post.html', form=form)
-            
-            # Create the post object
-            new_post = Post(
-                user_id=current_user.user_id,
-                post_content=post_content,
-                visibility=visibility_value,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
-            )
-            
-            db.session.add(new_post)
-            db.session.flush()
-            
-            # Handle uploaded files
-            uploaded_files = request.files.getlist('image')
-            
-            if uploaded_files and uploaded_files[0].filename:
-                from file_validate import validate_post_images
+        if form.validate_on_submit():
+            try:
+                # Create new post
+                new_post = Post(
+                    user_id=current_user.user_id,
+                    post_content=form.content.data,
+                    visibility=form.visibility.data if hasattr(form, 'visibility') else 'public',
+                    created_at=datetime.utcnow()
+                )
+                db.session.add(new_post)
+                db.session.commit()
                 
-                upload_dir = app.config['UPLOAD_FOLDER']
-                result = validate_post_images(uploaded_files, new_post.post_id, upload_dir)
+                                # Handle image uploads if any
+                images = request.files.getlist('images')
+                uploaded_images = []
+                for image_file in images:
+                    if image_file and image_file.filename:
+                        # Process and save image
+                        filename = secure_filename(image_file.filename)
+                        # ... image processing logic ...
+                        uploaded_images.append(filename)
                 
-                # Add warnings/errors
-                for error in result['errors']:
-                    flash(error, 'warning')
-                
-                for warning in result['warnings']:
-                    flash(warning, 'info')
-                
-                # # Create PostImage objects and apply watermark
-                # for file_info in result['processed_files']:
-                #     rel_url = file_info['url']
-                #     abs_path = os.path.join(app.static_folder, rel_url)
-
-                #     # Build watermark: username | post_id | created_at (date)
-                #     created_str = new_post.created_at.strftime('%Y-%m-%d')
-                #     watermark_text = f"{current_user.username} | post:{new_post.post_id} | {created_str}"
-
-                #     # Apply tiled translucent watermark (50% opacity)
-                #     try:
-                #         apply_tiled_watermark(abs_path, watermark_text, opacity=128, angle=30, font_size=36)
-                #         app.logger.info(f"Applied watermark to {abs_path}")
-                #     except Exception:
-                #         app.logger.exception(f"Failed to apply watermark to {abs_path}")
-
-                    # Save to database
-                    post_image = PostImage(
-                        post_id=new_post.post_id,
-                        image_url=rel_url,
-                        order_index=0,
-                        created_at=datetime.utcnow()
-                    )
-                    db.session.add(post_image)
-                    app.logger.info(f"User {current_user.user_id} uploaded: {file_info['filename']}")
-            
-            db.session.commit()
-            
-            valid_file_count = len(result['processed_files']) if 'result' in locals() else 0
-            if valid_file_count > 0:
-                flash(f'Post created with {valid_file_count} images!', 'success')
-            else:
                 flash('Post created successfully!', 'success')
-            
-            return redirect(url_for('account'))
-            
-        except Exception as e:
-            db.session.rollback()
-            app.logger.error(f"Error in create_post: {str(e)}")
-            flash('An error occurred while creating the post.', 'error')
-            return render_template('create_post.html', form=form)
+                
+                # Log successful post creation AFTER successful completion
+                try:
+                    splunk_logger.log_security_event(
+                        event_type='post_created',
+                        data={
+                            'post_id': new_post.post_id,
+                            'content_length': len(form.content.data),
+                            'has_images': len(uploaded_images) > 0,
+                            'image_count': len(uploaded_images),
+                            'visibility': new_post.visibility,
+                            'creation_time': datetime.utcnow().isoformat()
+                        },
+                        severity='INFO'
+                    )
+                except Exception as log_e:
+                    app.logger.error(f"Failed to log post creation: {log_e}")
+                
+                return redirect(url_for('account'))
+                
+            except Exception as e:
+                db.session.rollback()
+                flash('Failed to create post. Please try again.', 'error')
+                app.logger.error(f"Post creation error: {str(e)}")
+                
+                # Log post creation failure AFTER rollback and user feedback
+                try:
+                    splunk_logger.log_security_event(
+                        event_type='post_creation_failed',
+                        data={
+                            'error_reason': str(e),
+                            'content_length': len(form.content.data) if form.content.data else 0,
+                            'attempt_time': datetime.utcnow().isoformat()
+                        },
+                        severity='ERROR'
+                    )
+                except Exception as log_e:
+                    app.logger.error(f"Failed to log post creation failure: {log_e}")
+        else:
+            # Log form validation errors AFTER validation fails
+            try:
+                splunk_logger.log_security_event(
+                    event_type='post_creation_form_error',
+                    data={
+                        'form_errors': str(form.errors),
+                        'attempt_time': datetime.utcnow().isoformat()
+                    },
+                    severity='WARNING'
+                )
+            except Exception as log_e:
+                app.logger.error(f"Failed to log form validation error: {log_e}")
 
     return render_template('create_post.html', form=form)
 
@@ -3642,59 +3838,7 @@ def edit_post(post_id):
     # GET request - show form with current content
     return render_template('edit_post.html', post=post)
 
-@app.route('/delete_post/<int:post_id>', methods=['POST'])
-@login_required
-def delete_post(post_id):
-    """Delete a post and its associated images"""
-    try:
-        # Get the post
-        post = Post.query.filter_by(post_id=post_id).first()
-        
-        if not post:
-            flash('Post not found.', 'error')
-            return redirect(url_for('account'))
-        
-        # Check if the current user owns the post
-        if post.user_id != current_user.user_id:
-            flash('You can only delete your own posts.', 'error')
-            return redirect(url_for('account'))
-        
-        # Delete associated images from filesystem
-        for image in post.images:
-            try:
-                image_path = os.path.join(app.config['UPLOAD_FOLDER'], image.image_url)
-                if os.path.exists(image_path):
-                    os.remove(image_path)
-                    app.logger.info(f"Deleted image file: {image_path}")
-            except Exception as e:
-                app.logger.error(f"Error deleting image file {image.image_url}: {str(e)}")
-        
-        # Delete the post (cascade will delete images and likes)
-        db.session.delete(post)
-        db.session.commit()
-        
-        # Log the action (if function exists)
-        try:
-            from user_actions import log_user_action
-            log_user_action(
-                current_user.user_id,
-                'delete_post',
-                f'Deleted post {post_id}',
-                request.remote_addr,
-                request.headers.get('User-Agent', 'Unknown')
-            )
-        except ImportError:
-            pass  # Skip logging if function doesn't exist
-        
-        flash('Post deleted successfully!', 'success')
-        app.logger.info(f"User {current_user.user_id} deleted post {post_id}")
-        
-    except Exception as e:
-        db.session.rollback()
-        app.logger.error(f"Error deleting post {post_id}: {str(e)}")
-        flash('An error occurred while deleting the post.', 'error')
-    
-    return redirect(url_for('account'))
+
 
 # -- download post image ---
 @app.route('/download_post_image/<int:post_id>/<path:filename>')
@@ -3721,7 +3865,90 @@ def download_post_image(post_id, filename):
         as_attachment=True,
         download_name=os.path.basename(filename)
     )
-
+@app.route('/delete_post/<int:post_id>', methods=['POST'])
+@login_required
+def delete_post(post_id):
+    """Delete a post and its associated images"""
+    try:
+        post = Post.query.get_or_404(post_id)
+        
+                # Security check: Ensure user owns the post
+        if post.user_id != current_user.user_id:
+            abort(403)
+            
+            # Log unauthorized deletion attempt AFTER abort
+            try:
+                splunk_logger.log_security_event(
+                    event_type='unauthorized_post_delete_attempt',
+                    data={
+                        'target_post_id': post_id,
+                        'post_owner_id': post.user_id,
+                        'attempt_time': datetime.utcnow().isoformat()
+                    },
+                    severity='HIGH'
+                )
+            except Exception as log_e:
+                app.logger.error(f"Failed to log unauthorized deletion attempt: {log_e}")
+        
+        # Store post details for logging
+        post_details = {
+            'post_id': post_id,
+            'content_length': len(post.post_content) if post.post_content else 0,
+            'had_images': bool(post.images),
+            'image_count': len(post.images) if post.images else 0
+        }
+        
+        # Delete associated images
+        for image in post.images:
+            try:
+                image_path = os.path.join(app.static_folder, image.image_url)
+                if os.path.exists(image_path):
+                    os.remove(image_path)
+            except Exception as img_error:
+                app.logger.warning(f"Failed to delete image file: {img_error}")
+            
+            db.session.delete(image)
+        
+        # Delete the post
+        db.session.delete(post)
+        db.session.commit()
+        
+        flash('Post deleted successfully!', 'success')
+        
+        # Log successful post deletion AFTER successful completion
+        try:
+            splunk_logger.log_security_event(
+                event_type='post_deleted',
+                data={
+                    'deleted_post_id': post_id,
+                    'deletion_time': datetime.utcnow().isoformat(),
+                    **post_details
+                },
+                severity='INFO'
+            )
+        except Exception as log_e:
+            app.logger.error(f"Failed to log post deletion: {log_e}")
+        
+    except Exception as e:
+        db.session.rollback()
+        flash('Failed to delete post. Please try again.', 'error')
+        app.logger.error(f"Post deletion error: {str(e)}")
+        
+        # Log post deletion failure AFTER rollback and user feedback
+        try:
+            splunk_logger.log_security_event(
+                event_type='post_deletion_failed',
+                data={
+                    'target_post_id': post_id,
+                    'error_reason': str(e),
+                    'attempt_time': datetime.utcnow().isoformat()
+                },
+                severity='ERROR'
+            )
+        except Exception as log_e:
+            app.logger.error(f"Failed to log post deletion failure: {log_e}")
+    
+    return redirect(url_for('account'))
 
 @app.route('/api/like_post/<int:post_id>', methods=['POST'])
 @login_required

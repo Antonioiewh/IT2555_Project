@@ -111,13 +111,20 @@ class CreatePostForm(FlaskForm):
     #title = StringField('Title', validators=[DataRequired(), Length(max=50)])
     post_content = TextAreaField('Content', validators=[DataRequired(), Length(max=300)])
     image = FileField('Upload Image', validators=[Optional(), FileAllowed(['jpg', 'jpeg', 'png'], 'Images only!')])
-    submit = SubmitField('Create Post')
+    # Added visibility dropdown to match template usage
+    visibility = SelectField(
+        'Visibility',
+        choices=[('private', 'Private'), ('friends', 'Friends Only'), ('public', 'Public')],
+        default='friends',
+        render_kw={"class": "form-select"}
+    )
 
     # CAPTCHA field for security
     recaptcha = RecaptchaField()
     
     # Submit button
     submit = SubmitField('Submit', render_kw={"class": "btn btn-primary"})
+    
 
 # --- edit profile form ---
 

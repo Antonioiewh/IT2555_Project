@@ -58,7 +58,7 @@ class SplunkLogger:
                     "source_ip": request.remote_addr if request else None,
                     "user_agent": request.headers.get('User-Agent') if request else None,
                     "session_id": session.get('session_id') if session else None,
-                    "user_id": current_user.id if current_user and current_user.is_authenticated else None,
+                    "user_id": current_user.user_id if current_user and current_user.is_authenticated else None,
                     "username": current_user.username if current_user and current_user.is_authenticated else None,
                     "data": data or {}
                 },

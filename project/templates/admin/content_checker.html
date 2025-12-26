@@ -1,0 +1,691 @@
+{% extends "UserBase.html" %}
+
+{% block title %}Content Checker - Admin Panel{% endblock %}
+
+{% block head %}
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<style>
+:root {
+    --google-blue: #1a73e8;
+    --google-blue-dark: #1557b0;
+    --google-blue-light: #e8f0fe;
+    --google-red: #ea4335;
+    --google-green: #34a853;
+    --google-yellow: #fbbc04;
+    --google-grey-50: #f8f9fa;
+    --google-grey-100: #f1f3f4;
+    --google-grey-200: #e8eaed;
+    --google-grey-300: #dadce0;
+    --google-grey-400: #bdc1c6;
+    --google-grey-500: #9aa0a6;
+    --google-grey-600: #80868b;
+    --google-grey-700: #5f6368;
+    --google-grey-800: #3c4043;
+    --google-grey-900: #202124;
+    --shadow-1: 0 1px 2px 0 rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15);
+    --shadow-2: 0 1px 2px 0 rgba(60,64,67,.3), 0 2px 6px 2px rgba(60,64,67,.15);
+    --shadow-3: 0 4px 8px 3px rgba(60,64,67,.15), 0 1px 3px rgba(60,64,67,.3);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Google Sans', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background-color: var(--google-grey-50);
+    color: var(--google-grey-800);
+    line-height: 1.5;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px 16px;
+}
+
+/* Header */
+.page-header {
+    background: linear-gradient(135deg, var(--google-blue) 0%, var(--google-blue-dark) 100%);
+    color: white;
+    padding: 32px;
+    border-radius: 12px;
+    margin-bottom: 32px;
+    box-shadow: var(--shadow-2);
+}
+
+.page-header h1 {
+    font-size: 32px;
+    font-weight: 500;
+    margin: 0 0 8px 0;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.page-header p {
+    font-size: 16px;
+    margin: 0;
+    opacity: 0.9;
+}
+
+/* Cards */
+.card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: var(--shadow-2);
+    margin-bottom: 24px;
+    overflow: hidden;
+}
+
+.card-header {
+    background: var(--google-grey-50);
+    border-bottom: 1px solid var(--google-grey-200);
+    padding: 20px 24px;
+}
+
+.card-header h2 {
+    font-size: 20px;
+    font-weight: 500;
+    margin: 0;
+    color: var(--google-grey-800);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.card-body {
+    padding: 24px;
+}
+
+/* Form Elements */
+.form-group {
+    margin-bottom: 24px;
+}
+
+.form-label {
+    display: block;
+    font-weight: 500;
+    color: var(--google-grey-700);
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.form-control {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid var(--google-grey-300);
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    background: white;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    outline: none;
+}
+
+.form-control:focus {
+    border-color: var(--google-blue);
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+}
+
+.form-control::placeholder {
+    color: var(--google-grey-500);
+}
+
+textarea.form-control {
+    resize: vertical;
+    min-height: 200px;
+    font-family: 'Roboto Mono', monospace;
+}
+
+/* Buttons */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    font-family: inherit;
+}
+
+.btn-primary {
+    background: var(--google-blue);
+    color: white;
+    box-shadow: var(--shadow-1);
+}
+
+.btn-primary:hover {
+    background: var(--google-blue-dark);
+    box-shadow: var(--shadow-2);
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background: white;
+    color: var(--google-grey-700);
+    border: 1px solid var(--google-grey-300);
+}
+
+.btn-secondary:hover {
+    background: var(--google-grey-50);
+    border-color: var(--google-grey-400);
+}
+
+.btn-clear {
+    background: var(--google-red);
+    color: white;
+}
+
+.btn-clear:hover {
+    background: #d33b2c;
+}
+
+/* Results Section */
+.results-section {
+    margin-top: 32px;
+}
+
+.severity-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.severity-high {
+    background: rgba(234, 67, 53, 0.1);
+    color: var(--google-red);
+    border: 1px solid rgba(234, 67, 53, 0.3);
+}
+
+.severity-medium {
+    background: rgba(251, 188, 4, 0.1);
+    color: #f57c00;
+    border: 1px solid rgba(251, 188, 4, 0.3);
+}
+
+.severity-low {
+    background: rgba(52, 168, 83, 0.1);
+    color: var(--google-green);
+    border: 1px solid rgba(52, 168, 83, 0.3);
+}
+
+.severity-none {
+    background: var(--google-grey-100);
+    color: var(--google-grey-600);
+    border: 1px solid var(--google-grey-300);
+}
+
+/* Risk Score */
+.risk-meter {
+    margin: 16px 0;
+}
+
+.risk-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--google-grey-200);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.risk-fill {
+    height: 100%;
+    transition: width 0.3s ease;
+}
+
+.risk-low { background: var(--google-green); }
+.risk-medium { background: var(--google-yellow); }
+.risk-high { background: var(--google-red); }
+
+/* Matches */
+.match-item {
+    background: var(--google-grey-50);
+    border: 1px solid var(--google-grey-300);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+}
+
+.match-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.match-type {
+    font-weight: 500;
+    color: var(--google-grey-800);
+}
+
+.match-text {
+    background: white;
+    border: 1px solid var(--google-grey-300);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 13px;
+    margin: 8px 0;
+}
+
+.match-context {
+    font-size: 12px;
+    color: var(--google-grey-600);
+    background: white;
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-family: 'Roboto Mono', monospace;
+}
+
+/* Recommendations */
+.recommendations {
+    background: var(--google-blue-light);
+    border: 1px solid var(--google-blue);
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 16px;
+}
+
+.recommendations h3 {
+    color: var(--google-blue-dark);
+    margin: 0 0 12px 0;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.recommendations ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.recommendations li {
+    margin-bottom: 8px;
+    color: var(--google-grey-700);
+}
+
+/* Help Section */
+.pattern-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.pattern-item {
+    background: white;
+    border: 1px solid var(--google-grey-200);
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.pattern-title {
+    font-weight: 500;
+    color: var(--google-grey-800);
+    margin-bottom: 8px;
+}
+
+.pattern-examples {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 12px;
+    color: var(--google-grey-600);
+    background: var(--google-grey-50);
+    padding: 8px;
+    border-radius: 4px;
+    margin-top: 8px;
+}
+
+/* Statistics */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin: 16px 0;
+}
+
+.stat-item {
+    text-align: center;
+    padding: 16px;
+    background: white;
+    border: 1px solid var(--google-grey-200);
+    border-radius: 8px;
+}
+
+.stat-value {
+    font-size: 32px;
+    font-weight: 600;
+    color: var(--google-blue);
+    margin-bottom: 4px;
+}
+
+.stat-label {
+    font-size: 14px;
+    color: var(--google-grey-600);
+}
+
+/* Alerts */
+.alert {
+    padding: 16px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.alert-success {
+    background: rgba(52, 168, 83, 0.1);
+    border: 1px solid rgba(52, 168, 83, 0.3);
+    color: var(--google-green);
+}
+
+.alert-warning {
+    background: rgba(251, 188, 4, 0.1);
+    border: 1px solid rgba(251, 188, 4, 0.3);
+    color: #f57c00;
+}
+
+.alert-error {
+    background: rgba(234, 67, 53, 0.1);
+    border: 1px solid rgba(234, 67, 53, 0.3);
+    color: var(--google-red);
+}
+
+.material-icons {
+    font-size: 20px;
+    vertical-align: middle;
+}
+
+/* Loading */
+.btn.loading {
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .container {
+        padding: 16px 8px;
+    }
+    
+    .page-header {
+        padding: 24px 16px;
+    }
+    
+    .card-body {
+        padding: 16px;
+    }
+    
+    .pattern-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+<div class="container">
+    <!-- Page Header -->
+    <div class="page-header">
+        <h1>
+            <span class="material-icons">security</span>
+            Sensitive Content Checker
+        </h1>
+        <p>Test and validate sensitive content detection algorithms for NRIC, credit cards, and other PII</p>
+    </div>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'error' if category == 'error' else category }}">
+                    <span class="material-icons">
+                        {% if category == 'success' %}check_circle{% elif category == 'warning' %}warning{% else %}error{% endif %}
+                    </span>
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- Help Section -->
+    <div class="card">
+        <div class="card-header">
+            <h2>
+                <span class="material-icons">help_outline</span>
+                Supported Detection Patterns
+            </h2>
+        </div>
+        <div class="card-body">
+            <p>The content checker can detect the following types of sensitive information:</p>
+            <div class="pattern-grid">
+                {% for pattern_name, pattern_data in pattern_info.items() %}
+                <div class="pattern-item">
+                    <div class="pattern-title">
+                        <span class="severity-badge severity-{{ pattern_data.severity.lower() }}">
+                            {{ pattern_data.severity }}
+                        </span>
+                        {{ pattern_data.description }}
+                    </div>
+                    {% if pattern_data.examples %}
+                    <div class="pattern-examples">
+                        Examples: {{ pattern_data.examples | join(', ') }}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Testing Form -->
+    <div class="card">
+        <div class="card-header">
+            <h2>
+                <span class="material-icons">bug_report</span>
+                Content Testing
+            </h2>
+        </div>
+        <div class="card-body">
+            <form method="POST" id="contentForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="form-group">
+                    <label for="test_text" class="form-label">
+                        Text to Test
+                    </label>
+                    <textarea 
+                        name="test_text" 
+                        id="test_text" 
+                        class="form-control" 
+                        placeholder="Enter text containing potential sensitive information to test the detection algorithms...&#10;&#10;Example test content:&#10;My NRIC is S1234567A&#10;Credit card: 4111111111111111&#10;Phone: +65 91234567&#10;Email: user@example.com"
+                        rows="8">{{ test_text }}</textarea>
+                    <small class="form-text text-muted">
+                        Enter any text that might contain sensitive information. The system will analyze it and provide detailed results.
+                    </small>
+                </div>
+
+                <div style="display: flex; gap: 12px; align-items: center;">
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <span class="material-icons">search</span>
+                        Analyze Content
+                    </button>
+                    
+                    <button type="button" class="btn btn-secondary" onclick="loadSampleData()">
+                        <span class="material-icons">assignment</span>
+                        Load Sample Data
+                    </button>
+                    
+                    <button type="button" class="btn btn-clear" onclick="clearForm()">
+                        <span class="material-icons">clear</span>
+                        Clear
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Results Section -->
+    {% if results %}
+    <div class="card results-section">
+        <div class="card-header">
+            <h2>
+                <span class="material-icons">analytics</span>
+                Analysis Results
+            </h2>
+        </div>
+        <div class="card-body">
+            <!-- Statistics -->
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-value">{{ results.match_count }}</div>
+                    <div class="stat-label">Matches Found</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">
+                        <span class="severity-badge severity-{{ results.severity.lower() }}">
+                            {{ results.severity }}
+                        </span>
+                    </div>
+                    <div class="stat-label">Highest Severity</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">{{ results.risk_score }}</div>
+                    <div class="stat-label">Risk Score (0-100)</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">{{ results.text_length }}</div>
+                    <div class="stat-label">Characters Analyzed</div>
+                </div>
+            </div>
+
+            <!-- Risk Meter -->
+            <div class="risk-meter">
+                <label>Risk Level:</label>
+                <div class="risk-bar">
+                    <div class="risk-fill risk-{% if results.risk_score < 30 %}low{% elif results.risk_score < 70 %}medium{% else %}high{% endif %}" 
+                         style="width: {{ results.risk_score }}%"></div>
+                </div>
+                <small>{{ results.risk_score }}/100</small>
+            </div>
+
+            <!-- Matches -->
+            {% if results.matches %}
+            <h3>Detected Sensitive Content:</h3>
+            {% for match in results.matches %}
+            <div class="match-item">
+                <div class="match-header">
+                    <span class="match-type">{{ match.description }}</span>
+                    <span class="severity-badge severity-{{ match.severity.lower() }}">
+                        {{ match.severity }}
+                    </span>
+                </div>
+                <div class="match-text">
+                    <strong>Matched:</strong> {{ match.matched_text }}
+                </div>
+                <div class="match-context">
+                    <strong>Context:</strong> {{ match.context }}
+                </div>
+                <small>Position: {{ match.position.start }}-{{ match.position.end }}</small>
+            </div>
+            {% endfor %}
+            {% endif %}
+
+            <!-- Recommendations -->
+            <div class="recommendations">
+                <h3>
+                    <span class="material-icons">lightbulb</span>
+                    Recommendations
+                </h3>
+                <ul>
+                    {% for recommendation in results.recommendations %}
+                    <li>{{ recommendation }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <!-- Metadata -->
+            <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--google-grey-200); font-size: 12px; color: var(--google-grey-600);">
+                <strong>Analysis completed:</strong> {{ results.timestamp }}<br>
+                <strong>Safe for storage:</strong> {{ '✅ Yes' if results.safe_for_storage else '❌ No' }}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Back to Admin -->
+    <div style="text-align: center; margin-top: 32px;">
+        <a href="{{ url_for('admin.manage_users') }}" class="btn btn-secondary">
+            <span class="material-icons">arrow_back</span>
+            Back to Admin Dashboard
+        </a>
+    </div>
+</div>
+
+<script>
+    function clearForm() {
+        document.getElementById('test_text').value = '';
+    }
+
+    function loadSampleData() {
+        const sampleData = `Sample text with various sensitive information:
+
+Personal Information:
+- NRIC: S1234567A, T9876543Z
+- Credit Cards: 4111111111111111, 5555555555554444
+- Phone: +65 91234567, 81234567
+- Email: john.doe@example.com
+
+Financial Information:
+- DBS Bank Account: 1234567890
+- Credit Card: 4532015112830366
+
+Technical Information:
+- IP Address: 192.168.1.1
+- MAC Address: 00:1B:44:11:3A:B7
+
+International:
+- SSN: 123-45-6789
+- Passport: A1234567
+
+API Keys:
+- api_key="sk_test_1234567890abcdef"
+- secret_key: "abc123xyz789"
+
+Location:
+- Singapore Postal Code: 123456`;
+
+        document.getElementById('test_text').value = sampleData;
+    }
+
+    // Form submission with loading state
+    document.getElementById('contentForm').addEventListener('submit', function() {
+        const submitBtn = document.getElementById('submitBtn');
+        submitBtn.classList.add('loading');
+        submitBtn.innerHTML = '<span class="material-icons">hourglass_empty</span>Analyzing...';
+        submitBtn.disabled = true;
+    });
+
+    // Auto-resize textarea
+    const textarea = document.getElementById('test_text');
+    textarea.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = this.scrollHeight + 'px';
+    });
+</script>
+{% endblock %}

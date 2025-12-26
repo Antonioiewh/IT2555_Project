@@ -2,253 +2,386 @@
 
 {% block title %}Ticket #{{ ticket.ticket_id }} - Support{% endblock %}
 
-{% block content %}
-<div class="container mt-4">
-    <div class="row">
-        <div class="col-md-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2>Ticket #{{ ticket.ticket_id }}</h2>
-                <div>
-                    {% if current_user.has_role('support_agent') %}
-                        <a href="{{ url_for('ticketing.agent_dashboard') }}" class="btn btn-outline-secondary">
-                            <i class="bi bi-arrow-left"></i> Back to Dashboard
-                        </a>
-                    {% else %}
-                        <a href="{{ url_for('ticketing.index') }}" class="btn btn-outline-secondary">
-                            <i class="bi bi-arrow-left"></i> Back to Tickets
-                        </a>
-                    {% endif %}
-                </div>
-            </div>
+{% block head %}
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@300;400;500;600&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+{% endblock %}
 
+{% block content %}
+<div class="google-container">
+    <!-- Header Section -->
+    <div class="page-header">
+        <div class="header-main">
+            <div class="header-icon">
+                <span class="material-icons">assignment</span>
+            </div>
+            <div class="header-text">
+                <h1 class="header-title">Ticket #{{ ticket.ticket_id }}</h1>
+                <p class="header-subtitle">{{ ticket.title }}</p>
+            </div>
+        </div>
+        
+        <div class="header-actions">
+            {% if current_user.has_role('support_agent') %}
+                <a href="{{ url_for('ticketing.agent_dashboard') }}" class="google-btn outline">
+                    <span class="material-icons">arrow_back</span>
+                    Back to Dashboard
+                </a>
+            {% else %}
+                <a href="{{ url_for('ticketing.index') }}" class="google-btn outline">
+                    <span class="material-icons">arrow_back</span>
+                    Back to Tickets
+                </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="content-grid">
+        <!-- Left Column - Ticket Details -->
+        <div class="main-content">
             <!-- Ticket Details Card -->
-            <div class="card mb-4">
+            <div class="ticket-card">
                 <div class="card-header">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <h5 class="card-title mb-0">{{ ticket.title }}</h5>
+                    <div class="ticket-status">
+                        <div class="status-badge status-{{ ticket.status }}">
+                            <span class="material-icons">
+                                {% if ticket.status == 'open' %}radio_button_unchecked
+                                {% elif ticket.status == 'in_progress' %}refresh
+                                {% elif ticket.status == 'pending' %}pause_circle
+                                {% elif ticket.status == 'closed' %}check_circle
+                                {% else %}help{% endif %}
+                            </span>
+                            {{ ticket.status.replace('_', ' ').title() }}
                         </div>
-                        <div class="col-md-6 text-end">
-                            <span class="badge bg-{% if ticket.status == 'open' %}warning{% elif ticket.status == 'in_progress' %}info{% elif ticket.status == 'pending' %}secondary{% elif ticket.status == 'closed' %}success{% else %}dark{% endif %} me-2">
-                                {{ ticket.status|title }}
+                        <div class="priority-badge priority-{{ ticket.priority }}">
+                            <span class="material-icons">
+                                {% if ticket.priority == 'security' %}security
+                                {% elif ticket.priority == 'critical' %}error
+                                {% elif ticket.priority == 'high' %}keyboard_arrow_up
+                                {% elif ticket.priority == 'medium' %}remove
+                                {% else %}keyboard_arrow_down{% endif %}
                             </span>
-                            <span class="badge bg-{% if ticket.priority == 'security' %}danger{% elif ticket.priority == 'critical' %}danger{% elif ticket.priority == 'high' %}warning{% elif ticket.priority == 'medium' %}info{% else %}secondary{% endif %}">
-                                {{ ticket.priority|title }} Priority
-                            </span>
+                            {{ ticket.priority.title() }} Priority
                         </div>
                     </div>
                 </div>
-                <div class="card-body">
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <strong>Created by:</strong> {{ ticket.user.username }}<br>
-                            <strong>Created at:</strong> {{ ticket.created_at.strftime('%Y-%m-%d %H:%M:%S') }}<br>
-                            <strong>Updated at:</strong> {{ ticket.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                
+                <div class="card-content">
+                    <!-- Ticket Info Grid -->
+                    <div class="info-grid">
+                        <div class="info-section">
+                            <h3 class="section-title">
+                                <span class="material-icons">person</span>
+                                Creator Information
+                            </h3>
+                            <div class="info-items">
+                                <div class="info-item">
+                                    <span class="item-label">Created by:</span>
+                                    <span class="item-value">{{ ticket.user.username }}</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="item-label">Created at:</span>
+                                    <span class="item-value">{{ ticket.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="item-label">Last updated:</span>
+                                    <span class="item-value">{{ ticket.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}</span>
+                                </div>
+                            </div>
                         </div>
-                        <div class="col-md-6">
-                            {% if ticket.category %}
-                                <strong>Category:</strong> {{ ticket.category.name }}<br>
-                            {% endif %}
-                            <strong>Classification:</strong> 
-                            <span class="badge bg-{% if ticket.classification == 'top_secret' %}danger{% elif ticket.classification == 'secret' %}warning{% elif ticket.classification == 'confidential' %}info{% else %}secondary{% endif %}">
-                                {{ ticket.classification|replace('_', ' ')|title }}
-                            </span><br>
-                            {% if assignment and assignment.agent %}
-                                <strong>Assigned to:</strong> {{ assignment.agent.user.username }}<br>
-                            {% else %}
-                                <strong>Status:</strong> <em>Unassigned</em><br>
-                            {% endif %}
+
+                        <div class="info-section">
+                            <h3 class="section-title">
+                                <span class="material-icons">settings</span>
+                                Ticket Details
+                            </h3>
+                            <div class="info-items">
+                                {% if ticket.category %}
+                                <div class="info-item">
+                                    <span class="item-label">Category:</span>
+                                    <span class="item-value">{{ ticket.category.name }}</span>
+                                </div>
+                                {% endif %}
+                                <div class="info-item">
+                                    <span class="item-label">Classification:</span>
+                                    <div class="classification-badge classification-{{ ticket.classification }}">
+                                        <span class="material-icons">
+                                            {% if ticket.classification == 'top_secret' %}lock
+                                            {% elif ticket.classification == 'secret' %}security
+                                            {% elif ticket.classification == 'confidential' %}visibility_off
+                                            {% else %}lock_open{% endif %}
+                                        </span>
+                                        {{ ticket.classification|replace('_', ' ')|title }}
+                                    </div>
+                                </div>
+                                <div class="info-item">
+                                    <span class="item-label">Assigned to:</span>
+                                    {% if assignment and assignment.agent %}
+                                        <div class="assignee-info">
+                                            <span class="material-icons">support_agent</span>
+                                            {{ assignment.agent.user.username }}
+                                        </div>
+                                    {% else %}
+                                        <span class="unassigned">Unassigned</span>
+                                    {% endif %}
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    
-                    <div class="mb-3">
-                        <strong>Description:</strong>
-                        <div class="border rounded p-3 mt-2 bg-light preserve-whitespace">
+
+                    <!-- Description Section -->
+                    <div class="description-section">
+                        <h3 class="section-title">
+                            <span class="material-icons">description</span>
+                            Description
+                        </h3>
+                        <div class="description-content">
                             {{ ticket.description }}
                         </div>
                     </div>
 
+                    <!-- Resolution Section -->
                     {% if ticket.status == 'closed' and ticket.resolution %}
-                        <div class="mb-3">
-                            <strong>Resolution:</strong>
-                            <div class="border rounded p-3 mt-2 bg-success-light preserve-whitespace">
+                        <div class="resolution-section">
+                            <h3 class="section-title">
+                                <span class="material-icons">task_alt</span>
+                                Resolution
+                            </h3>
+                            <div class="resolution-content">
                                 {{ ticket.resolution }}
                             </div>
                             {% if ticket.resolved_at %}
-                                <small class="text-muted">Resolved on: {{ ticket.resolved_at.strftime('%Y-%m-%d %H:%M:%S') }}</small>
+                                <div class="resolution-date">
+                                    <span class="material-icons">schedule</span>
+                                    Resolved on: {{ ticket.resolved_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                                </div>
                             {% endif %}
                         </div>
                     {% endif %}
                 </div>
             </div>
+        </div>
 
-            <!-- Agent Actions (Only for Support Agents) -->
-            {% if agent and ticket.status != 'closed' %}
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <h6 class="card-title mb-0">Agent Actions</h6>
-                    </div>
-                    <div class="card-body">
-                        <!-- Check if ticket is assigned to show appropriate actions -->
-                        {% if assignment and assignment.agent %}
-                            <!-- Ticket is assigned - show all actions -->
-                            <div class="row">
-                                <!-- Escalate Ticket -->
-                                <div class="col-md-6 mb-3">
-                                    <form method="POST" action="{{ url_for('ticketing.escalate_ticket', ticket_id=ticket.ticket_id) }}" class="d-inline">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                        
-                                        <div class="mb-2">
-                                            <label for="escalation_type" class="form-label">Escalation Type:</label>
-                                            <select name="escalation_type" id="escalation_type" class="form-control form-control-sm" onchange="toggleEscalationOptions()">
-                                                <option value="priority">Priority Escalation</option>
-                                                <option value="tier">Tier Escalation</option>
-                                            </select>
+        <!-- Right Column - Agent Actions -->
+        {% if agent and ticket.status != 'closed' %}
+        <div class="sidebar">
+            <div class="actions-card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <span class="material-icons">build</span>
+                        Agent Actions
+                    </h3>
+                </div>
+                
+                <div class="card-content">
+                    {% if assignment and assignment.agent %}
+                        <!-- Ticket is assigned - show all actions -->
+                        <div class="action-sections">
+                            <!-- Escalate Section -->
+                            <div class="action-section">
+                                <h4 class="action-title">
+                                    <span class="material-icons">trending_up</span>
+                                    Escalate Ticket
+                                </h4>
+                                
+                                <form method="POST" action="{{ url_for('ticketing.escalate_ticket', ticket_id=ticket.ticket_id) }}" class="action-form">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    
+                                    <div class="form-group">
+                                        <label class="form-label">Escalation Type</label>
+                                        <select name="escalation_type" id="escalation_type" class="google-select" onchange="toggleEscalationOptions()">
+                                            <option value="priority">Priority Escalation</option>
+                                            <option value="tier">Tier Escalation</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div id="priority-info" class="escalation-info">
+                                        <div class="info-chip">
+                                            <span class="material-icons">info</span>
+                                            Will escalate from <strong>{{ ticket.priority }}</strong> to next priority level
                                         </div>
-                                        
-                                        <!-- Priority escalation info (shown by default) -->
-                                        <div id="priority-info" class="mb-2">
-                                            <small class="text-muted">Will escalate from <strong>{{ ticket.priority }}</strong> to next priority level</small>
-                                        </div>
-                                        
-                                        <!-- Tier escalation options (hidden by default) -->
-                                        <div id="tier-options" class="mb-2" style="display: none;">
-                                            <label for="target_tier" class="form-label">Target Tier:</label>
-                                            <select name="target_tier" id="target_tier" class="form-control form-control-sm">
+                                    </div>
+                                    
+                                    <div id="tier-options" class="tier-options" style="display: none;">
+                                        <div class="form-group">
+                                            <label class="form-label">Escalate to Clearance Level</label>
+                                            <select name="target_tier" id="target_tier" class="google-select">
                                                 {% set classification_levels = {'public': 1, 'internal': 2, 'confidential': 3, 'secret': 4, 'top_secret': 5} %}
                                                 {% set current_ticket_level = classification_levels.get(ticket.classification, 1) %}
                                                 {% set available_tiers = [] %}
+                                                {% set tier_names = {1: 'PUBLIC', 2: 'INTERNAL', 3: 'CONFIDENTIAL', 4: 'SECRET', 5: 'TOP SECRET'} %}
                                                 
-                                                <!-- Show all tiers higher than current ticket classification -->
                                                 {% for level in range(current_ticket_level + 1, 6) %}
                                                     {% set _ = available_tiers.append(level) %}
-                                                    <option value="{{ level }}">L{{ level }} - 
-                                                        {% if level == 1 %}PUBLIC
-                                                        {% elif level == 2 %}INTERNAL
-                                                        {% elif level == 3 %}CONFIDENTIAL  
-                                                        {% elif level == 4 %}SECRET
-                                                        {% elif level == 5 %}TOP SECRET
-                                                        {% endif %}
+                                                    <option value="{{ level }}">
+                                                        {{ tier_names.get(level, 'UNKNOWN') }} (Level {{ level }})
                                                     </option>
                                                 {% endfor %}
                                                 
                                                 {% if available_tiers|length == 0 %}
-                                                    <option value="" disabled>No higher tiers available</option>
+                                                    <option value="" disabled>No higher clearance levels available</option>
                                                 {% endif %}
                                             </select>
-                                            
+                                        </div>
+                                        
+                                        <div class="info-chip">
+                                            <span class="material-icons">info</span>
                                             {% if available_tiers|length == 0 %}
-                                                <small class="text-muted">
-                                                    Cannot escalate higher than {{ ticket.classification|replace('_', ' ')|title }} 
-                                                    (already at highest classification level)
-                                                </small>
+                                                Cannot escalate higher than {{ ticket.classification|replace('_', ' ')|title }}
                                             {% else %}
-                                                <small class="text-muted">
-                                                    Escalating from {{ ticket.classification|replace('_', ' ')|title }} to higher classification level
-                                                </small>
+                                                Escalating from {{ ticket.classification|replace('_', ' ')|title }} to higher classification level
                                             {% endif %}
                                         </div>
-                                        
-                                        <div class="mb-2">
-                                            <label for="reason" class="form-label">Escalation Reason:</label>
-                                            <textarea name="reason" id="reason" class="form-control form-control-sm" rows="2" placeholder="Reason for escalation..." required></textarea>
-                                        </div>
-                                        
-                                        <button type="submit" class="btn btn-warning btn-sm">
-                                            <i class="bi bi-arrow-up-circle"></i> Escalate
-                                        </button>
-                                    </form>
-                                </div>
-
-                                <!-- Close Ticket -->
-                                <div class="col-md-6 mb-3">
-                                    <form method="POST" action="{{ url_for('ticketing.close_ticket', ticket_id=ticket.ticket_id) }}" class="d-inline">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                        <div class="mb-2">
-                                            <label for="resolution" class="form-label">Resolution:</label>
-                                            <textarea name="resolution" id="resolution" class="form-control form-control-sm" rows="2" placeholder="Describe the resolution..." required></textarea>
-                                        </div>
-                                        
-                                        <!-- Archive checkbox -->
-                                        <div class="form-check mb-2">
-                                            <input class="form-check-input" type="checkbox" name="archive_ticket" id="archive_ticket" value="1">
-                                            <label class="form-check-label" for="archive_ticket">
-                                                <small>Archive ticket after closing (read-only access)</small>
-                                            </label>
-                                        </div>
-                                        
-                                        <button type="submit" class="btn btn-success btn-sm">
-                                            <i class="bi bi-check-circle"></i> Close Ticket
-                                        </button>
-                                    </form>
-                                    
-                                    <!-- Terminate Button -->
-                                    <div class="mt-2">
-                                        <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#terminateModal">
-                                            <i class="bi bi-trash"></i> Terminate Ticket
-                                        </button>
                                     </div>
-                                </div>
+                                    
+                                    <div class="form-group">
+                                        <label class="form-label">Escalation Reason</label>
+                                        <textarea name="reason" id="reason" class="google-textarea" rows="3" placeholder="Reason for escalation..." required></textarea>
+                                    </div>
+                                    
+                                    <button type="submit" class="google-btn warning full-width">
+                                        <span class="material-icons">trending_up</span>
+                                        Escalate Ticket
+                                    </button>
+                                </form>
                             </div>
-                        {% else %}
-                            <!-- Ticket is unassigned - only show take ticket option -->
-                            <div class="alert alert-warning">
-                                <h6><i class="bi bi-exclamation-triangle"></i> Ticket Not Assigned</h6>
-                                <p class="mb-2">This ticket is currently unassigned. You must take ownership of the ticket before you can close, escalate, or terminate it.</p>
+
+                            <!-- Close Section -->
+                            <div class="action-section">
+                                <h4 class="action-title">
+                                    <span class="material-icons">task_alt</span>
+                                    Close Ticket
+                                </h4>
+                                
+                                <form method="POST" action="{{ url_for('ticketing.close_ticket', ticket_id=ticket.ticket_id) }}" class="action-form">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    
+                                    <div class="form-group">
+                                        <label class="form-label">Resolution</label>
+                                        <textarea name="resolution" id="resolution" class="google-textarea" rows="3" placeholder="Describe the resolution..." required></textarea>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label class="checkbox-container">
+                                            <input type="checkbox" name="archive_ticket" id="archive_ticket" value="1">
+                                            <span class="checkmark"></span>
+                                            <span class="checkbox-label">Archive ticket after closing (read-only access)</span>
+                                        </label>
+                                    </div>
+                                    
+                                    <button type="submit" class="google-btn success full-width">
+                                        <span class="material-icons">check_circle</span>
+                                        Close Ticket
+                                    </button>
+                                </form>
+                            </div>
+
+                            <!-- Terminate Section -->
+                            <div class="action-section danger">
+                                <h4 class="action-title">
+                                    <span class="material-icons">delete_forever</span>
+                                    Danger Zone
+                                </h4>
+                                
+                                <div class="danger-warning">
+                                    <span class="material-icons">warning</span>
+                                    <span>Permanent deletion cannot be undone</span>
+                                </div>
+                                
+                                <button type="button" class="google-btn danger full-width" data-bs-toggle="modal" data-bs-target="#terminateModal">
+                                    <span class="material-icons">delete_forever</span>
+                                    Terminate Ticket
+                                </button>
+                            </div>
+                        </div>
+                    {% else %}
+                        <!-- Ticket is unassigned -->
+                        <div class="unassigned-notice">
+                            <div class="notice-icon">
+                                <span class="material-icons">assignment_late</span>
+                            </div>
+                            <div class="notice-content">
+                                <h4>Ticket Not Assigned</h4>
+                                <p>This ticket is currently unassigned. You must take ownership before you can perform actions.</p>
                                 
                                 {% if agent.can_view_classification(ticket.classification) %}
-                                    <button type="button" class="btn btn-primary btn-sm" onclick="takeTicket({{ ticket.ticket_id }})">
-                                        <i class="bi bi-person-check"></i> Take Ticket
+                                    <button type="button" class="google-btn primary" onclick="takeTicket({{ ticket.ticket_id }})">
+                                        <span class="material-icons">person_add</span>
+                                        Take Ticket
                                     </button>
                                 {% else %}
-                                    <p class="text-muted small mb-0">
-                                        <i class="bi bi-lock"></i> You do not have sufficient clearance to take this {{ ticket.classification|replace('_', ' ')|title }} classified ticket.
-                                    </p>
+                                    <div class="access-denied">
+                                        <span class="material-icons">lock</span>
+                                        <span>You do not have sufficient clearance to take this {{ ticket.classification|replace('_', ' ')|title }} classified ticket.</span>
+                                    </div>
                                 {% endif %}
                             </div>
-                        {% endif %}
-                    </div>
+                        </div>
+                    {% endif %}
                 </div>
-            {% endif %}
+            </div>
         </div>
+        {% endif %}
     </div>
 </div>
 
 <!-- Terminate Ticket Confirmation Modal -->
 <div class="modal fade" id="terminateModal" tabindex="-1" aria-labelledby="terminateModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title" id="terminateModalLabel">
-                    <i class="bi bi-exclamation-triangle"></i> Terminate Ticket
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content google-modal">
+            <div class="modal-header">
+                <div class="modal-title-container">
+                    <div class="modal-icon danger">
+                        <span class="material-icons">warning</span>
+                    </div>
+                    <h3 class="modal-title" id="terminateModalLabel">Terminate Ticket</h3>
+                </div>
+                <button type="button" class="modal-close" data-bs-dismiss="modal" aria-label="Close">
+                    <span class="material-icons">close</span>
+                </button>
             </div>
             <div class="modal-body">
-                <div class="alert alert-warning">
-                    <strong>⚠️ WARNING: This action is irreversible!</strong>
+                <div class="warning-banner">
+                    <span class="material-icons">error</span>
+                    <strong>WARNING: This action is irreversible!</strong>
                 </div>
+                
                 <p>You are about to <strong>permanently delete</strong> this ticket from the database:</p>
-                <ul>
-                    <li><strong>Ticket #{{ ticket.ticket_id }}:</strong> {{ ticket.title }}</li>
-                    <li><strong>Priority:</strong> {{ ticket.priority|title }}</li>
-                    <li><strong>Classification:</strong> {{ ticket.classification|replace('_', ' ')|title }}</li>
-                </ul>
-                <p class="text-danger">
-                    <strong>This will completely remove:</strong><br>
-                    • The ticket and all its data<br>
-                    • All messages and replies<br>
-                    • Assignment history<br>
-                    • Escalation records<br>
-                </p>
-                <p>Are you sure you want to continue?</p>
+                
+                <div class="ticket-summary">
+                    <div class="summary-item">
+                        <span class="summary-label">Ticket:</span>
+                        <span class="summary-value">#{{ ticket.ticket_id }} - {{ ticket.title }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Priority:</span>
+                        <span class="summary-value">{{ ticket.priority|title }}</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Classification:</span>
+                        <span class="summary-value">{{ ticket.classification|replace('_', ' ')|title }}</span>
+                    </div>
+                </div>
+                
+                <div class="deletion-impact">
+                    <h4>This will completely remove:</h4>
+                    <ul>
+                        <li><span class="material-icons">assignment</span>The ticket and all its data</li>
+                        <li><span class="material-icons">message</span>All messages and replies</li>
+                        <li><span class="material-icons">history</span>Assignment history</li>
+                        <li><span class="material-icons">trending_up</span>Escalation records</li>
+                    </ul>
+                </div>
+                
+                <p class="confirmation-text">Are you sure you want to continue?</p>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="google-btn outline" data-bs-dismiss="modal">Cancel</button>
                 <form method="POST" action="{{ url_for('ticketing.terminate_ticket', ticket_id=ticket.ticket_id) }}" class="d-inline">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                    <button type="submit" class="btn btn-danger">
-                        <i class="bi bi-trash"></i> Yes, Terminate Permanently
+                    <button type="submit" class="google-btn danger">
+                        <span class="material-icons">delete_forever</span>
+                        Yes, Terminate Permanently
                     </button>
                 </form>
             </div>
@@ -287,22 +420,40 @@ function takeTicket(ticketId) {
         .then(response => response.json())
         .then(data => {
             if (data.message) {
-                alert(data.message);
-                location.reload(); // Refresh the page to show updated assignment
+                showAlert('success', data.message);
+                setTimeout(() => location.reload(), 1500);
             } else if (data.error) {
-                alert('Error: ' + data.error);
+                showAlert('error', 'Error: ' + data.error);
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('An error occurred while taking the ticket.');
+            showAlert('error', 'An error occurred while taking the ticket.');
         });
     }
 }
 
+function showAlert(type, message) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `google-alert ${type}`;
+    alertDiv.innerHTML = `
+        <span class="material-icons">${type === 'success' ? 'check_circle' : 'error'}</span>
+        <span>${message}</span>
+        <button onclick="this.parentElement.remove()" class="alert-close">
+            <span class="material-icons">close</span>
+        </button>
+    `;
+    document.querySelector('.google-container').prepend(alertDiv);
+    
+    setTimeout(() => {
+        if (alertDiv.parentElement) {
+            alertDiv.remove();
+        }
+    }, 5000);
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
-    // Only initialize escalation options if the form exists (ticket is assigned)
     const escalationType = document.getElementById('escalation_type');
     if (escalationType) {
         toggleEscalationOptions();
@@ -311,12 +462,1006 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <style>
-.bg-success-light {
-    background-color: #d1e7dd !important;
+/* Google Material Design Variables */
+:root {
+    --google-blue: #1a73e8;
+    --google-red: #ea4335;
+    --google-yellow: #fbbc04;
+    --google-green: #34a853;
+    --google-grey-50: #f8f9fa;
+    --google-grey-100: #f1f3f4;
+    --google-grey-200: #e8eaed;
+    --google-grey-300: #dadce0;
+    --google-grey-400: #bdc1c6;
+    --google-grey-500: #9aa0a6;
+    --google-grey-600: #80868b;
+    --google-grey-700: #5f6368;
+    --google-grey-800: #3c4043;
+    --google-grey-900: #202124;
+    --google-border-radius: 8px;
+    --google-shadow: 0 1px 3px 0 rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15);
+    --google-shadow-hover: 0 1px 3px 0 rgba(60, 64, 67, 0.3), 0 8px 16px 6px rgba(60, 64, 67, 0.15);
 }
 
-.preserve-whitespace {
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Google Sans', 'Roboto', sans-serif;
+    background-color: var(--google-grey-50);
+    color: var(--google-grey-800);
+    line-height: 1.6;
+}
+
+.google-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+/* Page Header */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: white;
+    border-radius: var(--google-border-radius);
+    box-shadow: var(--google-shadow);
+    padding: 24px 32px;
+    gap: 24px;
+}
+
+.header-main {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.header-icon {
+    width: 56px;
+    height: 56px;
+    background: var(--google-blue);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+}
+
+.header-icon .material-icons {
+    font-size: 28px;
+}
+
+.header-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.header-title {
+    font-size: 28px;
+    font-weight: 400;
+    margin: 0;
+    color: var(--google-grey-900);
+    font-family: 'Roboto Mono', monospace;
+}
+
+.header-subtitle {
+    color: var(--google-grey-600);
+    font-size: 16px;
+    margin: 0;
+    font-weight: 500;
+}
+
+.header-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.google-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 24px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    position: relative;
+    overflow: hidden;
+}
+
+.google-btn.primary {
+    background: var(--google-blue);
+    color: white;
+    box-shadow: 0 2px 4px rgba(26, 115, 232, 0.3);
+}
+
+.google-btn.primary:hover {
+    background: #1557b0;
+    transform: translateY(-1px);
+}
+
+.google-btn.success {
+    background: var(--google-green);
+    color: white;
+    box-shadow: 0 2px 4px rgba(52, 168, 83, 0.3);
+}
+
+.google-btn.success:hover {
+    background: #2e7d32;
+    transform: translateY(-1px);
+}
+
+.google-btn.warning {
+    background: var(--google-yellow);
+    color: var(--google-grey-900);
+    box-shadow: 0 2px 4px rgba(251, 188, 4, 0.3);
+}
+
+.google-btn.warning:hover {
+    background: #f9ab00;
+    transform: translateY(-1px);
+}
+
+.google-btn.danger {
+    background: var(--google-red);
+    color: white;
+    box-shadow: 0 2px 4px rgba(234, 67, 53, 0.3);
+}
+
+.google-btn.danger:hover {
+    background: #c5221f;
+    transform: translateY(-1px);
+}
+
+.google-btn.outline {
+    background: transparent;
+    border: 2px solid var(--google-grey-300);
+    color: var(--google-grey-700);
+}
+
+.google-btn.outline:hover {
+    background: var(--google-grey-50);
+    border-color: var(--google-grey-400);
+}
+
+.google-btn.full-width {
+    width: 100%;
+    justify-content: center;
+}
+
+.google-btn .material-icons {
+    font-size: 18px;
+}
+
+/* Content Grid */
+.content-grid {
+    display: grid;
+    grid-template-columns: 1fr 400px;
+    gap: 32px;
+}
+
+/* Main Content */
+.main-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.ticket-card {
+    background: white;
+    border-radius: var(--google-border-radius);
+    box-shadow: var(--google-shadow);
+    overflow: hidden;
+}
+
+.card-header {
+    background: var(--google-grey-50);
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--google-grey-200);
+}
+
+.ticket-status {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.status-badge, .priority-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-badge .material-icons,
+.priority-badge .material-icons {
+    font-size: 16px;
+}
+
+/* Status badges */
+.status-badge.status-open {
+    background: rgba(251, 188, 4, 0.1);
+    color: #f57c00;
+    border: 1px solid rgba(251, 188, 4, 0.3);
+}
+
+.status-badge.status-in_progress {
+    background: rgba(26, 115, 232, 0.1);
+    color: var(--google-blue);
+    border: 1px solid rgba(26, 115, 232, 0.3);
+}
+
+.status-badge.status-pending {
+    background: rgba(154, 160, 166, 0.1);
+    color: var(--google-grey-600);
+    border: 1px solid var(--google-grey-400);
+}
+
+.status-badge.status-closed {
+    background: rgba(52, 168, 83, 0.1);
+    color: var(--google-green);
+    border: 1px solid rgba(52, 168, 83, 0.3);
+}
+
+/* Priority badges */
+.priority-badge.priority-security,
+.priority-badge.priority-critical {
+    background: rgba(234, 67, 53, 0.1);
+    color: var(--google-red);
+    border: 1px solid rgba(234, 67, 53, 0.3);
+}
+
+.priority-badge.priority-high {
+    background: rgba(251, 188, 4, 0.1);
+    color: #f57c00;
+    border: 1px solid rgba(251, 188, 4, 0.3);
+}
+
+.priority-badge.priority-medium {
+    background: rgba(26, 115, 232, 0.1);
+    color: var(--google-blue);
+    border: 1px solid rgba(26, 115, 232, 0.3);
+}
+
+.priority-badge.priority-low {
+    background: rgba(52, 168, 83, 0.1);
+    color: var(--google-green);
+    border: 1px solid rgba(52, 168, 83, 0.3);
+}
+
+.card-content {
+    padding: 32px;
+}
+
+/* Info Grid */
+.info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    margin-bottom: 32px;
+}
+
+.info-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.section-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--google-grey-800);
+    margin: 0;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--google-grey-200);
+}
+
+.section-title .material-icons {
+    color: var(--google-grey-600);
+    font-size: 20px;
+}
+
+.info-items {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+
+.item-label {
+    font-weight: 500;
+    color: var(--google-grey-700);
+    min-width: 100px;
+}
+
+.item-value {
+    color: var(--google-grey-800);
+    text-align: right;
+}
+
+.classification-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.classification-badge.classification-top_secret {
+    background: rgba(234, 67, 53, 0.1);
+    color: var(--google-red);
+    border: 1px solid rgba(234, 67, 53, 0.3);
+}
+
+.classification-badge.classification-secret {
+    background: rgba(251, 188, 4, 0.1);
+    color: #f57c00;
+    border: 1px solid rgba(251, 188, 4, 0.3);
+}
+
+.classification-badge.classification-confidential {
+    background: rgba(26, 115, 232, 0.1);
+    color: var(--google-blue);
+    border: 1px solid rgba(26, 115, 232, 0.3);
+}
+
+.classification-badge.classification-internal,
+.classification-badge.classification-public {
+    background: rgba(52, 168, 83, 0.1);
+    color: var(--google-green);
+    border: 1px solid rgba(52, 168, 83, 0.3);
+}
+
+.classification-badge .material-icons {
+    font-size: 14px;
+}
+
+.assignee-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--google-grey-800);
+}
+
+.assignee-info .material-icons {
+    color: var(--google-green);
+    font-size: 16px;
+}
+
+.unassigned {
+    color: var(--google-grey-500);
+    font-style: italic;
+}
+
+/* Description and Resolution Sections */
+.description-section, .resolution-section {
+    margin-bottom: 24px;
+}
+
+.description-content, .resolution-content {
+    background: var(--google-grey-50);
+    padding: 20px;
+    border-radius: var(--google-border-radius);
+    border: 1px solid var(--google-grey-200);
     white-space: pre-line;
+    font-family: 'Roboto', sans-serif;
+    line-height: 1.6;
+    color: var(--google-grey-800);
+}
+
+.resolution-content {
+    background: rgba(52, 168, 83, 0.05);
+    border-color: rgba(52, 168, 83, 0.2);
+}
+
+.resolution-date {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--google-grey-600);
+    font-size: 14px;
+    margin-top: 12px;
+}
+
+.resolution-date .material-icons {
+    font-size: 16px;
+}
+
+/* Sidebar */
+.sidebar {
+    display: flex;
+    flex-direction: column;
+}
+
+.actions-card {
+    background: white;
+    border-radius: var(--google-border-radius);
+    box-shadow: var(--google-shadow);
+    overflow: hidden;
+    position: sticky;
+    top: 24px;
+}
+
+.actions-card .card-header {
+    background: var(--google-grey-50);
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--google-grey-200);
+}
+
+.card-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--google-grey-800);
+    margin: 0;
+}
+
+.card-title .material-icons {
+    color: var(--google-grey-600);
+    font-size: 20px;
+}
+
+.actions-card .card-content {
+    padding: 24px;
+}
+
+/* Action Sections */
+.action-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+.action-section {
+    padding: 20px;
+    border: 1px solid var(--google-grey-200);
+    border-radius: var(--google-border-radius);
+    background: var(--google-grey-50);
+}
+
+.action-section.danger {
+    background: rgba(234, 67, 53, 0.02);
+    border-color: rgba(234, 67, 53, 0.2);
+}
+
+.action-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--google-grey-800);
+    margin: 0 0 16px 0;
+}
+
+.action-title .material-icons {
+    color: var(--google-grey-600);
+    font-size: 18px;
+}
+
+.action-section.danger .action-title .material-icons {
+    color: var(--google-red);
+}
+
+/* Form Styles */
+.action-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.form-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--google-grey-700);
+}
+
+.google-select, .google-textarea {
+    padding: 12px 16px;
+    border: 2px solid var(--google-grey-300);
+    border-radius: var(--google-border-radius);
+    font-size: 14px;
+    background: white;
+    transition: all 0.2s ease;
+    font-family: 'Roboto', sans-serif;
+}
+
+.google-select:focus, .google-textarea:focus {
+    outline: none;
+    border-color: var(--google-blue);
+    box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1);
+}
+
+.google-textarea {
+    resize: vertical;
+    min-height: 80px;
+    line-height: 1.5;
+}
+
+/* Escalation Info */
+.escalation-info, .tier-options {
+    margin-top: 12px;
+}
+
+.info-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(26, 115, 232, 0.1);
+    border: 1px solid rgba(26, 115, 232, 0.2);
+    border-radius: 16px;
+    font-size: 12px;
+    color: var(--google-blue);
+}
+
+.info-chip .material-icons {
+    font-size: 14px;
+}
+
+/* Checkbox Styles */
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    position: relative;
+}
+
+.checkbox-container input[type="checkbox"] {
+    opacity: 0;
+    position: absolute;
+}
+
+.checkmark {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--google-grey-400);
+    border-radius: 4px;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.checkbox-container:hover .checkmark {
+    border-color: var(--google-blue);
+}
+
+.checkbox-container input[type="checkbox"]:checked + .checkmark {
+    background: var(--google-blue);
+    border-color: var(--google-blue);
+}
+
+.checkbox-container input[type="checkbox"]:checked + .checkmark::after {
+    content: '';
+    position: absolute;
+    left: 6px;
+    top: 2px;
+    width: 6px;
+    height: 10px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+.checkbox-label {
+    font-size: 14px;
+    color: var(--google-grey-700);
+}
+
+/* Danger Warning */
+.danger-warning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: rgba(234, 67, 53, 0.1);
+    border: 1px solid rgba(234, 67, 53, 0.3);
+    border-radius: var(--google-border-radius);
+    color: var(--google-red);
+    font-size: 14px;
+    margin-bottom: 16px;
+}
+
+.danger-warning .material-icons {
+    font-size: 18px;
+}
+
+/* Unassigned Notice */
+.unassigned-notice {
+    text-align: center;
+    padding: 32px 20px;
+}
+
+.notice-icon {
+    width: 80px;
+    height: 80px;
+    background: rgba(251, 188, 4, 0.1);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+}
+
+.notice-icon .material-icons {
+    font-size: 40px;
+    color: var(--google-yellow);
+}
+
+.notice-content h4 {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--google-grey-800);
+    margin: 0 0 12px 0;
+}
+
+.notice-content p {
+    color: var(--google-grey-600);
+    margin: 0 0 20px 0;
+    line-height: 1.5;
+}
+
+.access-denied {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+    padding: 12px 16px;
+    background: rgba(234, 67, 53, 0.1);
+    border: 1px solid rgba(234, 67, 53, 0.3);
+    border-radius: var(--google-border-radius);
+    color: var(--google-red);
+    font-size: 14px;
+}
+
+.access-denied .material-icons {
+    font-size: 18px;
+}
+
+/* Modal Styles */
+.google-modal {
+    border-radius: var(--google-border-radius);
+    box-shadow: var(--google-shadow-hover);
+    border: none;
+}
+
+.modal-header {
+    background: var(--google-grey-50);
+    border-bottom: 1px solid var(--google-grey-200);
+    padding: 24px 32px;
+    border-radius: var(--google-border-radius) var(--google-border-radius) 0 0;
+}
+
+.modal-title-container {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.modal-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-icon.danger {
+    background: rgba(234, 67, 53, 0.1);
+    color: var(--google-red);
+}
+
+.modal-icon .material-icons {
+    font-size: 24px;
+}
+
+.modal-title {
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--google-grey-900);
+    margin: 0;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--google-grey-500);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    transition: background-color 0.2s ease;
+}
+
+.modal-close:hover {
+    background: var(--google-grey-100);
+}
+
+.modal-close .material-icons {
+    font-size: 20px;
+}
+
+.modal-body {
+    padding: 32px;
+}
+
+.warning-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    background: rgba(234, 67, 53, 0.1);
+    border: 1px solid rgba(234, 67, 53, 0.3);
+    border-radius: var(--google-border-radius);
+    color: var(--google-red);
+    margin-bottom: 24px;
+}
+
+.warning-banner .material-icons {
+    font-size: 20px;
+}
+
+.ticket-summary {
+    background: var(--google-grey-50);
+    border-radius: var(--google-border-radius);
+    border: 1px solid var(--google-grey-200);
+    padding: 20px;
+    margin: 16px 0;
+}
+
+.summary-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.summary-item:last-child {
+    margin-bottom: 0;
+}
+
+.summary-label {
+    font-weight: 500;
+    color: var(--google-grey-700);
+}
+
+.summary-value {
+    color: var(--google-grey-800);
+}
+
+.deletion-impact h4 {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--google-grey-800);
+    margin: 24px 0 12px 0;
+}
+
+.deletion-impact ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.deletion-impact li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    color: var(--google-grey-700);
+}
+
+.deletion-impact li .material-icons {
+    color: var(--google-red);
+    font-size: 18px;
+}
+
+.confirmation-text {
+    color: var(--google-grey-800);
+    font-weight: 500;
+    margin: 24px 0 0 0;
+}
+
+.modal-footer {
+    padding: 20px 32px;
+    background: var(--google-grey-50);
+    border-top: 1px solid var(--google-grey-200);
+    border-radius: 0 0 var(--google-border-radius) var(--google-border-radius);
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+/* Alert Styles */
+.google-alert {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: var(--google-border-radius);
+    margin-bottom: 16px;
+    box-shadow: var(--google-shadow);
+    background: white;
+}
+
+.google-alert.success {
+    border-left: 4px solid var(--google-green);
+    color: var(--google-green);
+}
+
+.google-alert.error {
+    border-left: 4px solid var(--google-red);
+    color: var(--google-red);
+}
+
+.alert-close {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--google-grey-500);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+}
+
+.alert-close:hover {
+    background: var(--google-grey-100);
+}
+
+.alert-close .material-icons {
+    font-size: 18px;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+    .content-grid {
+        grid-template-columns: 1fr;
+        gap: 24px;
+    }
+    
+    .actions-card {
+        position: static;
+    }
+}
+
+@media (max-width: 768px) {
+    .google-container {
+        padding: 16px;
+        gap: 20px;
+    }
+    
+    .page-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 16px;
+        padding: 20px;
+    }
+    
+    .header-main {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    
+    .info-grid {
+        grid-template-columns: 1fr;
+        gap: 24px;
+    }
+    
+    .card-content {
+        padding: 20px;
+    }
+    
+    .actions-card .card-content {
+        padding: 20px;
+    }
+    
+    .action-sections {
+        gap: 24px;
+    }
+    
+    .action-section {
+        padding: 16px;
+    }
+    
+    .ticket-status {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .modal-header {
+        padding: 20px;
+    }
+    
+    .modal-body {
+        padding: 20px;
+    }
+    
+    .modal-footer {
+        padding: 16px 20px;
+    }
+}
+
+@media (max-width: 480px) {
+    .google-container {
+        padding: 12px;
+    }
+    
+    .page-header {
+        padding: 16px;
+    }
+    
+    .header-title {
+        font-size: 24px;
+    }
+    
+    .card-content {
+        padding: 16px;
+    }
+    
+    .info-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+    
+    .item-value {
+        text-align: left;
+    }
+    
+    .actions-card .card-content {
+        padding: 16px;
+    }
+    
+    .action-section {
+        padding: 12px;
+    }
+    
+    .google-btn {
+        padding: 10px 20px;
+        font-size: 13px;
+    }
+}
+
+/* Focus states for accessibility */
+.google-btn:focus,
+.google-select:focus,
+.google-textarea:focus {
+    outline: 2px solid var(--google-blue);
+    outline-offset: 2px;
 }
 </style>
 {% endblock %}

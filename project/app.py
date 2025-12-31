@@ -279,7 +279,7 @@ def initialize_extensions(app):
         return User.query.get(int(user_id))
     # Initialize Splunk logger
     from splunk_logger import splunk_logger
-    #splunk_logger.init_app(app)
+    splunk_logger.init_app(app)
     # Socket.IO configuration
     socketio = SocketIO()
     socketio.init_app(app, 

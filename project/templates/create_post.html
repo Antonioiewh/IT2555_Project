@@ -477,12 +477,25 @@
                 <div class="google-form-group">
                     <label for="visibility" class="google-form-label">Visibility</label>
                     <select id="visibility" name="visibility" class="google-select" aria-label="Post visibility">
-                        <option value="private">Private</option>
-                        <option value="friends" selected>Friends Only</option>
-                        <option value="public">Public</option>
+                        <option value="public" selected>Public (Everyone can see)</option>
+                        <option value="friends">Friends Only</option>
+                        <option value="specific">Specific Users Only</option>
                     </select>
                 </div>
 
+                <!-- Specific Users Field (hidden by default) -->
+                <div class="google-form-group" id="specificUsersGroup" style="display: none;">
+                    <label for="specific_users" class="google-form-label">Select Specific Users</label>
+                    <input type="text" id="specific_users" name="specific_users" class="google-input" 
+                           placeholder="Enter usernames separated by commas (e.g., alice, bob, charlie)"
+                           style="width: 100%; padding: 10px 12px; border: 1px solid #dadce0; border-radius: 8px; font-family: 'Roboto', sans-serif; font-size: 14px; color: #3c4043; box-sizing: border-box;">
+                    <small style="color: #5f6368; font-size: 12px; margin-top: 4px; display: block;">Enter usernames of people who can see this post</small>
+                </div>
+                <!-- reCAPTCHA Field -->
+                <div class="google-form-group">
+                    <label class="google-form-label">Security Verification</label>
+                    {{ form.recaptcha }}
+                </div>
                 <!-- Buttons -->
                 <div class="google-button-group">
                     <a href="{{ url_for('account') }}" class="google-btn google-btn-secondary">Cancel</a>
@@ -878,6 +891,26 @@ function handleTextArea() {
     updateWordCount();
 }
 
+function handleVisibilityDropdown() {
+    const visibilitySelect = document.getElementById('visibility');
+    const specificUsersGroup = document.getElementById('specificUsersGroup');
+    
+    if (!visibilitySelect || !specificUsersGroup) return;
+    
+    function toggleSpecificUsersField() {
+        if (visibilitySelect.value === 'specific') {
+            specificUsersGroup.style.display = 'block';
+        } else {
+            specificUsersGroup.style.display = 'none';
+        }
+    }
+    
+    visibilitySelect.addEventListener('change', toggleSpecificUsersField);
+    
+    // Initialize on page load
+    toggleSpecificUsersField();
+}
+
 function initializeCreatePostForm() {
     if (formState.initialized) return;
     
@@ -887,6 +920,7 @@ function initializeCreatePostForm() {
         handleTextArea();
         handleDragAndDrop();
         handleFormSubmission();
+        handleVisibilityDropdown();  // Add this line
         
         formState.initialized = true;
         console.log('Create post form initialized successfully');

@@ -26,6 +26,7 @@ DROP TABLE IF EXISTS ticket_messages;
 DROP TABLE IF EXISTS chat_participants;
 DROP TABLE IF EXISTS friend_chat_map;
 DROP TABLE IF EXISTS event_participants;
+DROP TABLE IF EXISTS post_user_permissions;
 DROP TABLE IF EXISTS post_images;
 DROP TABLE IF EXISTS post_likes;
 DROP TABLE IF EXISTS blocked_users;
@@ -366,7 +367,25 @@ CREATE TABLE posts (
     post_content TEXT NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    visibility ENUM('public', 'friends', 'specific') DEFAULT 'public',
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- ---------------------------------------------------------------------------------
+-- Post User Permissions - For specific user access to posts
+-- ---------------------------------------------------------------------------------
+CREATE TABLE post_user_permissions (
+    permission_id INT AUTO_INCREMENT PRIMARY KEY,
+    post_id INT NOT NULL,
+    user_id INT NOT NULL,
+    granted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    granted_by INT NOT NULL,
+    FOREIGN KEY (post_id) REFERENCES posts(post_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (granted_by) REFERENCES users(user_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_post_user (post_id, user_id),
+    INDEX idx_post_permissions_post_id (post_id),
+    INDEX idx_post_permissions_user_id (user_id)
 );
 
 -- ---------------------------------------------------------------------------------

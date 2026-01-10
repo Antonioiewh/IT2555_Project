@@ -51,11 +51,14 @@ COPY --from=builder /go/src/github.com/percona/orchestrator/orchestrator /usr/lo
 # Copy web resources (templates, static files)
 COPY --from=builder /go/src/github.com/percona/orchestrator/resources /usr/local/orchestrator/resources
 
+# Copy discovery script
+COPY discover.sh /usr/local/bin/discover.sh
+
 # Set proper ownership
 RUN chown -R orchestrator:orchestrator /etc/orchestrator /var/lib/orchestrator /var/log/orchestrator /usr/local/orchestrator
 
-# Make binary executable
-RUN chmod +x /usr/local/bin/orchestrator
+# Make binaries executable
+RUN chmod +x /usr/local/bin/orchestrator /usr/local/bin/discover.sh
 
 # Switch to orchestrator user
 USER orchestrator
@@ -71,5 +74,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:3000/api/status || exit 1
 
 # Set entrypoint
-ENTRYPOINT ["/usr/local/bin/orchestrator"]
-CMD ["-config", "/etc/orchestrator/orchestrator.conf.json", "http"]
+ENTRYPOINT ["/usr/local/bin/discover.sh"]

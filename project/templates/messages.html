@@ -69,8 +69,13 @@ html, body { height: 100%; }
 .attachment-name{ font-weight:600; }
 .attachment-meta{ font-size:12px; opacity:.8; }
 .attachment-download.btn{ border-radius:18px; padding:6px 10px; }
-#options-images, #options-links { display:none; margin-top:8px; }
-#options-links a { word-break: break-all; overflow-wrap: anywhere; }
+#options-images, #options-links { display:none; margin-top:8px; max-height:300px; overflow-y:auto; }
+#options-links a { word-break: break-all; overflow-wrap: anywhere; display:block; padding:8px; background:#f5f7fb; border-radius:8px; margin:8px 0; color:#1a73e8; text-decoration:none; }
+#options-links a:hover { background:#f0f2f5; }
+#chat-info-sidebar { transition: all 0.3s ease; }
+#chat-info-sidebar .attachment-card { margin-bottom:8px; padding:8px; background:#f5f7fb; border-radius:8px; }
+#images-btn, #links-btn { justify-content:space-between !important; }
+#chat-search-input::placeholder { color:rgba(255,255,255,.6); }
 .message-row{ margin:10px 0; display:flex; }
 .message-row.me{ justify-content:flex-end; }
 .message-bubble{ position:relative; max-width:min(78%, 720px); padding:10px 12px; border-radius:18px; background:#f3f4f6; color:#111827; border:1px solid #eef0f6; box-shadow:0 2px 10px rgba(17,24,39,.06); word-break: break-word; overflow-wrap: anywhere; }
@@ -132,8 +137,19 @@ html, body { height: 100%; }
 .friend-list::-webkit-scrollbar, .chat-box::-webkit-scrollbar { width:10px; }
 .friend-list::-webkit-scrollbar-thumb, .chat-box::-webkit-scrollbar-thumb { background:#e5e7eb; border-radius:8px; }
 .friend-list::-webkit-scrollbar-thumb:hover, .chat-box::-webkit-scrollbar-thumb:hover { background:#d1d5db; }
-@media (max-width: 992px){ .messages-layout{ grid-template-columns: 1fr; gap:12px; } .friend-list{ max-height:40vh; } }
+@media (max-width: 992px){ .messages-layout{ grid-template-columns: 1fr; gap:12px; } .friend-list{ max-height:40vh; } #chat-info-sidebar { position:fixed; right:0; top:0; width:100vw; height:100vh; z-index:1000; border-radius:0; } }
 .blur-overlay { filter: blur(5px); pointer-events: none; }
+
+
+/* Chat lock UI*/
+.chat-item-menu-btn { opacity: 0; transition: 0.2s; }
+.friend-link:hover .chat-item-menu-btn { opacity: 1; }
+
+#chat-item-context-menu { width: 160px; }
+
+/* Small icon button for chat items */
+.icon-btn.sm { color: var(--muted); background: transparent; border: none; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.icon-btn.sm:hover { background: rgba(0,0,0,0.05); color: var(--ink); }
 </style>
 
 <div class="main-messages-wrapper" id="main-interface">
@@ -155,81 +171,121 @@ html, body { height: 100%; }
           <li class="friend-link {% if friend.is_online %}status-online{% else %}status-offline{% endif %}"
               data-user-id="{{ friend.user_id }}"
               data-chat-id="{{ friend.chat_id }}">
-            <img src="{{ url_for('static', filename='uploads/' + friend.profile_pic_url) if friend.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
-                alt="Profile" class="friend-profile"
-                onerror="this.src='{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}'">
-            <div class="friend-info">
-              <div class="friend-name">{{ friend.username }}</div>
-              {% if friend.is_online %}
-              <div class="friend-status">Online</div>
-              {% else %}
-              <div class="friend-status">Offline</div>
-              {% endif %}
+            <img src="{{ url_for('static', filename='uploads/' + friend.profile_pic_url) if friend.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}" class="friend-profile">
+            <div style="flex:1">
+                <div class="friend-name">{{ friend.username }}</div>
+                <div class="friend-status">{{ 'Blocked' if friend.is_blocked else ('Online' if friend.is_online else 'Offline') }}</div>
             </div>
+            <button class="icon-btn sm" onclick="showChatListItemMenu(event, '{{ friend.chat_id }}')" style="width:28px; height:28px;">
+                <span class="material-icons" style="font-size:18px;">more_vert</span>
+            </button>
           </li>
         {% endfor %}
       </ul>
     </div>
 
-    <div class="chat-container">
-      <div class="chat-topbar" id="chat-topbar" style="display:none;">
-        <div class="current-chat-info">
-          <img id="current-friend-pic" src="{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
-              alt="Profile" class="friend-profile">
-          <span id="current-friend-name"></span>
-        </div>
-        <button class="btn btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#chatOptions">
-          <span class="material-icons" style="vertical-align:middle;margin-right:6px;">tune</span>
-          Options
-          <span class="material-icons" style="vertical-align:middle;margin-left:4px;">expand_more</span>
-        </button>
-      </div>
-
-      <div class="chat-options collapse" id="chatOptions">
-        <div class="options-inner">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <h5>Chat Options</h5>
+    <div class="chat-container" style="display:grid; grid-template-columns: 1fr auto;">
+      <div style="display:flex; flex-direction:column; gap:12px; height:100%; min-height:0;">
+        <div class="chat-topbar" id="chat-topbar" style="display:none;">
+          <div class="current-chat-info">
+            <img id="current-friend-pic" src="{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
+                alt="Profile" class="friend-profile">
+            <span id="current-friend-name"></span>
           </div>
-          <div class="d-flex gap-3 mb-2">
-            <button id="images-btn" class="btn btn-outline-secondary">Images <span id="images-count" class="badge text-bg-light ms-1">0</span></button>
-            <button id="links-btn" class="btn btn-outline-secondary">Links <span id="links-count" class="badge text-bg-light ms-1">0</span></button>
-            <input type="text" class="form-control w-50" placeholder="Find messages...">
-          </div>
-          <div id="options-images"></div>
-          <div id="options-links"></div>
-          <div class="d-flex gap-2">
-            <button class="btn btn-secondary">Block User</button>
-            <button id="report-user-btn" class="btn btn-warning">Report User</button>
-            <button class="btn btn-danger">Clear Chat</button>
-            <button class="btn btn-danger">Delete Chat</button>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <div style="display:flex; align-items:center; gap:6px; background:rgba(255,255,255,.12); border-radius:20px; padding:8px 12px;">
+              <span class="material-icons" style="color:#fff; font-size:20px;">search</span>
+              <input id="chat-search-input" type="text" placeholder="Search messages..." 
+                     style="border:none; background:transparent; color:#fff; outline:none; width:150px; font-size:14px;">
+            </div>
+            <button id="chat-info-btn" class="btn" style="background:rgba(255,255,255,.12); color:#fff; border:none; border-radius:50%; width:40px; height:40px; padding:0; display:flex; align-items:center; justify-content:center;" title="Chat Info">
+              <span class="material-icons">info</span>
+            </button>
           </div>
         </div>
+
+        <div id="chat-placeholder">
+          <div class="placeholder-inner">
+            <span class="material-icons placeholder-icon" aria-hidden="true">chat_bubble</span>
+            <div>Select a friend to start chatting securely</div>
+          </div>
+        </div>
+
+        <div id="composer-previews" class="composer-previews"></div>
+        <div id="chat-box" class="chat-box" style="display: none;"></div>
+        
+        <form id="chat-form" class="chat-input-row" style="display: none;">
+          <input id="attachment-input" type="file" multiple
+                accept=".jpg,.jpeg,.png,.gif,.webp,.mp4,.webm,.pdf,.txt,.docx,.xlsx,.pptx,image/*,video/mp4,video/webm,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                style="display:none">
+          <button id="attach-btn" class="btn btn-outline-secondary" type="button" title="Attach">
+            <span class="material-icons" style="font-size:18px;vertical-align:middle;margin-right:6px;">attach_file</span>
+            Add
+          </button>
+          <textarea id="chat-input" class="form-control" placeholder="Type a message..." rows="1"></textarea>
+          <button id="chat-send-btn" class="btn btn-primary" type="submit">
+            <span class="material-icons" style="font-size:18px;vertical-align:middle;margin-right:6px;">send</span>
+            Send
+          </button>
+        </form>
       </div>
 
-      <div id="chat-placeholder">
-        <div class="placeholder-inner">
-          <span class="material-icons placeholder-icon" aria-hidden="true">chat_bubble</span>
-          <div>Select a friend to start chatting securely</div>
+      <!-- Chat Info Sidebar -->
+      <div id="chat-info-sidebar" style="display:none; width:320px; background:var(--surface); border-left:1px solid var(--border); overflow-y:auto; border-radius:0; box-shadow:none;">
+        <div style="padding:16px; border-bottom:1px solid var(--border);">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+            <h5 style="margin:0; color:var(--ink);">Chat Info</h5>
+            <button id="close-info-btn" class="btn btn-sm" style="background:transparent; border:none; color:var(--muted); padding:0; width:32px; height:32px; display:flex; align-items:center; justify-content:center;">
+              <span class="material-icons">close</span>
+            </button>
+          </div>
+          <img id="info-friend-pic" src="" alt="Profile" style="width:80px; height:80px; border-radius:50%; object-fit:cover; margin:0 auto 12px; display:block; border:2px solid var(--border);">
+          <div style="text-align:center;">
+            <div id="info-friend-name" style="font-weight:600; color:var(--ink); margin-bottom:4px;"></div>
+            <div id="info-friend-status" style="font-size:12px; color:var(--muted);"></div>
+          </div>
+        </div>
+
+        <div style="padding:12px;">
+          <!-- Images Section -->
+          <div style="margin-bottom:16px;">
+            <button id="images-btn" class="btn btn-outline-secondary w-100" style="border-radius:12px; font-size:14px;">
+              <span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">image</span>
+              Images <span id="images-count" class="badge text-bg-light ms-auto">0</span>
+            </button>
+            <div id="options-images" style="margin-top:8px; display:none;"></div>
+          </div>
+
+          <!-- Links Section -->
+          <div style="margin-bottom:16px;">
+            <button id="links-btn" class="btn btn-outline-secondary w-100" style="border-radius:12px; font-size:14px;">
+              <span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">link</span>
+              Links <span id="links-count" class="badge text-bg-light ms-auto">0</span>
+            </button>
+            <div id="options-links" style="margin-top:8px; display:none;"></div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <button class="btn btn-secondary w-100" style="border-radius:12px; font-size:14px;">
+              <span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">block</span>
+              Block User
+            </button>
+            <button id="report-user-btn" class="btn btn-warning w-100" style="border-radius:12px; font-size:14px;">
+              <span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">flag</span>
+              Report User
+            </button>
+            <button class="btn btn-danger w-100" style="border-radius:12px; font-size:14px;">
+              <span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">delete_sweep</span>
+              Clear Chat
+            </button>
+            <button class="btn btn-danger w-100" style="border-radius:12px; font-size:14px;">
+              <span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">delete</span>
+              Delete Chat
+            </button>
+          </div>
         </div>
       </div>
-
-      <div id="composer-previews" class="composer-previews"></div>
-      <div id="chat-box" class="chat-box" style="display: none;"></div>
-      
-      <form id="chat-form" class="chat-input-row" style="display: none;">
-        <input id="attachment-input" type="file" multiple
-              accept=".jpg,.jpeg,.png,.gif,.webp,.mp4,.webm,.pdf,.txt,.docx,.xlsx,.pptx,image/*,video/mp4,video/webm,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation"
-              style="display:none">
-        <button id="attach-btn" class="btn btn-outline-secondary" type="button" title="Attach">
-          <span class="material-icons" style="font-size:18px;vertical-align:middle;margin-right:6px;">attach_file</span>
-          Add
-        </button>
-        <textarea id="chat-input" class="form-control" placeholder="Type a message..." rows="1"></textarea>
-        <button id="chat-send-btn" class="btn btn-primary" type="submit">
-          <span class="material-icons" style="font-size:18px;vertical-align:middle;margin-right:6px;">send</span>
-          Send
-        </button>
-      </form>
     </div>
   </div>
 </div>
@@ -673,6 +729,12 @@ function openChat(link) {
     link.classList.remove('has-unread');
     document.getElementById('current-friend-name').innerText = link.querySelector('.friend-name').innerText;
     document.getElementById('current-friend-pic').src = link.querySelector('img').src;
+    document.getElementById('info-friend-pic').src = link.querySelector('img').src;
+    document.getElementById('info-friend-name').innerText = link.querySelector('.friend-name').innerText;
+    const statusEl = link.querySelector('.friend-status');
+    if (statusEl) {
+        document.getElementById('info-friend-status').innerText = statusEl.innerText;
+    }
     const chatBox = document.getElementById('chat-box');
     chatBox.innerHTML = '';
     if (chatId) {
@@ -689,9 +751,130 @@ function openChat(link) {
             loadChatHistoryByFriendId(friendUserId);
         });
     }
-    // Wire options
-    document.querySelector('.btn.btn-secondary').onclick = function() {
-        showConfirm('Block user?', function() { fetch(`/block_user/${currentChatId}`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } }).then(() => { showToast('Blocked.', 'error'); }); });
+    // Wire all options buttons
+    const blockBtn = document.querySelector('#chat-info-sidebar .btn.btn-secondary');
+    const reportBtn = document.getElementById('report-user-btn');
+    const clearBtn = document.querySelectorAll('#chat-info-sidebar .btn.btn-danger')[0];
+    const deleteBtn = document.querySelectorAll('#chat-info-sidebar .btn.btn-danger')[1];
+    
+    // Check if user is blocked and update button text
+    fetch(`/is_blocked/${currentChatId}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.blocked_by_me) {
+                blockBtn.innerHTML = '<span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">block</span>Unblock User';
+                blockBtn.classList.remove('btn-secondary');
+                blockBtn.classList.add('btn-warning');
+            } else {
+                blockBtn.innerHTML = '<span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">block</span>Block User';
+                blockBtn.classList.remove('btn-warning');
+                blockBtn.classList.add('btn-secondary');
+            }
+        })
+        .catch(e => console.error('Error checking block status:', e));
+    
+    // Block/Unblock User
+    blockBtn.onclick = () => {
+        const isBlocked = blockBtn.textContent.includes('Unblock');
+        const action = isBlocked ? 'unblock' : 'block';
+        const confirmMsg = isBlocked ? 'Unblock this user?' : 'Block this user?';
+        
+        showConfirm(confirmMsg, async () => {
+            try {
+                const url = `/${action}_user/${currentChatId}`;
+                const res = await fetch(url, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
+                
+                if (res.ok) {
+                    if (isBlocked) {
+                        blockBtn.innerHTML = '<span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">block</span>Block User';
+                        blockBtn.classList.remove('btn-warning');
+                        blockBtn.classList.add('btn-secondary');
+                        showToast('User unblocked successfully', 'success');
+                        link.classList.remove('status-blocked');
+                    } else {
+                        blockBtn.innerHTML = '<span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">block</span>Unblock User';
+                        blockBtn.classList.remove('btn-secondary');
+                        blockBtn.classList.add('btn-warning');
+                        showToast('User blocked successfully', 'success');
+                        link.classList.add('status-blocked');
+                    }
+                } else {
+                    showToast('Error updating block status', 'error');
+                }
+            } catch (e) {
+                console.error('Block/Unblock error:', e);
+                showToast('Error updating block status', 'error');
+            }
+        });
+    };
+    
+    // Report User
+    reportBtn.onclick = () => {
+        const reportedUsername = link.querySelector('.friend-name').textContent;
+        const reason = prompt(`Report ${reportedUsername}?\n\nPlease enter reason (max 255 chars):`);
+        if (!reason) return;
+        
+        const fd = new FormData();
+        fd.append('reported_user_id', friendUserId);
+        fd.append('report_reason', reason.substring(0, 255));
+        fd.append('report_type', 'user_behavior');
+        fd.append('context', `Reported from chat (Chat ID: ${currentChatId})`);
+        
+        fetch('/report_user', {
+            method: 'POST',
+            body: fd,
+            headers: { 'X-CSRFToken': csrfToken }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.ok || res.ok) {
+                showToast(`${reportedUsername} reported successfully`, 'success');
+            } else {
+                showToast('Failed to submit report', 'error');
+            }
+        })
+        .catch(e => {
+            console.error('Report error:', e);
+            showToast('Error submitting report', 'error');
+        });
+    };
+    
+    // Clear Chat
+    clearBtn.onclick = () => {
+        showConfirm('Clear chat history?\n\nThis will hide all messages in this conversation.', async () => {
+            try {
+                const res = await fetch(`/clear_chat/${currentChatId}`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken }
+                });
+                if (res.ok) {
+                    chatBox.innerHTML = '<div class="text-center p-3 text-muted">Chat cleared</div>';
+                    showToast('Chat history cleared', 'success');
+                }
+            } catch (e) {
+                showToast('Error clearing chat', 'error');
+            }
+        });
+    };
+    
+    // Delete Chat
+    deleteBtn.onclick = () => {
+        showConfirm('Delete this chat permanently?\n\nYou will need to re-add this friend to message them again.', async () => {
+            try {
+                const res = await fetch(`/delete_chat/${currentChatId}`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken }
+                });
+                if (res.ok) {
+                    showToast('Chat deleted', 'success');
+                    link.remove();
+                    showPlaceholder();
+                    currentChatId = null;
+                }
+            } catch (e) {
+                showToast('Error deleting chat', 'error');
+            }
+        });
     };
 }
 async function loadChatHistoryByFriendId(friendId) {
@@ -829,6 +1012,59 @@ async function labelBlockedStatuses() {
 }
 window.addEventListener('DOMContentLoaded', labelBlockedStatuses);
 
+// Chat Info Sidebar
+const chatInfoBtn = document.getElementById('chat-info-btn');
+const closeInfoBtn = document.getElementById('close-info-btn');
+const chatInfoSidebar = document.getElementById('chat-info-sidebar');
+
+if (chatInfoBtn) {
+    chatInfoBtn.addEventListener('click', () => {
+        chatInfoSidebar.style.display = chatInfoSidebar.style.display === 'none' ? 'block' : 'none';
+    });
+}
+
+if (closeInfoBtn) {
+    closeInfoBtn.addEventListener('click', () => {
+        chatInfoSidebar.style.display = 'none';
+    });
+}
+
+// Chat Search
+const chatSearchInput = document.getElementById('chat-search-input');
+if (chatSearchInput) {
+    chatSearchInput.addEventListener('input', () => {
+        const searchTerm = chatSearchInput.value.toLowerCase().trim();
+        const chatBox = document.getElementById('chat-box');
+        const messages = chatBox.querySelectorAll('.message-row');
+        
+        messages.forEach(msg => {
+            const text = msg.textContent.toLowerCase();
+            msg.style.opacity = searchTerm === '' || text.includes(searchTerm) ? '1' : '0.4';
+            msg.style.pointerEvents = searchTerm === '' || text.includes(searchTerm) ? 'auto' : 'none';
+        });
+        
+        if (searchTerm) {
+            const firstMatch = Array.from(messages).find(msg => 
+                msg.textContent.toLowerCase().includes(searchTerm)
+            );
+            if (firstMatch) {
+                firstMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+    });
+}
+
+// Images and Links toggle
+document.getElementById('images-btn')?.addEventListener('click', function() {
+    const imagesBox = document.getElementById('options-images');
+    imagesBox.style.display = imagesBox.style.display === 'none' ? 'block' : 'none';
+});
+
+document.getElementById('links-btn')?.addEventListener('click', function() {
+    const linksBox = document.getElementById('options-links');
+    linksBox.style.display = linksBox.style.display === 'none' ? 'block' : 'none';
+});
+
 // Initial Load
 window.addEventListener('DOMContentLoaded', () => {
     const params = new URLSearchParams(location.search);
@@ -845,4 +1081,42 @@ window.addEventListener('DOMContentLoaded', () => {
     ta.addEventListener('input', () => { ta.style.height='auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; });
 });
 </script>
+
+// 8. CHAT LOCKING UI
+
+
+<div id="chat-item-context-menu" class="msg-context-menu">
+    <div class="ctx-item" onclick="initLockSetup()">
+        <span class="material-icons">lock</span> <span>Lock Chat</span>
+    </div>
+</div>
+
+<div id="lock-setup-modal" class="custom-modal">
+    <div class="modal-box">
+        <div class="modal-title">Lock this Chat?</div>
+        <p style="color:var(--muted); font-size:14px; margin-bottom:20px;">
+            Locked chats require authentication to view. Choose your method:
+        </p>
+        
+        <div style="display:flex; flex-direction:column; gap:10px;">
+            <button class="action-btn" onclick="selectLockType('pin')">
+                <span class="material-icons">dialpad</span> <span>Setup PIN Lock</span>
+            </button>
+            <button class="action-btn" onclick="selectLockType('biometric')">
+                <span class="material-icons">fingerprint</span> <span>Setup Biometrics</span>
+            </button>
+        </div>
+
+        <div id="pin-setup-input" style="display:none; margin-top:20px;">
+            <label style="font-size:13px; font-weight:600;">Enter 4-Digit PIN</label>
+            <input type="password" id="new-chat-pin" class="form-control" maxlength="4" placeholder="****" 
+                   style="text-align:center; font-size:24px; letter-spacing:10px; margin-top:8px;">
+            <button class="btn-primary w-100 mt-3" onclick="savePinLock()">Enable PIN Lock</button>
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn-text" onclick="closeLockModal()">Cancel</button>
+        </div>
+    </div>
+</div>
 {% endblock %}

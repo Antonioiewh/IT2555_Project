@@ -742,4 +742,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
 );
 </script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const loginForm = document.querySelector('form');
+    
+    // Intercept the login form submission
+    if (loginForm) {
+        loginForm.addEventListener('submit', function() {
+            const passwordField = document.querySelector('input[name="password"]');
+            if (passwordField && passwordField.value) {
+                // Save password temporarily to unlock encryption keys on the next page
+                sessionStorage.setItem('e2ee_handover', passwordField.value);
+            }
+        });
+    }
+});
+</script>
 {% endblock %}

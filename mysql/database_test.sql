@@ -41,6 +41,7 @@ DROP TABLE IF EXISTS ticket_categories;
 DROP TABLE IF EXISTS notifications;
 DROP TABLE IF EXISTS messages;
 DROP TABLE IF EXISTS chats;
+DROP TABLE IF EXISTS user_chat_locks;
 DROP TABLE IF EXISTS friendships;
 DROP TABLE IF EXISTS posts;
 DROP TABLE IF EXISTS events;
@@ -405,6 +406,24 @@ CREATE TABLE chats (
     chat_id INT AUTO_INCREMENT PRIMARY KEY,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ---------------------------------------------------------------------------------
+-- User Chat Locks
+-- ---------------------------------------------------------------------------------
+CREATE TABLE user_chat_locks (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    chat_id INT NOT NULL,
+    is_locked BOOLEAN DEFAULT TRUE NOT NULL,
+    pin_hash VARCHAR(255) NULL,
+    lock_type VARCHAR(20) NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY _user_chat_lock_uc (user_id, chat_id),
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (chat_id) REFERENCES chats(chat_id) ON DELETE CASCADE
+);
+
 
 -- ---------------------------------------------------------------------------------
 -- Chat Participation

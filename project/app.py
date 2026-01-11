@@ -75,7 +75,7 @@ import cbor2
 # Models
 from models import (
     db, User, Role, Permission, Event, EventParticipant, Post, PostImage, PostLike,
-    Notification, Report, Chat, ChatParticipant, Message, 
+    Notification, Report, Chat, UserChatLock, ChatParticipant, Message, 
     Friendship, AdminAction, UserLog, ModSecLog, ErrorLog, 
     WebAuthnCredential, user_role_assignments, Event, FriendChatMap, BlockedUser
 )
@@ -2586,7 +2586,72 @@ def update_security_keys():
         return jsonify({'error': 'Internal server error'}), 500
 
 
+# --- Chat Lock Management ---
+@app.route('/api/sync_chat_lock/<int:chat_id>', methods=['POST'])
+@login_required
+def sync_chat_lock(chat_id):
+    """
+    Sync chat lock per-user.
+    Each user can lock/unlock independently.
+    """
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        is_locked = data.get('is_locked')
+        pin_hash = data.get('pin_hash')
+        lock_type = data.get('lock_type')
+        
+        # Security: only allow user to lock their own chats
+        if str(user_id) != str(current_user.user_id):
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        # Verify user is in this chat
+        chat_participant = ChatParticipant.query.filter_by(
+            chat_id=chat_id, 
+            user_id=user_id
+        ).first()
+        
+        if not chat_participant:
+            return jsonify({'error': 'Not a chat participant'}), 403
+        
+        # Update UserChatLock for this user+chat combination
+        lock = UserChatLock.query.filter_by(
+            user_id=user_id,
+            chat_id=chat_id
+        ).first()
+        
+        if is_locked:
+            if not lock:
+                lock = UserChatLock(user_id=user_id, chat_id=chat_id)
+            lock.is_locked = True
+            lock.pin_hash = pin_hash
+            lock.lock_type = lock_type
+            db.session.add(lock)
+        else:
+            # Remove lock if exists
+            if lock:
+                db.session.delete(lock)
+        
+        db.session.commit()
+        return jsonify({'ok': True})
+        
+    except Exception as e:
+        app.logger.error(f"Error syncing chat lock: {e}")
+        return jsonify({'error': str(e)}), 500
+@app.route('/api/get_locked_chats', methods=['GET'])
+@login_required
+def get_locked_chats():
+    """Get all locked chats for current user (per-user locks only)."""
+    locked_chats = UserChatLock.query.filter_by(
+        user_id=current_user.user_id,
+        is_locked=True
+    ).all()
+    
+    return jsonify({
+        'locked_chats': {str(lock.chat_id): lock.pin_hash for lock in locked_chats}
+    })
 # --- Messaging ---
+
 @app.route('/messages', methods=['GET'])
 @single_role_required('user')
 def messages():

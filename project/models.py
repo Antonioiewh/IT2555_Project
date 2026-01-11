@@ -370,6 +370,26 @@ class Chat(db.Model):
 
     def __repr__(self):
         return f"<Chat {self.chat_id}>"
+    
+class UserChatLock(db.Model):
+    """Per-user chat locks - each user controls their own lock independently"""
+    __tablename__ = 'user_chat_locks'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    chat_id = db.Column(db.Integer, db.ForeignKey('chats.chat_id'), nullable=False)
+    is_locked = db.Column(db.Boolean, default=True, nullable=False)
+    pin_hash = db.Column(db.String(255), nullable=True)  # Only for PIN locks
+    lock_type = db.Column(db.String(20), nullable=True)  # 'pin' or 'biometric' (biometric not stored here)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Ensure one lock per user per chat
+    __table_args__ = (db.UniqueConstraint('user_id', 'chat_id', name='_user_chat_lock_uc'),)
+    
+    # Relationships
+    user = db.relationship('User', backref='chat_locks')
+    chat = db.relationship('Chat', backref='user_locks')
 
 class ChatParticipant(db.Model):
     __tablename__ = 'chat_participants'

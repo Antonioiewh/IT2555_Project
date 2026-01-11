@@ -163,6 +163,10 @@ class ClearanceLevel(db.Model):
     # Relationship
     agents = db.relationship('SupportAgent', backref='clearance_level_info')
     
+    def get_display_name(self):
+        """Get formatted display name for clearance level"""
+        return self.level_name.replace('_', ' ').title()
+    
     def __repr__(self):
         return f"<ClearanceLevel {self.level_name}>"
 
@@ -218,6 +222,8 @@ class Post(db.Model):
     post_content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Added visibility column: 'private' | 'friends' | 'public'
+    visibility = db.Column(db.String(16), nullable=False, server_default='friends')
     
     # Relationships
     user = db.relationship("User", back_populates="posts")

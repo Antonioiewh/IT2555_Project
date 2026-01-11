@@ -7,7 +7,7 @@ import os
 from decorators import admin_required
 from forms import UpdateUserStatusForm, UpdateReportStatusForm
 from filters import apply_user_filters, apply_user_sorting, apply_report_filters, apply_user_log_filters
-from parse_test import parse_modsec_audit_log, parse_error_log
+
 from file_validate import validate_file_security
 from datetime import datetime, timedelta
 # Models

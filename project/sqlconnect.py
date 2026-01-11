@@ -1,3 +1,5 @@
+# idk if need but leave it for now incase something implodes
+
 mysql_host ='mysql'
 mysql_user ='root'
 #This is my password, but you should change it to your own password that you chose when setting up MySQL

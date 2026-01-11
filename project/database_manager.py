@@ -204,7 +204,7 @@ def create_health_endpoints(app, db_ha_instance):
         try:
             # Check Redis if you're using it
             import redis
-            r = redis.Redis(host='redis', port=6379, db=0)
+            r = redis.Redis(host='redis', port=6666, db=0)
             r.ping()
             health_status['redis'] = 'healthy'
         except:

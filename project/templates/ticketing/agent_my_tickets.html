@@ -2,247 +2,934 @@
 
 {% block title %}My Assigned Tickets - Agent View{% endblock %}
 
+{% block head %}
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@300;400;500;600&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+{% endblock %}
+
 {% block content %}
-<div class="container-fluid mt-4">
-    <div class="row">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <div>
-                    <h2><i class="bi bi-person-check"></i> My Assigned Tickets</h2>
-                    <p class="text-muted">Tickets currently assigned to you</p>
-                </div>
-                <div>
-                    <a href="{{ url_for('ticketing.agent_dashboard') }}" class="btn btn-outline-primary">
-                        <i class="bi bi-arrow-left"></i> Back to Dashboard
-                    </a>
-                    <a href="{{ url_for('ticketing.agent_open_tickets') }}" class="btn btn-primary">
-                        <i class="bi bi-clipboard-check"></i> View Open Tickets
-                    </a>
-                </div>
+<div class="google-container">
+    <!-- Header Section -->
+    <div class="page-header">
+        <div class="header-main">
+            <div class="header-icon">
+                <span class="material-icons">assignment_ind</span>
+            </div>
+            <div class="header-text">
+                <h1 class="header-title">My Assigned Tickets</h1>
+                <p class="header-subtitle">Tickets currently assigned to you</p>
             </div>
         </div>
+        
+        <div class="header-actions">
+            <a href="{{ url_for('ticketing.agent_dashboard') }}" class="google-btn outline">
+                <span class="material-icons">arrow_back</span>
+                Back to Dashboard
+            </a>
+            <a href="{{ url_for('ticketing.agent_open_tickets') }}" class="google-btn primary">
+                <span class="material-icons">assignment</span>
+                View Open Tickets
+            </a>
+        </div>
     </div>
-    
-    <!-- Agent Info -->
+
+    <!-- Agent Info Card -->
     {% if agent %}
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="card bg-light">
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-3">
-                            <strong>Agent:</strong> {{ agent.user.username }}
-                        </div>
-                        <div class="col-md-3">
-                            <strong>Clearance Level:</strong> L{{ agent.clearance_level }}
-                        </div>
-                        <div class="col-md-3">
-                            <strong>Department:</strong> {{ agent.department }}
-                        </div>
-                        <div class="col-md-3">
-                            <strong>Total Assigned:</strong> 
-                            <span class="badge bg-primary">{{ tickets|length }}</span>
-                        </div>
+    <div class="agent-info-card">
+        <div class="agent-info-header">
+            <div class="agent-avatar">
+                <span class="material-icons">support_agent</span>
+            </div>
+            <div class="agent-details">
+                <h3>{{ agent.user.username }}</h3>
+                <div class="agent-meta">
+                    <div class="clearance-badge clearance-{{ agent.clearance_level_info.level_name.lower() }}">
+                        <span class="material-icons">
+                            {% if agent.clearance_level_info.level_name == 'TOP_SECRET' %}lock
+                            {% elif agent.clearance_level_info.level_name == 'SECRET' %}security
+                            {% elif agent.clearance_level_info.level_name == 'CONFIDENTIAL' %}visibility_off
+                            {% else %}lock_open{% endif %}
+                        </span>
+                        {{ agent.clearance_level_info.level_name.replace('_', ' ') }} CLEARANCE
                     </div>
+                    <span class="department">{{ agent.department }}</span>
                 </div>
+            </div>
+            <div class="total-tickets">
+                <div class="ticket-count">{{ tickets|length }}</div>
+                <div class="ticket-label">Total Assigned</div>
             </div>
         </div>
     </div>
     {% endif %}
-    
-    <!-- Tickets Summary -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card border-success">
-                <div class="card-body text-center">
-                    <h5 class="card-title text-success">Open</h5>
-                    <h3>{{ tickets|selectattr("status", "equalto", "open")|list|length }}</h3>
-                </div>
+
+    <!-- Status Summary Cards -->
+    <div class="status-grid">
+        <div class="status-card open">
+            <div class="status-icon">
+                <span class="material-icons">radio_button_unchecked</span>
+            </div>
+            <div class="status-content">
+                <div class="status-number">{{ tickets|selectattr("status", "equalto", "open")|list|length }}</div>
+                <div class="status-label">Open</div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card border-warning">
-                <div class="card-body text-center">
-                    <h5 class="card-title text-warning">In Progress</h5>
-                    <h3>{{ tickets|selectattr("status", "equalto", "in_progress")|list|length }}</h3>
-                </div>
+        
+        <div class="status-card in-progress">
+            <div class="status-icon">
+                <span class="material-icons">refresh</span>
+            </div>
+            <div class="status-content">
+                <div class="status-number">{{ tickets|selectattr("status", "equalto", "in_progress")|list|length }}</div>
+                <div class="status-label">In Progress</div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card border-info">
-                <div class="card-body text-center">
-                    <h5 class="card-title text-info">Pending</h5>
-                    <h3>{{ tickets|selectattr("status", "equalto", "pending")|list|length }}</h3>
-                </div>
+        
+        <div class="status-card pending">
+            <div class="status-icon">
+                <span class="material-icons">pause_circle</span>
+            </div>
+            <div class="status-content">
+                <div class="status-number">{{ tickets|selectattr("status", "equalto", "pending")|list|length }}</div>
+                <div class="status-label">Pending</div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card border-secondary">
-                <div class="card-body text-center">
-                    <h5 class="card-title text-secondary">Closed</h5>
-                    <h3>{{ tickets|selectattr("status", "equalto", "closed")|list|length }}</h3>
-                </div>
+        
+        <div class="status-card closed">
+            <div class="status-icon">
+                <span class="material-icons">check_circle</span>
+            </div>
+            <div class="status-content">
+                <div class="status-number">{{ tickets|selectattr("status", "equalto", "closed")|list|length }}</div>
+                <div class="status-label">Closed</div>
             </div>
         </div>
     </div>
-    
-    <!-- Tickets Table -->
-    <div class="row">
-        <div class="col-12">
-            {% if tickets %}
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="card-title mb-0">
-                            <i class="bi bi-list-check"></i> Assigned Tickets
-                        </h5>
+
+    <!-- Tickets Content -->
+    <div class="tickets-container">
+        {% if tickets %}
+            <div class="tickets-card">
+                <div class="card-header">
+                    <div class="header-title">
+                        <span class="material-icons">list</span>
+                        <h2>Assigned Tickets</h2>
                     </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Title</th>
-                                        <th>User</th>
-                                        <th>Status</th>
-                                        <th>Priority</th>
-                                        <th>Classification</th>
-                                        <th>Created</th>
-                                        <th>Last Update</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for ticket in tickets %}
-                                    <tr>
-                                        <td>
-                                            <strong>#{{ ticket.ticket_id }}</strong>
-                                        </td>
-                                        <td>
-                                            <div>
-                                                <strong>{{ ticket.title }}</strong>
-                                                {% if ticket.description %}
-                                                <br>
-                                                <small class="text-muted">
-                                                    {{ ticket.description[:80] }}{% if ticket.description|length > 80 %}...{% endif %}
-                                                </small>
-                                                {% endif %}
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <i class="bi bi-person-circle"></i>
-                                            {{ ticket.user.username }}
-                                        </td>
-                                        <td>
-                                            <span class="badge 
-                                                {% if ticket.status == 'open' %}bg-success
-                                                {% elif ticket.status == 'in_progress' %}bg-warning text-dark
-                                                {% elif ticket.status == 'pending' %}bg-info
-                                                {% elif ticket.status == 'closed' %}bg-secondary
-                                                {% else %}bg-primary{% endif %}">
-                                                <i class="bi 
-                                                    {% if ticket.status == 'open' %}bi-circle
-                                                    {% elif ticket.status == 'in_progress' %}bi-arrow-clockwise
-                                                    {% elif ticket.status == 'pending' %}bi-pause-circle
-                                                    {% elif ticket.status == 'closed' %}bi-check-circle
-                                                    {% else %}bi-question-circle{% endif %}"></i>
-                                                {{ ticket.status.replace('_', ' ').title() }}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <span class="badge 
-                                                {% if ticket.priority == 'security' %}bg-danger
-                                                {% elif ticket.priority == 'critical' %}bg-danger
-                                                {% elif ticket.priority == 'high' %}bg-warning text-dark
-                                                {% elif ticket.priority == 'medium' %}bg-info
-                                                {% else %}bg-success{% endif %}">
-                                                {% if ticket.priority == 'security' %}<i class="bi bi-shield-exclamation"></i>
-                                                {% elif ticket.priority == 'critical' %}<i class="bi bi-exclamation-triangle"></i>
-                                                {% elif ticket.priority == 'high' %}<i class="bi bi-arrow-up"></i>
-                                                {% elif ticket.priority == 'medium' %}<i class="bi bi-dash"></i>
-                                                {% else %}<i class="bi bi-arrow-down"></i>{% endif %}
-                                                {{ ticket.priority.title() }}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <span class="badge 
-                                                {% if ticket.classification == 'top_secret' %}bg-dark
-                                                {% elif ticket.classification == 'secret' %}bg-danger
-                                                {% elif ticket.classification == 'confidential' %}bg-warning text-dark
-                                                {% elif ticket.classification == 'restricted' %}bg-info
-                                                {% else %}bg-success{% endif %}">
-                                                {% if ticket.classification == 'top_secret' %}<i class="bi bi-lock-fill"></i>
-                                                {% elif ticket.classification == 'secret' %}<i class="bi bi-shield-lock"></i>
-                                                {% elif ticket.classification == 'confidential' %}<i class="bi bi-eye-slash"></i>
-                                                {% elif ticket.classification == 'restricted' %}<i class="bi bi-key"></i>
-                                                {% else %}<i class="bi bi-unlock"></i>{% endif %}
-                                                {{ ticket.classification.replace('_', ' ').title() }}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <small>
-                                                {{ ticket.created_at.strftime('%Y-%m-%d') }}<br>
-                                                <span class="text-muted">{{ ticket.created_at.strftime('%H:%M') }}</span>
-                                            </small>
-                                        </td>
-                                        <td>
-                                            <small>
-                                                {{ ticket.updated_at.strftime('%Y-%m-%d') }}<br>
-                                                <span class="text-muted">{{ ticket.updated_at.strftime('%H:%M') }}</span>
-                                            </small>
-                                        </td>
-                                        <td>
-                                            <a href="{{ url_for('ticketing.view_ticket', ticket_id=ticket.ticket_id) }}" 
-                                               class="btn btn-primary btn-sm">
-                                                <i class="bi bi-eye"></i> View
-                                            </a>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
+                    <div class="header-meta">
+                        {{ tickets|length }} ticket{{ 's' if tickets|length != 1 else '' }}
+                    </div>
+                </div>
+                
+                <div class="tickets-list">
+                    {% for ticket in tickets %}
+                    <div class="ticket-row classification-{{ ticket.classification }}">
+                        <div class="ticket-main">
+                            <div class="ticket-header">
+                                <div class="ticket-id">#{{ ticket.ticket_id }}</div>
+                                <div class="ticket-user">
+                                    <span class="material-icons">person</span>
+                                    {{ ticket.user.username }}
+                                </div>
+                            </div>
+                            
+                            <div class="ticket-content">
+                                <h3 class="ticket-title">{{ ticket.title }}</h3>
+                                {% if ticket.description %}
+                                <p class="ticket-description">
+                                    {{ ticket.description[:120] }}{% if ticket.description|length > 120 %}...{% endif %}
+                                </p>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="ticket-meta">
+                                <div class="meta-badges">
+                                    <div class="meta-badge status status-{{ ticket.status }}">
+                                        <span class="material-icons">
+                                            {% if ticket.status == 'open' %}radio_button_unchecked
+                                            {% elif ticket.status == 'in_progress' %}refresh
+                                            {% elif ticket.status == 'pending' %}pause_circle
+                                            {% elif ticket.status == 'closed' %}check_circle
+                                            {% else %}help{% endif %}
+                                        </span>
+                                        {{ ticket.status.replace('_', ' ').title() }}
+                                    </div>
+                                    
+                                    <div class="meta-badge priority priority-{{ ticket.priority }}">
+                                        <span class="material-icons">
+                                            {% if ticket.priority == 'security' %}security
+                                            {% elif ticket.priority == 'critical' %}error
+                                            {% elif ticket.priority == 'high' %}keyboard_arrow_up
+                                            {% elif ticket.priority == 'medium' %}remove
+                                            {% else %}keyboard_arrow_down{% endif %}
+                                        </span>
+                                        {{ ticket.priority.title() }}
+                                    </div>
+                                    
+                                    <div class="meta-badge classification classification-{{ ticket.classification }}">
+                                        <span class="material-icons">
+                                            {% if ticket.classification == 'top_secret' %}lock
+                                            {% elif ticket.classification == 'secret' %}security
+                                            {% elif ticket.classification == 'confidential' %}visibility_off
+                                            {% elif ticket.classification == 'restricted' %}key
+                                            {% else %}lock_open{% endif %}
+                                        </span>
+                                        {{ ticket.classification.replace('_', ' ').title() }}
+                                    </div>
+                                </div>
+                                
+                                <div class="ticket-timestamps">
+                                    <div class="timestamp">
+                                        <span class="material-icons">schedule</span>
+                                        <div class="timestamp-content">
+                                            <div class="timestamp-label">Created</div>
+                                            <div class="timestamp-value">{{ ticket.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                                        </div>
+                                    </div>
+                                    <div class="timestamp">
+                                        <span class="material-icons">update</span>
+                                        <div class="timestamp-content">
+                                            <div class="timestamp-label">Updated</div>
+                                            <div class="timestamp-value">{{ ticket.updated_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="ticket-actions">
+                            <a href="{{ url_for('ticketing.view_ticket', ticket_id=ticket.ticket_id) }}" 
+                               class="action-btn primary">
+                                <span class="material-icons">visibility</span>
+                                View Details
+                            </a>
                         </div>
                     </div>
+                    {% endfor %}
                 </div>
-            {% else %}
-                <div class="card">
-                    <div class="card-body text-center py-5">
-                        <i class="bi bi-inbox display-4 text-muted mb-3"></i>
-                        <h4>No Assigned Tickets</h4>
-                        <p class="text-muted">You currently have no tickets assigned to you.</p>
-                        <a href="{{ url_for('ticketing.agent_open_tickets') }}" class="btn btn-primary">
-                            <i class="bi bi-search"></i> Browse Open Tickets
-                        </a>
-                    </div>
+            </div>
+        {% else %}
+            <div class="empty-state-card">
+                <div class="empty-icon">
+                    <span class="material-icons">inbox</span>
                 </div>
-            {% endif %}
-        </div>
+                <h3>No Assigned Tickets</h3>
+                <p>You currently have no tickets assigned to you.</p>
+                <a href="{{ url_for('ticketing.agent_open_tickets') }}" class="google-btn primary">
+                    <span class="material-icons">search</span>
+                    Browse Open Tickets
+                </a>
+            </div>
+        {% endif %}
     </div>
 </div>
 
 <style>
-.card {
-    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-    border: 1px solid rgba(0, 0, 0, 0.125);
+/* Google Material Design Variables */
+:root {
+    --google-blue: #1a73e8;
+    --google-red: #ea4335;
+    --google-yellow: #fbbc04;
+    --google-green: #34a853;
+    --google-grey-50: #f8f9fa;
+    --google-grey-100: #f1f3f4;
+    --google-grey-200: #e8eaed;
+    --google-grey-300: #dadce0;
+    --google-grey-400: #bdc1c6;
+    --google-grey-500: #9aa0a6;
+    --google-grey-600: #80868b;
+    --google-grey-700: #5f6368;
+    --google-grey-800: #3c4043;
+    --google-grey-900: #202124;
+    --google-border-radius: 8px;
+    --google-shadow: 0 1px 3px 0 rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15);
+    --google-shadow-hover: 0 1px 3px 0 rgba(60, 64, 67, 0.3), 0 8px 16px 6px rgba(60, 64, 67, 0.15);
 }
 
-.table th {
-    border-top: none;
-    font-weight: 600;
-    font-size: 0.875rem;
+* {
+    box-sizing: border-box;
 }
 
-.badge {
-    font-size: 0.75rem;
+body {
+    font-family: 'Google Sans', 'Roboto', sans-serif;
+    background-color: var(--google-grey-50);
+    color: var(--google-grey-800);
+    line-height: 1.6;
 }
 
-.table-responsive {
-    border-radius: 0.375rem;
+.google-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+/* Page Header */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: white;
+    border-radius: var(--google-border-radius);
+    box-shadow: var(--google-shadow);
+    padding: 24px 32px;
+    gap: 24px;
+}
+
+.header-main {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.header-icon {
+    width: 56px;
+    height: 56px;
+    background: var(--google-blue);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+}
+
+.header-icon .material-icons {
+    font-size: 28px;
+}
+
+.header-title {
+    font-size: 28px;
+    font-weight: 400;
+    margin: 0;
+    color: var(--google-grey-900);
+}
+
+.header-subtitle {
+    color: var(--google-grey-600);
+    font-size: 16px;
+    margin: 4px 0 0 0;
+}
+
+.header-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.google-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 20px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.google-btn.primary {
+    background: var(--google-blue);
+    color: white;
+}
+
+.google-btn.primary:hover {
+    background: #1557b0;
+    color: white;
+}
+
+.google-btn.outline {
+    background: transparent;
+    border: 1px solid var(--google-grey-300);
+    color: var(--google-grey-700);
+}
+
+.google-btn.outline:hover {
+    background: var(--google-grey-50);
+    color: var(--google-grey-800);
+}
+
+.google-btn .material-icons {
+    font-size: 18px;
+}
+
+/* Agent Info Card */
+.agent-info-card {
+    background: white;
+    border-radius: var(--google-border-radius);
+    box-shadow: var(--google-shadow);
+    overflow: hidden;
+}
+
+.agent-info-header {
+    display: flex;
+    align-items: center;
+    padding: 24px 32px;
+    gap: 20px;
+}
+
+.agent-avatar {
+    width: 48px;
+    height: 48px;
+    background: var(--google-green);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+}
+
+.agent-avatar .material-icons {
+    font-size: 24px;
+}
+
+.agent-details {
+    flex: 1;
+}
+
+.agent-details h3 {
+    margin: 0 0 4px 0;
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--google-grey-900);
+}
+
+.agent-meta {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.clearance-badge {
+    background: var(--google-blue);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.department {
+    color: var(--google-grey-600);
+    font-size: 14px;
+}
+
+.total-tickets {
+    text-align: center;
+}
+
+.ticket-count {
+    font-size: 32px;
+    font-weight: 300;
+    color: var(--google-blue);
+    line-height: 1;
+}
+
+.ticket-label {
+    font-size: 12px;
+    color: var(--google-grey-600);
+    text-transform: uppercase;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+/* Status Grid */
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.status-card {
+    background: white;
+    border-radius: var(--google-border-radius);
+    box-shadow: var(--google-shadow);
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    transition: box-shadow 0.2s ease;
+    border-left: 4px solid transparent;
+}
+
+.status-card:hover {
+    box-shadow: var(--google-shadow-hover);
+}
+
+.status-card.open {
+    border-left-color: var(--google-green);
+}
+
+.status-card.in-progress {
+    border-left-color: var(--google-yellow);
+}
+
+.status-card.pending {
+    border-left-color: var(--google-blue);
+}
+
+.status-card.closed {
+    border-left-color: var(--google-grey-500);
+}
+
+.status-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.status-card.open .status-icon {
+    background: rgba(52, 168, 83, 0.1);
+    color: var(--google-green);
+}
+
+.status-card.in-progress .status-icon {
+    background: rgba(251, 188, 4, 0.1);
+    color: #f57c00;
+}
+
+.status-card.pending .status-icon {
+    background: rgba(26, 115, 232, 0.1);
+    color: var(--google-blue);
+}
+
+.status-card.closed .status-icon {
+    background: rgba(154, 160, 166, 0.1);
+    color: var(--google-grey-500);
+}
+
+.status-icon .material-icons {
+    font-size: 20px;
+}
+
+.status-number {
+    font-size: 24px;
+    font-weight: 300;
+    color: var(--google-grey-900);
+    line-height: 1;
+}
+
+.status-label {
+    font-size: 14px;
+    color: var(--google-grey-600);
+    font-weight: 500;
+}
+
+/* Tickets Container */
+.tickets-container {
+    min-height: 300px;
+}
+
+.tickets-card {
+    background: white;
+    border-radius: var(--google-border-radius);
+    box-shadow: var(--google-shadow);
+    overflow: hidden;
 }
 
 .card-header {
-    background-color: #f8f9fa;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--google-grey-200);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.header-title h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--google-grey-900);
+}
+
+.header-title .material-icons {
+    color: var(--google-grey-600);
+    font-size: 20px;
+}
+
+.header-meta {
+    color: var(--google-grey-600);
+    font-size: 14px;
+}
+
+/* Tickets List */
+.tickets-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.ticket-row {
+    display: flex;
+    padding: 24px;
+    border-bottom: 1px solid var(--google-grey-200);
+    transition: background-color 0.2s ease;
+    border-left: 4px solid transparent;
+    gap: 24px;
+}
+
+.ticket-row:last-child {
+    border-bottom: none;
+}
+
+.ticket-row:hover {
+    background: var(--google-grey-50);
+}
+
+.ticket-row.classification-top_secret {
+    border-left-color: var(--google-red);
+}
+
+.ticket-row.classification-secret {
+    border-left-color: #f57c00;
+}
+
+.ticket-row.classification-confidential {
+    border-left-color: var(--google-blue);
+}
+
+.ticket-row.classification-internal,
+.ticket-row.classification-restricted {
+    border-left-color: var(--google-green);
+}
+
+.ticket-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.ticket-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.ticket-id {
+    font-family: 'Roboto Mono', monospace;
+    font-weight: 600;
+    color: var(--google-grey-700);
+    background: var(--google-grey-100);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.ticket-user {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--google-grey-600);
+    font-size: 14px;
+}
+
+.ticket-user .material-icons {
+    font-size: 16px;
+}
+
+.ticket-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--google-grey-900);
+    margin: 0 0 8px 0;
+    line-height: 1.4;
+}
+
+.ticket-description {
+    color: var(--google-grey-600);
+    font-size: 14px;
+    margin: 0;
+    line-height: 1.5;
+}
+
+.ticket-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.meta-badges {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.meta-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.meta-badge .material-icons {
+    font-size: 14px;
+}
+
+/* Status badges */
+.meta-badge.status-open {
+    background: rgba(52, 168, 83, 0.1);
+    color: var(--google-green);
+}
+
+.meta-badge.status-in_progress {
+    background: rgba(251, 188, 4, 0.1);
+    color: #f57c00;
+}
+
+.meta-badge.status-pending {
+    background: rgba(26, 115, 232, 0.1);
+    color: var(--google-blue);
+}
+
+.meta-badge.status-closed {
+    background: rgba(154, 160, 166, 0.1);
+    color: var(--google-grey-600);
+}
+
+/* Priority badges */
+.meta-badge.priority-security,
+.meta-badge.priority-critical {
+    background: rgba(234, 67, 53, 0.1);
+    color: var(--google-red);
+}
+
+.meta-badge.priority-high {
+    background: rgba(251, 188, 4, 0.1);
+    color: #f57c00;
+}
+
+.meta-badge.priority-medium {
+    background: rgba(26, 115, 232, 0.1);
+    color: var(--google-blue);
+}
+
+.meta-badge.priority-low {
+    background: rgba(52, 168, 83, 0.1);
+    color: var(--google-green);
+}
+
+/* Classification badges */
+.meta-badge.classification-top_secret {
+    background: rgba(234, 67, 53, 0.1);
+    color: var(--google-red);
+}
+
+.meta-badge.classification-secret {
+    background: rgba(251, 188, 4, 0.1);
+    color: #f57c00;
+}
+
+.meta-badge.classification-confidential {
+    background: rgba(26, 115, 232, 0.1);
+    color: var(--google-blue);
+}
+
+.meta-badge.classification-internal,
+.meta-badge.classification-restricted {
+    background: rgba(52, 168, 83, 0.1);
+    color: var(--google-green);
+}
+
+.ticket-timestamps {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+.timestamp {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.timestamp .material-icons {
+    font-size: 16px;
+    color: var(--google-grey-500);
+}
+
+.timestamp-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.timestamp-label {
+    font-size: 11px;
+    color: var(--google-grey-500);
+    text-transform: uppercase;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+.timestamp-value {
+    font-size: 13px;
+    color: var(--google-grey-700);
+}
+
+/* Ticket Actions */
+.ticket-actions {
+    display: flex;
+    align-items: center;
+}
+
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 20px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.action-btn.primary {
+    background: var(--google-blue);
+    color: white;
+}
+
+.action-btn.primary:hover {
+    background: #1557b0;
+    color: white;
+    box-shadow: 0 2px 8px rgba(26, 115, 232, 0.3);
+}
+
+.action-btn .material-icons {
+    font-size: 18px;
+}
+
+/* Empty State */
+.empty-state-card {
+    background: white;
+    border-radius: var(--google-border-radius);
+    box-shadow: var(--google-shadow);
+    padding: 60px 40px;
+    text-align: center;
+}
+
+.empty-icon {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 20px;
+    background: var(--google-grey-100);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.empty-icon .material-icons {
+    font-size: 40px;
+    color: var(--google-grey-400);
+}
+
+.empty-state-card h3 {
+    color: var(--google-grey-700);
+    font-size: 20px;
+    font-weight: 400;
+    margin: 0 0 8px 0;
+}
+
+.empty-state-card p {
+    color: var(--google-grey-600);
+    font-size: 14px;
+    margin: 0 0 24px 0;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .google-container {
+        padding: 16px;
+        gap: 16px;
+    }
+    
+    .page-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 16px;
+    }
+    
+    .header-main {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    
+    .header-actions {
+        flex-direction: column;
+    }
+    
+    .agent-info-header {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 16px;
+    }
+    
+    .agent-meta {
+        justify-content: center;
+    }
+    
+    .status-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .ticket-row {
+        flex-direction: column;
+        gap: 16px;
+    }
+    
+    .ticket-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .ticket-timestamps {
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .meta-badges {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+@media (max-width: 480px) {
+    .status-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .header-actions {
+        gap: 8px;
+    }
+    
+    .google-btn {
+        font-size: 13px;
+        padding: 8px 16px;
+    }
 }
 </style>
 {% endblock %}

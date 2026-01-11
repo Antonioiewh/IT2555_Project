@@ -20,6 +20,7 @@ from models import (
 )
 from forms import TicketForm, TicketReplyForm, TicketAssignForm, KnowledgeBaseForm
 from decorators import role_required, admin_required, agent_required
+from content_checker import content_scanner, check_sensitive_content
 
 # Optional imports that might not be available
 try:
@@ -80,11 +81,11 @@ def get_available_escalation_tiers(current_clearance_level, ticket_classificatio
     """Get available escalation tiers for current agent based on ticket classification"""
     tiers = []
     tier_names = {
-        1: 'L1-PUBLIC',
-        2: 'L2-INTERNAL',
-        3: 'L3-CONFIDENTIAL', 
-        4: 'L4-SECRET',
-        5: 'L5-TOP SECRET'
+        1: 'PUBLIC',
+        2: 'INTERNAL',
+        3: 'CONFIDENTIAL', 
+        4: 'SECRET',
+        5: 'TOP_SECRET'
     }
     
     # Classification to level mapping
@@ -107,12 +108,11 @@ def get_available_escalation_tiers(current_clearance_level, ticket_classificatio
     for level in range(current_ticket_level + 1, current_clearance_level + 1):
         tiers.append({
             'level': level,
-            'name': tier_names.get(level, f'L{level}'),
-            'description': f'Escalate to Level {level} clearance'
+            'name': tier_names.get(level, f'LEVEL_{level}'),
+            'description': f'Escalate to {tier_names.get(level, f"Level {level}").title().replace("_", " ")} clearance level'
         })
     
     return tiers
-
 
 def check_additional_auth_required(ticket_id, user):
     """Check if additional authentication is required and valid"""
@@ -159,6 +159,185 @@ def check_additional_auth_required(ticket_id, user):
         current_app.logger.error(f"Error checking additional auth: {str(e)}")
         return True  # Require auth on error
 
+def check_additional_auth_required_archived(archived_ticket_id, user):
+    """Check if additional authentication is required for archived tickets"""
+    try:
+        archived_ticket = ArchivedTicket.query.get(archived_ticket_id)
+        if not archived_ticket:
+            return True  # Require auth if archived ticket not found
+        
+        # Check classification level
+        classification_levels = {
+            'public': 1,
+            'internal': 2,
+            'confidential': 3,
+            'secret': 4,
+            'top_secret': 5
+        }
+        
+        ticket_level = classification_levels.get(archived_ticket.classification, 1)
+        
+        # No additional auth needed for level 1-2
+        if ticket_level < 3:
+            return False
+        
+        # Check session for verification
+        if 'verified_archived_tickets' not in session:
+            return True
+        
+        verification_time = session['verified_archived_tickets'].get(str(archived_ticket_id))
+        if not verification_time:
+            return True
+        
+        # Check if verification is still valid (10 minutes)
+        if time.time() - verification_time > 600:  # 10 minutes
+            # Remove expired verification
+            del session['verified_archived_tickets'][str(archived_ticket_id)]
+            # Also clean up any partial verification data
+            if 'archived_ticket_verification' in session and str(archived_ticket_id) in session['archived_ticket_verification']:
+                del session['archived_ticket_verification'][str(archived_ticket_id)]
+            return True
+        
+        return False
+        
+    except Exception as e:
+        current_app.logger.error(f"Error checking additional auth for archived ticket: {str(e)}")
+        return True  # Require auth on error
+
+def handle_archived_password_verification(archived_ticket_id, archived_ticket, required_methods):
+    """Handle password verification for archived tickets"""
+    password = request.form.get('password', '').strip()
+    
+    if not password:
+        flash('Password is required.', 'error')
+        return render_template('ticketing/verify_archived_access.html', 
+                             archived_ticket=archived_ticket, 
+                             required_methods=required_methods,
+                             show_password_error=True)
+    
+    # Verify password
+    if not check_password_hash(current_user.password_hash, password):
+        current_app.logger.warning(f"SECURITY: Failed password verification for user {current_user.username} accessing archived ticket {archived_ticket_id}")
+        flash('Incorrect password. Access denied.', 'error')
+        return render_template('ticketing/verify_archived_access.html', 
+                             archived_ticket=archived_ticket, 
+                             required_methods=required_methods,
+                             show_password_error=True)
+    
+    # Store password verification in session
+    if 'archived_ticket_verification' not in session:
+        session['archived_ticket_verification'] = {}
+    
+    if str(archived_ticket_id) not in session['archived_ticket_verification']:
+        session['archived_ticket_verification'][str(archived_ticket_id)] = {}
+    
+    session['archived_ticket_verification'][str(archived_ticket_id)]['password'] = time.time()
+    
+    # Check if password was the only required method
+    if len(required_methods) == 1 and 'password' in required_methods:
+        return complete_archived_verification(archived_ticket_id, archived_ticket)
+    
+    # Password verified, show next step
+    flash('Password verified. Please complete additional authentication.', 'info')
+    return render_template('ticketing/verify_archived_access.html', 
+                         archived_ticket=archived_ticket, 
+                         required_methods=required_methods,
+                         password_verified=True)
+
+def handle_archived_2fa_verification(archived_ticket_id, archived_ticket, required_methods):
+    """Handle 2FA verification for archived tickets"""
+    totp_code = request.form.get('totp_code', '').strip()
+    
+    if not totp_code:
+        flash('2FA code is required.', 'error')
+        return render_template('ticketing/verify_archived_access.html', 
+                             archived_ticket=archived_ticket, 
+                             required_methods=required_methods,
+                             show_2fa_error=True)
+    
+    # Verify TOTP code
+    totp = pyotp.TOTP(current_user.totp_secret)
+    if not totp.verify(totp_code, valid_window=1):
+        current_app.logger.warning(f"SECURITY: Failed 2FA verification for user {current_user.username} accessing archived ticket {archived_ticket_id}")
+        flash('Invalid 2FA code. Access denied.', 'error')
+        return render_template('ticketing/verify_archived_access.html', 
+                             archived_ticket=archived_ticket, 
+                             required_methods=required_methods,
+                             show_2fa_error=True)
+    
+    # Store 2FA verification in session
+    if 'archived_ticket_verification' not in session:
+        session['archived_ticket_verification'] = {}
+    
+    if str(archived_ticket_id) not in session['archived_ticket_verification']:
+        session['archived_ticket_verification'][str(archived_ticket_id)] = {}
+    
+    session['archived_ticket_verification'][str(archived_ticket_id)]['2fa'] = time.time()
+    
+    # Check if all required methods are now verified
+    if is_archived_verification_complete(archived_ticket_id, required_methods):
+        return complete_archived_verification(archived_ticket_id, archived_ticket)
+    
+    # 2FA verified, show next step or completion
+    flash('2FA verified. Please complete passkey authentication.', 'info')
+    return render_template('ticketing/verify_archived_access.html', 
+                         archived_ticket=archived_ticket, 
+                         required_methods=required_methods,
+                         totp_verified=True)
+
+def handle_archived_passkey_verification(archived_ticket_id, archived_ticket, required_methods):
+    """Handle passkey verification for archived tickets"""
+    # This would integrate with your existing passkey verification logic
+    # For now, we'll mark it as verified (you'll need to implement the actual passkey verification)
+    
+    if 'archived_ticket_verification' not in session:
+        session['archived_ticket_verification'] = {}
+    
+    if str(archived_ticket_id) not in session['archived_ticket_verification']:
+        session['archived_ticket_verification'][str(archived_ticket_id)] = {}
+    
+    session['archived_ticket_verification'][str(archived_ticket_id)]['passkey'] = time.time()
+    
+    # Check if all required methods are now verified
+    if is_archived_verification_complete(archived_ticket_id, required_methods):
+        return complete_archived_verification(archived_ticket_id, archived_ticket)
+    
+    flash('Passkey verified.', 'info')
+    return render_template('ticketing/verify_archived_access.html', 
+                         archived_ticket=archived_ticket, 
+                         required_methods=required_methods,
+                         passkey_verified=True)
+
+def is_archived_verification_complete(archived_ticket_id, required_methods):
+    """Check if all required authentication methods have been verified for archived tickets"""
+    if 'archived_ticket_verification' not in session:
+        return False
+    
+    ticket_verification = session['archived_ticket_verification'].get(str(archived_ticket_id), {})
+    
+    for method in required_methods:
+        if method not in ticket_verification:
+            return False
+    
+    return True
+
+def complete_archived_verification(archived_ticket_id, archived_ticket):
+    """Complete the verification process and grant access to archived ticket"""
+    # Store final verification
+    if 'verified_archived_tickets' not in session:
+        session['verified_archived_tickets'] = {}
+    
+    session['verified_archived_tickets'][str(archived_ticket_id)] = time.time()
+    session.permanent = True
+    
+    # Clear temporary verification data
+    if 'archived_ticket_verification' in session and str(archived_ticket_id) in session['archived_ticket_verification']:
+        del session['archived_ticket_verification'][str(archived_ticket_id)]
+    
+    current_app.logger.info(f"SECURITY: User {current_user.username} completed verification for {archived_ticket.classification} archived ticket {archived_ticket_id}")
+    
+    flash(f'Access verified for {archived_ticket.classification} classified archived ticket.', 'success')
+    return redirect(url_for('ticketing.view_archived_ticket', archived_ticket_id=archived_ticket_id))
 # --- User Routes ---
 
 @ticketing_bp.route('/')
@@ -362,63 +541,6 @@ def view_ticket(ticket_id):
         flash('An error occurred while loading the ticket.', 'error')
         return redirect(url_for('ticketing.index'))
 
-# unused
-@ticketing_bp.route('/reply/<int:ticket_id>', methods=['POST'])
-@agent_required
-def reply_ticket(ticket_id):
-    """Add reply to ticket"""
-    try:
-        ticket = Ticket.query.get_or_404(ticket_id)
-        
-        # Check access permissions
-        if not check_ticket_access(ticket, current_user):
-            abort(403)
-        
-        form = TicketReplyForm()
-        
-        if form.validate_on_submit():
-            # Check if user is support agent
-            agent = SupportAgent.query.filter_by(user_id=current_user.user_id, is_active=True).first()
-            is_agent_reply = agent is not None
-            
-            # Create message
-            message = TicketMessage(
-                ticket_id=ticket_id,
-                user_id=current_user.user_id,
-                message=form.message.data,
-                is_internal=form.is_internal.data if is_agent_reply else False,
-                created_at=datetime.utcnow()
-            )
-            
-            db.session.add(message)
-            
-            # Update ticket status and timestamp
-            ticket.updated_at = datetime.utcnow()
-            
-            # If agent reply, update status to in_progress
-            if is_agent_reply and ticket.status == 'open':
-                ticket.status = 'in_progress'
-            
-            # If user reply and ticket was pending, reopen it
-            elif not is_agent_reply and ticket.status == 'pending':
-                ticket.status = 'in_progress'
-            
-            db.session.commit()
-            
-            flash('Reply added successfully!', 'success')
-            
-        else:
-            for field, errors in form.errors.items():
-                for error in errors:
-                    flash(f'{field}: {error}', 'error')
-        
-        return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
-        
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Error replying to ticket: {str(e)}")
-        flash('An error occurred while adding your reply.', 'error')
-        return redirect(url_for('ticketing.view_ticket', ticket_id=ticket_id))
 
 @ticketing_bp.route('/take/<int:ticket_id>', methods=['POST'])
 @agent_required
@@ -879,13 +1001,13 @@ def agent_archived_tickets():
     try:
         agent = SupportAgent.query.filter_by(user_id=current_user.user_id, is_active=True).first()
         if not agent:
-            flash('Agent profile not found.', 'error')
+            flash('You are not authorized as a support agent.', 'error')
             return redirect(url_for('ticketing.index'))
         
         # Get classifications at or below this agent's clearance level
         accessible_classifications = get_classifications_at_or_below_level(agent.clearance_level)
         
-        # Get archived tickets based on clearance
+        # Get archived tickets that this agent can access based on classification
         archived_tickets = ArchivedTicket.query.filter(
             ArchivedTicket.classification.in_(accessible_classifications)
         ).order_by(ArchivedTicket.archived_at.desc()).all()
@@ -906,20 +1028,80 @@ def view_archived_ticket(archived_ticket_id):
     try:
         archived_ticket = ArchivedTicket.query.get_or_404(archived_ticket_id)
         
-        # Check clearance access
+        # Get current agent
         agent = SupportAgent.query.filter_by(user_id=current_user.user_id, is_active=True).first()
-        if not agent or not agent.can_view_classification(archived_ticket.classification):
-            flash('Access denied - insufficient clearance level.', 'error')
+        if not agent:
+            flash('You are not authorized as a support agent.', 'error')
+            return redirect(url_for('ticketing.index'))
+        
+        # Check if agent can view this classification level
+        if not agent.can_view_classification(archived_ticket.classification):
+            current_app.logger.warning(f"SECURITY: Agent {current_user.username} (clearance level {agent.clearance_level}) attempted to access archived ticket {archived_ticket_id} with classification {archived_ticket.classification}")
+            flash('You do not have sufficient clearance to view this archived ticket.', 'error')
             return redirect(url_for('ticketing.agent_archived_tickets'))
         
+        # Check if additional authentication is required for high-classification archived tickets
+        if check_additional_auth_required_archived(archived_ticket_id, current_user):
+            session['pending_archived_ticket_id'] = archived_ticket_id
+            return redirect(url_for('ticketing.verify_archived_access', archived_ticket_id=archived_ticket_id))
+        
         return render_template('ticketing/view_archived_ticket.html', 
-                             ticket=archived_ticket,
+                             archived_ticket=archived_ticket,
                              agent=agent)
         
     except Exception as e:
         current_app.logger.error(f"Error viewing archived ticket: {str(e)}")
         flash('An error occurred while loading the archived ticket.', 'error')
         return redirect(url_for('ticketing.agent_archived_tickets'))
+
+@ticketing_bp.route('/verify-archived-access/<int:archived_ticket_id>', methods=['GET', 'POST'])
+@agent_required
+def verify_archived_access(archived_ticket_id):
+    """Additional authentication for high-classification archived tickets"""
+    try:
+        archived_ticket = ArchivedTicket.query.get_or_404(archived_ticket_id)
+        
+        # Get current agent
+        agent = SupportAgent.query.filter_by(user_id=current_user.user_id, is_active=True).first()
+        if not agent:
+            flash('You are not authorized as a support agent.', 'error')
+            return redirect(url_for('ticketing.index'))
+        
+        # Check if agent can view this classification level
+        if not agent.can_view_classification(archived_ticket.classification):
+            current_app.logger.warning(f"SECURITY: Agent {current_user.username} attempted unauthorized access to archived ticket {archived_ticket_id}")
+            flash('You do not have sufficient clearance to view this archived ticket.', 'error')
+            return redirect(url_for('ticketing.agent_archived_tickets'))
+        
+        # Determine required authentication methods based on classification
+        classification_levels = {
+            'confidential': ['password'],
+            'secret': ['password', '2fa'],
+            'top_secret': ['password', '2fa', 'passkey']
+        }
+        
+        required_methods = classification_levels.get(archived_ticket.classification, [])
+        
+        if request.method == 'POST':
+            verification_type = request.form.get('verification_type')
+            
+            if verification_type == 'password':
+                return handle_archived_password_verification(archived_ticket_id, archived_ticket, required_methods)
+            elif verification_type == '2fa':
+                return handle_archived_2fa_verification(archived_ticket_id, archived_ticket, required_methods)
+            elif verification_type == 'passkey':
+                return handle_archived_passkey_verification(archived_ticket_id, archived_ticket, required_methods)
+        
+        return render_template('ticketing/verify_archived_access.html', 
+                             archived_ticket=archived_ticket, 
+                             required_methods=required_methods,
+                             agent=agent)
+        
+    except Exception as e:
+        current_app.logger.error(f"Error in archived ticket verification: {str(e)}")
+        flash('An error occurred during verification.', 'error')
+        return redirect(url_for('ticketing.agent_archived_tickets'))
+
 
 @ticketing_bp.route('/terminate/<int:ticket_id>', methods=['POST'])
 @agent_required
@@ -1229,7 +1411,7 @@ def manage_agents():
 @ticketing_bp.route('/create', methods=['GET', 'POST'])
 @agent_required
 def create_ticket():
-    """Create new support ticket"""
+    """Create new support ticket with content scanning"""
     form = TicketForm()
     
     # Populate categories
@@ -1244,9 +1426,34 @@ def create_ticket():
                 flash('Invalid category selected.', 'error')
                 return render_template('ticketing/create_ticket.html', form=form)
             
+            # Scan content for sensitive information
+            combined_content = f"{form.title.data} {form.description.data}"
+            content_assessment = content_scanner(
+                content_type='ticket',
+                content_text=combined_content,
+                user_id=current_user.user_id,
+                additional_context={
+                    'category': category.name,
+                    'user_agent': request.headers.get('User-Agent', 'Unknown')
+                }
+            )
+            
+            # Check if content should be blocked
+            if content_assessment['block_content']:
+                current_app.logger.warning(f"SECURITY: Blocked ticket submission from user {current_user.username} due to high-risk content")
+                flash(
+                    'Your ticket contains highly sensitive information that cannot be processed through this system. '
+                    'Please remove sensitive data (NRIC, credit card numbers, etc.) or contact support directly for secure handling.',
+                    'error'
+                )
+                return render_template('ticketing/create_ticket.html', form=form, content_warnings=content_assessment['warnings'])
+            
             # Use category's default priority and required_clearance
             priority = category.default_priority
-            clearance_level = category.required_clearance
+            base_clearance_level = category.required_clearance
+            
+            # Determine final classification based on content scan and category
+            content_classification = content_assessment['classification_required']
             
             # Map clearance level to classification
             clearance_to_classification = {
@@ -1256,16 +1463,33 @@ def create_ticket():
                 4: 'secret',
                 5: 'top_secret'
             }
-            classification = clearance_to_classification.get(clearance_level, 'public')
+            category_classification = clearance_to_classification.get(base_clearance_level, 'public')
             
-            # Create ticket with category-based classification
+            # Use the higher of the two classifications
+            classification_levels = {
+                'public': 1,
+                'internal': 2,
+                'confidential': 3,
+                'secret': 4,
+                'top_secret': 5
+            }
+            
+            content_level = classification_levels.get(content_classification, 1)
+            category_level = classification_levels.get(category_classification, 1)
+            final_level = max(content_level, category_level)
+            
+            # Get final classification
+            level_to_classification = {v: k for k, v in classification_levels.items()}
+            final_classification = level_to_classification[final_level]
+            
+            # Create ticket with content-aware classification
             ticket = Ticket(
                 user_id=current_user.user_id,
                 title=form.title.data,
                 description=form.description.data,
                 category_id=form.category_id.data,
                 priority=priority,
-                classification=classification,
+                classification=final_classification,
                 status='open',
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow()
@@ -1274,26 +1498,46 @@ def create_ticket():
             db.session.add(ticket)
             db.session.flush()  # Get the ticket_id
             
-            # Don't auto-assign - leave unassigned as requested
-            # auto_assign_ticket(ticket)  # Commented out
+            # Auto-assign ticket based on classification
+            auto_assign_ticket(ticket)
             
             db.session.commit()
             
-            # Log ticket creation
-            if splunk_logger:
-                splunk_logger.log_security_event('ticket_created', {
-                    'user_id': current_user.user_id,
-                    'username': current_user.username,
-                    'ticket_id': ticket.ticket_id,
-                    'title': ticket.title,
-                    'priority': priority,
-                    'classification': classification,
-                    'category': category.name,
-                    'clearance_level': clearance_level,
-                    'status': ticket.status
-                })
+            # Log ticket creation with content scan results
+            log_data = {
+                'user_id': current_user.user_id,
+                'username': current_user.username,
+                'ticket_id': ticket.ticket_id,
+                'title': ticket.title,
+                'priority': priority,
+                'classification': final_classification,
+                'category': category.name,
+                'base_clearance_level': base_clearance_level,
+                'content_classification': content_classification,
+                'content_risk_score': content_assessment['risk_score'],
+                'sensitive_content_detected': content_assessment['match_count'] > 0,
+                'content_warnings': content_assessment['warnings'],
+                'status': ticket.status
+            }
             
-            flash(f'Ticket #{ticket.ticket_id} created successfully with {classification} classification!', 'success')
+            if splunk_logger:
+                splunk_logger.log_security_event('ticket_created_with_content_scan', log_data)
+            
+            current_app.logger.info(f"Ticket created: ID={ticket.ticket_id}, Classification={final_classification}, Content Risk={content_assessment['risk_score']}")
+            
+            # Show appropriate success message
+            success_msg = f'Ticket #{ticket.ticket_id} created successfully with {final_classification} classification!'
+            if content_assessment['requires_review']:
+                success_msg += f" Note: Your ticket has been flagged for review due to potentially sensitive content."
+            if final_classification != category_classification:
+                success_msg += f" Classification was upgraded from {category_classification} to {final_classification} due to content analysis."
+                
+            flash(success_msg, 'success')
+            
+            # Show content warnings if any
+            for warning in content_assessment['warnings']:
+                flash(f"Content Warning: {warning}", 'warning')
+            
             return redirect(url_for('ticketing.view_ticket', ticket_id=ticket.ticket_id))
             
         except Exception as e:

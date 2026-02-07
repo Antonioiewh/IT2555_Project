@@ -3103,6 +3103,21 @@ def messages():
 
     return render_template('messages.html', friends=sidebar_friends_info, my_chat_ids=my_chat_ids, friend_chat_ids=friend_chat_ids, selected_friend=selected_friend, friends_to_readd=friends_to_readd_info, )
 
+
+def delete_expired_messages():
+    """Background task to delete expired messages."""
+    with app.app_context():
+        try:
+            now = datetime.utcnow()
+            # Find and delete messages where expiration time has passed
+            num_deleted = Message.query.filter(Message.expires_at <= now).delete()
+            if num_deleted > 0:
+                db.session.commit()
+                print(f"[Cleanup] Deleted {num_deleted} expired messages.")
+        except Exception as e:
+            print(f"[Cleanup Error] {e}")
+
+
 @csrf.exempt
 @app.route('/create_chat/<int:friend_id>', methods=['POST'])
 @single_role_required('user')
@@ -3259,6 +3274,11 @@ def handle_send_message(data):
     iv = data.get('iv')
     sender_enc_key = data.get('sender_enc_key')
     receiver_enc_key = data.get('receiver_enc_key')
+
+    expires_in = int(data.get('expires_in', 0)) # Get timer from frontend
+    expires_at = None
+    if expires_in > 0:
+        expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
     
     # Validate critical fields
     if not all([ciphertext, iv, sender_enc_key, receiver_enc_key]):
@@ -3294,7 +3314,8 @@ def handle_send_message(data):
             sender_enc_key=sender_enc_key,
             receiver_enc_key=receiver_enc_key,
             is_deleted_by_sender=True,
-            is_deleted_by_receiver=True
+            is_deleted_by_receiver=True,
+            expires_at=expires_at
         )
         db.session.add(msg)
         db.session.commit()
@@ -3308,7 +3329,8 @@ def handle_send_message(data):
         message_text=ciphertext,  # Store the encrypted content
         iv=iv,
         sender_enc_key=sender_enc_key,
-        receiver_enc_key=receiver_enc_key
+        receiver_enc_key=receiver_enc_key,
+        expires_at=expires_at
     )
     db.session.add(msg)
     db.session.commit()
@@ -3322,7 +3344,8 @@ def handle_send_message(data):
         'iv': msg.iv,
         'sender_enc_key': msg.sender_enc_key,
         'receiver_enc_key': msg.receiver_enc_key,
-        'sent_at': msg.sent_at.strftime('%H:%M')
+        'sent_at': msg.sent_at.strftime('%H:%M'),
+        'expires_at': expires_at.isoformat() + 'Z' if expires_at else None
     }
     
     # Broadcast to the chat room
@@ -3440,9 +3463,10 @@ def chat_history(friend_id):
             'is_deleted_by_sender': m.is_deleted_by_sender,
             'is_deleted_by_receiver': m.is_deleted_by_receiver,
             'deleted_for_me': deleted_for_me,
-            'iv': m.iv,                           # <--- ADDED
-            'sender_enc_key': m.sender_enc_key,   # <--- ADDED
-            'receiver_enc_key': m.receiver_enc_key # <--- ADDED
+            'iv': m.iv,                           
+            'sender_enc_key': m.sender_enc_key,  
+            'receiver_enc_key': m.receiver_enc_key, 
+            'expires_at': m.expires_at.isoformat() + 'Z' if m.expires_at else None
         })
     return jsonify(out)
 
@@ -4717,6 +4741,7 @@ def create_support_agent():
 # Initialize scheduler for event reminders
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=send_event_reminders, trigger="interval", hours=24)
+scheduler.add_job(func=delete_expired_messages, trigger="interval", seconds=30)
 scheduler.start()
 # --- Run the App ---
 if __name__ == '__main__':

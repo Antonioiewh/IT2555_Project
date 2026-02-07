@@ -508,6 +508,7 @@ class Message(db.Model):
     chat_id = db.Column(db.Integer, db.ForeignKey('chats.chat_id'), nullable=False)
     sender_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     message_text = db.Column(db.Text, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=True)
 
     # --- E2EE Metadata ---
     iv = db.Column(db.String(64), nullable=True) # Base64

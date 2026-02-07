@@ -139,6 +139,8 @@ html, body { height: 100%; }
 .friend-list::-webkit-scrollbar-thumb:hover, .chat-box::-webkit-scrollbar-thumb:hover { background:#d1d5db; }
 @media (max-width: 992px){ .messages-layout{ grid-template-columns: 1fr; gap:12px; } .friend-list{ max-height:40vh; } #chat-info-sidebar { position:fixed; right:0; top:0; width:100vw; height:100vh; z-index:1000; border-radius:0; } }
 .blur-overlay { filter: blur(5px); pointer-events: none; }
+.system-msg-row { display: flex; justify-content: center; margin: 15px 0; }
+.system-msg-badge { background: #e0e7ff; color: #4338ca; font-size: 12px; padding: 4px 12px; border-radius: 12px; font-weight: 500; }
 
 
 /* Chat lock UI*/
@@ -495,6 +497,32 @@ html, body { height: 100%; }
                     <span class="material-icons">lock_open</span>
                     <span>Remove Chat Lock</span>
                 </button>
+            </div>
+            <div class="sidebar-section" style="border-top:1px solid var(--border); padding-top:15px; margin-top:15px;">
+                <div class="media-header">
+                    <span style="display:flex; align-items:center; gap:8px; font-weight:500;">
+                        <span class="material-icons" style="font-size:18px; color:var(--danger);">timer</span> 
+                        Disappearing Messages
+                    </span>
+                </div>
+                
+                <label style="font-size:12px; color:var(--muted); margin:8px 0; display:block;">
+                    Messages will self-destruct after:
+                </label>
+                
+                <select id="dm-timer-select" onchange="updateDmTimer()" class="form-control" style="width:100%; padding:8px; border-radius:8px; border:1px solid var(--border);">
+                    <option value="0" selected>Off (Keep Forever)</option>
+                    <option value="10">10 Seconds</option>
+                    <option value="30">30 Seconds</option>
+                    <option value="60">1 Minute</option>
+                    <option value="300">5 Minutes</option>
+                    <option value="3600">1 Hour</option>
+                </select>
+                
+                <div id="dm-status-badge" style="margin-top:10px; font-size:12px; color:var(--danger); display:none; align-items:center; gap:5px; background: rgba(234, 67, 53, 0.1); padding: 5px; border-radius: 4px;">
+                    <span class="material-icons" style="font-size:14px">check_circle</span> 
+                    <span id="dm-status-text">Timer Active</span>
+                </div>
             </div>
           </div>
         </div>
@@ -1001,6 +1029,58 @@ async function triggerUnlockChallenge(lock, promptText = "Enter 4-digit PIN to u
     }
     return false;
 }
+
+// ==========================================
+// 2. DISAPPEARING MESSAGES
+// ==========================================
+let currentDmTimer = 0; // 0 = Off
+
+async function updateDmTimer() {
+    const select = document.getElementById('dm-timer-select');
+    currentDmTimer = parseInt(select.value);
+    
+    // 1. Update UI Badge
+    const badge = document.getElementById('dm-status-badge');
+    if (currentDmTimer > 0) {
+        badge.style.display = 'flex';
+        document.getElementById('dm-status-text').innerText = "Destructs in " + select.options[select.selectedIndex].text;
+    } else {
+        badge.style.display = 'none';
+    }
+
+    // 2. Send "System Message" to Chat (So friend knows)
+    if (!currentChatId) return;
+
+    try {
+        const msgText = currentDmTimer > 0 
+            ? `Disappearing messages set to ${select.options[select.selectedIndex].text}`
+            : `Disappearing messages disabled`;
+
+        // Get Friend's Key to encrypt the notification
+        const friendId = document.querySelector('.friend-link.active').dataset.userId;
+        let friendKey = friendPublicKeyCache[friendId];
+        if (!friendKey) {
+             const r = await fetch(`/api/get_public_key/${friendId}`);
+             const d = await r.json();
+             friendKey = await CryptoManager.importPublicKey(d.public_key);
+             friendPublicKeyCache[friendId] = friendKey;
+        }
+
+        // Send the special "system" type message
+        const payload = JSON.stringify({ type: 'system', text: msgText });
+        const enc = await CryptoManager.encryptMessage(payload, friendKey, myKeys.public);
+        
+        socket.emit('send_message', { 
+            chat_id: Number(currentChatId), 
+            ...enc,
+            expires_in: 0 // System messages shouldn't disappear, or set to currentDmTimer if you want
+        });
+
+    } catch (e) {
+        console.error("Failed to send system notification", e);
+    }
+}
+
 // ==========================================
 // 3. INITIALIZATION (Seamless)
 // ==========================================
@@ -1207,7 +1287,7 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
             if (j.ok) {
                 const payload = JSON.stringify({ type:'attachment', url: j.url, name: j.name, kind: j.kind, size: j.size });
                 const enc = await CryptoManager.encryptMessage(payload, friendKey, myKeys.public);
-                socket.emit('send_message', { chat_id: Number(currentChatId), ...enc });
+                socket.emit('send_message', { chat_id: Number(currentChatId), ...enc, expires_in: currentDmTimer});
                 ensureChatIndexes(currentChatId);
                 chatFilesIndex.get(String(currentChatId)).push({type:'attachment', ...j});
             }
@@ -1220,7 +1300,7 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
     if (text) {
         try {
             const enc = await CryptoManager.encryptMessage(text, friendKey, myKeys.public);
-            socket.emit('send_message', { chat_id: Number(currentChatId), ...enc });
+            socket.emit('send_message', { chat_id: Number(currentChatId), ...enc, expires_in: currentDmTimer });
             input.value = '';
             input.style.height = 'auto';
         } catch(e) {
@@ -1237,7 +1317,8 @@ socket.on('receive_message', async (data) => {
         return;
     }
     const text = await CryptoManager.decryptMessage(data);
-    appendMessage(String(data.sender_id) === String(myUserId) ? 'me' : 'friend', text, data.sent_at, data.message_id);
+
+    appendMessage(String(data.sender_id) === String(myUserId) ? 'me' : 'friend', text, data.sent_at, data.message_id, false, data.expires_at);
 });
 
 // UI & Helpers
@@ -1506,7 +1587,7 @@ async function loadChatHistoryByFriendId(friendId) {
         chatBox.scrollTop = chatBox.scrollHeight;
     } catch(e) { chatBox.innerHTML = '<div class="text-danger">Failed to load history</div>'; }
 }
-function appendMessage(who, text, time, msgId, isDeleted) {
+function appendMessage(who, text, time, msgId, isDeleted = false, expiresAt = null) {
     const chatBox = document.getElementById('chat-box');
     const div = document.createElement('div');
     div.className = `message-row ${who}`;
@@ -1515,21 +1596,62 @@ function appendMessage(who, text, time, msgId, isDeleted) {
     if(msgId) bubble.dataset.messageId = msgId;
     
     let content = text;
+    let isSystem = false;
     if (!isDeleted && text && text.startsWith('{')) {
         try {
             const obj = JSON.parse(text);
-            if (obj.type === 'attachment') {
+            if (obj.type === 'system') {
+                isSystem = true;
+                div.className = 'system-msg-row'; // Centered row
+                // Add the centered badge with icon
+                div.innerHTML = `
+                    <div class="system-msg-badge" style="background:#e0e7ff; color:#4338ca; padding:4px 12px; border-radius:12px; font-size:12px; font-weight:500; display:flex; align-items:center; gap:6px;">
+                        <span class="material-icons" style="font-size:14px;">info</span>
+                        ${obj.text}
+                    </div>`;
+            } 
+            else if (obj.type === 'attachment') {
                 content = `<div class="attachment-card"><span class="material-icons">description</span> ${obj.name} <a href="${obj.url}" download class="btn btn-sm btn-light">Download</a></div>`;
                 if(obj.kind === 'image') content = `<img src="${obj.url}" class="msg-image" onclick="openImageViewer('${obj.url}')">`;
             }
         } catch(e){}
     }
-    
-    bubble.innerHTML = `<div class="message-text">${content}</div><div class="message-time">${time}</div>`;
-    div.appendChild(bubble);
-    chatBox.appendChild(div);
-}
 
+    if (!isSystem) {
+        div.className = `message-row ${who}`;
+        const bubble = document.createElement('div');
+        bubble.className = `message-bubble ${isDeleted ? 'message-deleted' : ''}`;
+        if(msgId) bubble.dataset.messageId = msgId;
+        
+        bubble.innerHTML = `<div class="message-text">${content}</div><div class="message-time">${time}</div>`;
+
+        // Timer Logic
+        if (expiresAt) {
+            const expTime = new Date(expiresAt).getTime(); // Browser now sees 'Z' and handles timezone correctly
+            const now = new Date().getTime();
+            const timeLeft = expTime - now;
+
+            if (timeLeft > 0) {
+                const timeEl = bubble.querySelector('.message-time');
+                if(timeEl) timeEl.innerHTML += ' <span class="material-icons" style="font-size:12px; vertical-align:middle; color:var(--danger);" title="Self-destructs soon">timer</span>';
+                
+                setTimeout(() => {
+                    div.style.transition = "opacity 0.5s ease";
+                    div.style.opacity = "0";
+                    setTimeout(() => div.remove(), 500);
+                }, timeLeft);
+            } else {
+                // If expired, don't append at all
+                return; 
+            }
+        }
+        div.appendChild(bubble);
+    }
+
+    chatBox.appendChild(div);
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+    
 // 7. COMPOSER PREVIEWS & ATTACHMENTS
 document.getElementById('attach-btn').addEventListener('click', () => document.getElementById('attachment-input').click());
 document.getElementById('attachment-input').addEventListener('change', (e) => {

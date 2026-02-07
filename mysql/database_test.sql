@@ -486,6 +486,7 @@ CREATE TABLE messages (
     sent_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     is_deleted_by_sender BOOLEAN NOT NULL DEFAULT FALSE,
     is_deleted_by_receiver BOOLEAN NOT NULL DEFAULT FALSE,
+    expires_at DATETIME NULL,
     -- Encryption Fields ---
     iv VARCHAR(64) NULL, -- Initialization Vector for AES
     sender_enc_key TEXT NULL, -- The AES key encrypted with Sender's Public Key

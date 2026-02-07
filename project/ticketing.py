@@ -19,8 +19,8 @@ from models import (
     TicketEscalation, TicketCategory, KnowledgeBaseArticle, ClearanceLevel, ArchivedTicket, WebAuthnCredential
 )
 from forms import TicketForm, TicketReplyForm, TicketAssignForm, KnowledgeBaseForm
-from decorators import role_required, admin_required, agent_required
-from content_checker import content_scanner, check_sensitive_content
+from decorators_py.decorators import role_required, admin_required, agent_required
+from validators_py.content_validate import content_scanner, check_sensitive_content
 
 # Optional imports that might not be available
 try:

@@ -61,14 +61,14 @@ from vault import vault_bp
 
 # Models
 from models import (
-    db, User, Role, Permission, Event, EventParticipant, Post, PostImage, PostLike,
-    Notification, Report, Chat, UserChatLock, ChatParticipant, Message, 
+    db, User, Role, Permission, Event, EventParticipant, Post, PostImage, PostLike, PostUserPermission,
+    Notification, Report, Chat, ChatParticipant, Message, 
     Friendship, AdminAction, UserLog, ModSecLog, ErrorLog, 
     WebAuthnCredential, user_role_assignments, Event, FriendChatMap, BlockedUser
 )
 
 # Decorators
-from decorators import user_required, admin_required, single_role_required, role_required
+from decorators_py.decorators import user_required, admin_required, single_role_required, role_required
 
 # Filters
 from filters import (
@@ -80,7 +80,7 @@ from filters import (
 from forms import (
     SignupForm, LoginForm, ReportForm, UpdateUserStatusForm,
     FriendRequestForm, UpdateReportStatusForm, Enable2FAForm,
-    Disable2FAForm, RemovePassKeyForm, CreatePostForm, EditProfileForm, ChangePasswordForm, EventForm
+    Disable2FAForm, RemovePassKeyForm, CreatePostForm, EditPostVisibilityForm, EditProfileForm, ChangePasswordForm, EventForm
 )
 
 # Database Management
@@ -92,14 +92,11 @@ from user_actions import (
     log_user_login_failure, log_user_logout
 )
 
-# Log parsing utilities
-from parse_test import parse_modsec_audit_log, parse_error_log
-
 # File validation
-from file_validate import validate_file_security, scan_upload
+from validators_py.file_validate import validate_file_security, scan_upload,validate_banner_image, clean_old_file,validate_post_images,validate_cropped_image_data, clean_old_file
 
 # Message validators
-from message_validator import validate_attachment, save_attachment
+from validators_py.message_validate import validate_attachment, save_attachment
 
 # Helper functions
 from functions import get_relative_time, b64encode_all, get_fido2_server, send_user_event_reminders
@@ -727,37 +724,43 @@ def load_more_posts():
         page = request.args.get('page', 1, type=int)
         per_page = 10
         
-        # Get current user's accepted friendships
+        # Get current user's accepted friendships for friends-only posts
         friendships = Friendship.query.filter(
             ((Friendship.user_id1 == current_user.user_id) | (Friendship.user_id2 == current_user.user_id)),
             Friendship.status == 'accepted'
         ).all()
         
-        # Get friend user IDs
         friend_ids = []
         for f in friendships:
             if f.user_id1 == current_user.user_id:
                 friend_ids.append(f.user_id2)
             else:
                 friend_ids.append(f.user_id1)
-        
-        # Include current user's own posts
-        friend_ids.append(current_user.user_id)
-        
-        # # Query posts only from friends and current user
-        # posts_query = Post.query.filter(
-        #     Post.user_id.in_(friend_ids)
-        # ).order_by(Post.created_at.desc())
 
-        # Visibility rules:
-        # - public: visible to everyone
-        # - friends: visible to owner and accepted friends
-        # - private: visible only to owner
+        # NEW VISIBILITY LOGIC: Same as home route
         posts_query = Post.query.filter(
             or_(
+                # Public posts (everyone can see)
                 Post.visibility == 'public',
-                and_(Post.visibility == 'friends', Post.user_id.in_(friend_ids)),
-                Post.user_id == current_user.user_id
+                
+                # User's own posts (always visible to owner)
+                Post.user_id == current_user.user_id,
+                
+                # Friends-only posts from friends
+                and_(
+                    Post.visibility == 'friends',
+                    Post.user_id.in_(friend_ids)
+                ),
+                
+                # Specific posts the user has permission to see
+                and_(
+                    Post.visibility == 'specific',
+                    Post.post_id.in_(
+                        db.session.query(PostUserPermission.post_id).filter(
+                            PostUserPermission.user_id == current_user.user_id
+                        )
+                    )
+                )
             )
         ).order_by(Post.created_at.desc())
         
@@ -788,7 +791,8 @@ def load_more_posts():
                 },
                 'likes_count': PostLike.query.filter_by(post_id=post.post_id).count(),
                 'is_liked': PostLike.query.filter_by(post_id=post.post_id, user_id=current_user.user_id).first() is not None,
-                'is_own_post': post.user_id == current_user.user_id
+                'is_own_post': post.user_id == current_user.user_id,
+                'visibility': post.visibility  # Add visibility info for frontend
             }
             posts_data.append(post_data)
         
@@ -814,8 +818,6 @@ def upload_banner():
         if file.filename == '':
             return jsonify({'success': False, 'error': 'No file selected'})
         
-        # Use modular validation
-        from file_validate import validate_banner_image, clean_old_file
         
         upload_dir = os.path.join(app.static_folder, 'uploads')
         result = validate_banner_image(file, current_user.user_id, upload_dir)
@@ -879,54 +881,59 @@ def home():
         page = request.args.get('page', 1, type=int)
         per_page = 10  # Posts per page
         
-        # Get current user's accepted friendships
-        friendships = Friendship.query.filter(
-            ((Friendship.user_id1 == current_user.user_id) | (Friendship.user_id2 == current_user.user_id)),
-            Friendship.status == 'accepted'
-        ).all()
-        
-        # Get friend user IDs
-        friend_ids = []
-        for f in friendships:
-            if f.user_id1 == current_user.user_id:
-                friend_ids.append(f.user_id2)
-            else:
-                friend_ids.append(f.user_id1)
-        
-        # Include current user's own posts
-        friend_ids.append(current_user.user_id)
-        
-        # posts from friends, public and self with visibility check
-        # posts_query = Post.query.filter(
-        #     Post.user_id.in_(friend_ids),
-        # #     or_(
-        # #         Post.user_id == current_user.user_id,
-        # #         Post.visibility == 'public',
-        # #         Post.visibility == 'friends'
-        # #     )
-        # # ).order_by(Post.created_at.desc())
-
-        # Build posts query enforcing visibility rules.
-        # Wrap in try-except in case the visibility column doesn't exist in DB yet.
+        # NEW LOGIC: Show ALL posts that the current user can view
+        # This includes: public posts, friends-only posts from friends, and specific posts they're allowed to see
         try:
+            # Get friend IDs first for friends-only posts
+            friendships = Friendship.query.filter(
+                ((Friendship.user_id1 == current_user.user_id) | (Friendship.user_id2 == current_user.user_id)),
+                Friendship.status == 'accepted'
+            ).all()
+            
+            friend_ids = []
+            for f in friendships:
+                if f.user_id1 == current_user.user_id:
+                    friend_ids.append(f.user_id2)
+                else:
+                    friend_ids.append(f.user_id1)
+            
+            # Build comprehensive query for all viewable posts
             posts_query = Post.query.filter(
                 or_(
+                    # Public posts (everyone can see)
                     Post.visibility == 'public',
-                    and_(Post.visibility == 'friends', Post.user_id.in_(friend_ids)),
-                    Post.user_id == current_user.user_id
+                    
+                    # User's own posts (always visible to owner)
+                    Post.user_id == current_user.user_id,
+                    
+                    # Friends-only posts from friends
+                    and_(
+                        Post.visibility == 'friends',
+                        Post.user_id.in_(friend_ids)
+                    ),
+                    
+                    # Specific posts the user has permission to see
+                    and_(
+                        Post.visibility == 'specific',
+                        Post.post_id.in_(
+                            db.session.query(PostUserPermission.post_id).filter(
+                                PostUserPermission.user_id == current_user.user_id
+                            )
+                        )
+                    )
                 )
             ).order_by(Post.created_at.desc())
+            
             posts = posts_query.paginate(
                 page=page, 
                 per_page=per_page, 
                 error_out=False
             )
+            
         except Exception as e:
-            # If visibility column doesn't exist, fallback to simpler query
-            app.logger.warning(f"Visibility-based query failed: {e}. Falling back to friend-based query.")
-            posts_query = Post.query.filter(
-                Post.user_id.in_(friend_ids)
-            ).order_by(Post.created_at.desc())
+            # Fallback to simpler query showing all public posts if new logic fails
+            app.logger.warning(f"Advanced visibility query failed: {e}. Falling back to simple public query.")
+            posts_query = Post.query.filter_by(visibility='public').order_by(Post.created_at.desc())
             posts = posts_query.paginate(
                 page=page, 
                 per_page=per_page, 
@@ -935,7 +942,7 @@ def home():
         
         # Get current user's actual stats
         current_user_post_count = Post.query.filter_by(user_id=current_user.user_id).count()
-        current_user_friend_count = len(friendships)  # Number of accepted friendships
+        current_user_friend_count = len(friendships) if 'friendships' in locals() else 0
         
         # Format posts data for frontend
         posts_data = []
@@ -959,11 +966,12 @@ def home():
                 },
                 'likes_count': PostLike.query.filter_by(post_id=post.post_id).count(),
                 'is_liked': PostLike.query.filter_by(post_id=post.post_id, user_id=current_user.user_id).first() is not None,
-                'is_own_post': post.user_id == current_user.user_id
+                'is_own_post': post.user_id == current_user.user_id,
+                'visibility': post.visibility  # Add visibility info for frontend
             }
             posts_data.append(post_data)
         
-        print(f"DEBUG: Found {len(posts_data)} posts from friends and self")
+        print(f"DEBUG: Found {len(posts_data)} viewable posts for user {current_user.user_id}")
         print(f"DEBUG: User post count: {current_user_post_count}")
         print(f"DEBUG: User friend count: {current_user_friend_count}")
         
@@ -1858,6 +1866,7 @@ def change_password():
         # Handle passkey authentication
         if request.form.get('auth_method') == 'passkey':
             return jsonify({'redirect': url_for('begin_passkey_auth_for_password_change')})
+        
         if form.validate_on_submit():
             try:
                 # Validate current password
@@ -3711,15 +3720,11 @@ def view_profile(user_id):
                 friendship_status = friendship.status
                 friendship_id = friendship.friendship_id
         
-        # # Get user's posts (only their own posts)
-        # posts_query = Post.query.filter_by(user_id=user_id)
-        # posts = posts_query.order_by(Post.created_at.desc()).all()
-        
-        # # Get accurate friend count (accepted friendships only)
-        # accepted_friendships = Friendship.query.filter(
-        #     ((Friendship.user_id1 == user_id) | (Friendship.user_id2 == user_id)),
-        #     Friendship.status == 'accepted'
-        # ).count()
+        # Get accurate friend count (accepted friendships only)
+        accepted_friendships = Friendship.query.filter(
+            ((Friendship.user_id1 == user_id) | (Friendship.user_id2 == user_id)),
+            Friendship.status == 'accepted'
+        ).count()
 
         # Get user's posts (visibility-filtered)
         if is_own_profile:
@@ -3767,87 +3772,98 @@ def view_profile(user_id):
         logging.error(f"Error in view_profile for user ID {user_id}: {str(e)}")
         flash('An error occurred while loading the profile.', 'error')
         return redirect(url_for('home'))
-    
 @app.route('/create_post', methods=['GET', 'POST'])
 @login_required
 def create_post():
     form = CreatePostForm()
     
     if request.method == 'POST':
+        print(f"DEBUG: Form data received: {request.form}")
+        print(f"DEBUG: Form validation: {form.validate_on_submit()}")
+        print(f"DEBUG: Form errors: {form.errors}")
+        
         if form.validate_on_submit():
             try:
-                # Create new post
+                # Create new post with updated visibility system
                 new_post = Post(
                     user_id=current_user.user_id,
-                    post_content=form.content.data,
-                    visibility=form.visibility.data if hasattr(form, 'visibility') else 'public',
-                    created_at=datetime.utcnow()
+                    post_content=form.post_content.data,
+                    visibility=form.visibility.data or 'public'
                 )
-                db.session.add(new_post)
-                db.session.commit()
                 
-                                # Handle image uploads if any
-                images = request.files.getlist('images')
-                uploaded_images = []
-                for image_file in images:
-                    if image_file and image_file.filename:
-                        # Process and save image
-                        filename = secure_filename(image_file.filename)
-                        # ... image processing logic ...
-                        uploaded_images.append(filename)
+                print(f"DEBUG: Creating post with data: user_id={new_post.user_id}, content='{new_post.post_content}', visibility={new_post.visibility}")
+                
+                db.session.add(new_post)
+                db.session.flush()  # Get the post_id for potential user permissions
+                
+                print(f"DEBUG: Post flushed, post_id: {new_post.post_id}")
+                
+                # Handle specific user permissions if visibility is 'specific'
+                if form.visibility.data == 'specific' and form.specific_users.data:
+                    usernames = [username.strip() for username in form.specific_users.data.split(',') if username.strip()]
+                    print(f"DEBUG: Processing specific users: {usernames}")
+                    
+                    for username in usernames:
+                        user = User.query.filter_by(username=username).first()
+                        if user and user.user_id != current_user.user_id:
+                            permission = PostUserPermission(
+                                post_id=new_post.post_id,
+                                user_id=user.user_id,
+                                granted_by=current_user.user_id
+                            )
+                            db.session.add(permission)
+                            print(f"DEBUG: Added permission for user {username} (ID: {user.user_id})")
+                
+                # Handle image upload using the proper validation function
+                image_file = form.image.data
+                if image_file and image_file.filename:
+                    try:
+                        # Use the dedicated post image validation function
+                        
+                        upload_dir = os.path.join(current_app.root_path, current_app.config['UPLOAD_FOLDER'])
+                        
+                        # validate_post_images expects a list of files
+                        validation_result = validate_post_images([image_file], new_post.post_id, upload_dir)
+                        
+                        if validation_result['success'] and validation_result['processed_files']:
+                            # Get the first (and only) processed file
+                            processed_file = validation_result['processed_files'][0]
+                            
+                            # Create PostImage record using just the filename
+                            post_image = PostImage(
+                                post_id=new_post.post_id,
+                                image_url=processed_file['url'],  # Just the filename, like profile pics
+                                order_index=1
+                            )
+                            db.session.add(post_image)
+                            print(f"DEBUG: Added image {processed_file['filename']} to post")
+                            
+                        else:
+                            # Log validation errors but don't fail the post creation
+                            if validation_result['errors']:
+                                print(f"DEBUG: Image validation errors: {validation_result['errors']}")
+                                flash('Post created but image upload failed: ' + '; '.join(validation_result['errors'][:2]), 'warning')
+                        
+                    except Exception as img_error:
+                        print(f"DEBUG: Image upload error: {img_error}")
+                        # Continue without image if there's an error
+                        flash('Post created but image upload failed', 'warning')
+                
+                db.session.commit()
+                print("DEBUG: Post committed successfully")
                 
                 flash('Post created successfully!', 'success')
-                
-                # Log successful post creation AFTER successful completion
-                try:
-                    splunk_logger.log_security_event(
-                        event_type='post_created',
-                        data={
-                            'post_id': new_post.post_id,
-                            'content_length': len(form.content.data),
-                            'has_images': len(uploaded_images) > 0,
-                            'image_count': len(uploaded_images),
-                            'visibility': new_post.visibility,
-                            'creation_time': datetime.utcnow().isoformat()
-                        },
-                        severity='INFO'
-                    )
-                except Exception as log_e:
-                    app.logger.error(f"Failed to log post creation: {log_e}")
                 
                 return redirect(url_for('account'))
                 
             except Exception as e:
                 db.session.rollback()
+                print(f"DEBUG: Post creation error: {str(e)}")
                 flash('Failed to create post. Please try again.', 'error')
-                app.logger.error(f"Post creation error: {str(e)}")
-                
-                # Log post creation failure AFTER rollback and user feedback
-                try:
-                    splunk_logger.log_security_event(
-                        event_type='post_creation_failed',
-                        data={
-                            'error_reason': str(e),
-                            'content_length': len(form.content.data) if form.content.data else 0,
-                            'attempt_time': datetime.utcnow().isoformat()
-                        },
-                        severity='ERROR'
-                    )
-                except Exception as log_e:
-                    app.logger.error(f"Failed to log post creation failure: {log_e}")
+                current_app.logger.error(f"Post creation error: {str(e)}")
         else:
-            # Log form validation errors AFTER validation fails
-            try:
-                splunk_logger.log_security_event(
-                    event_type='post_creation_form_error',
-                    data={
-                        'form_errors': str(form.errors),
-                        'attempt_time': datetime.utcnow().isoformat()
-                    },
-                    severity='WARNING'
-                )
-            except Exception as log_e:
-                app.logger.error(f"Failed to log form validation error: {log_e}")
+            print(f"DEBUG: Form validation failed with errors: {form.errors}")
+            flash('Please correct the errors in the form.', 'error')
 
     return render_template('create_post.html', form=form)
 
@@ -3907,6 +3923,77 @@ def edit_post(post_id):
     
     # GET request - show form with current content
     return render_template('edit_post.html', post=post)
+
+# -- Edit Post Visibility ---
+@app.route('/edit_post_visibility/<int:post_id>', methods=['GET', 'POST'])
+@login_required
+def edit_post_visibility(post_id):
+    """Edit post visibility settings"""
+    post = Post.query.get_or_404(post_id)
+    
+    # Only post owner can edit visibility
+    if post.user_id != current_user.user_id:
+        abort(403)
+    
+    form = EditPostVisibilityForm()
+    
+    if form.validate_on_submit():
+        try:
+            # Update visibility
+            old_visibility = post.visibility
+            post.visibility = form.visibility.data
+            
+            # Clear existing specific user permissions
+            PostUserPermission.query.filter_by(post_id=post_id).delete()
+            
+            # Add new specific user permissions if needed
+            if form.visibility.data == 'specific' and form.specific_users.data:
+                usernames = [username.strip() for username in form.specific_users.data.split(',') if username.strip()]
+                
+                for username in usernames:
+                    user = User.query.filter_by(username=username).first()
+                    if user and user.user_id != current_user.user_id:
+                        permission = PostUserPermission(
+                            post_id=post_id,
+                            user_id=user.user_id,
+                            granted_by=current_user.user_id
+                        )
+                        db.session.add(permission)
+            
+            db.session.commit()
+            
+            # Log the action
+            try:
+                splunk_logger.log_security_event(
+                    event_type='post_visibility_changed',
+                    data={
+                        'post_id': post_id,
+                        'old_visibility': old_visibility,
+                        'new_visibility': post.visibility,
+                        'specific_users_count': len([u.strip() for u in form.specific_users.data.split(',') if u.strip()]) if form.specific_users.data else 0,
+                        'change_time': datetime.utcnow().isoformat()
+                    },
+                    severity='INFO'
+                )
+            except Exception as log_e:
+                app.logger.error(f"Failed to log post visibility change: {log_e}")
+            
+            flash('Post visibility updated successfully!', 'success')
+            return redirect(url_for('account', user_id=current_user.user_id))
+            
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f"Error updating post visibility: {str(e)}")
+            flash('Error updating post visibility. Please try again.', 'error')
+    
+    # Pre-populate form with current values
+    if request.method == 'GET':
+        form.visibility.data = post.visibility
+        if post.visibility == 'specific':
+            allowed_users = [perm.user.username for perm in post.user_permissions]
+            form.specific_users.data = ', '.join(allowed_users)
+    
+    return render_template('edit_post_visibility.html', form=form, post=post)
 
 
 
@@ -4106,7 +4193,7 @@ def edit_profile():
             cropped_image_data = request.form.get('cropped_image_data')
             
             if cropped_image_data:
-                from file_validate import validate_cropped_image_data, clean_old_file
+                
                 
                 upload_dir = app.config['UPLOAD_FOLDER']
                 result = validate_cropped_image_data(cropped_image_data, current_user.user_id, upload_dir)

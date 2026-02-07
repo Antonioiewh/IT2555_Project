@@ -21,5 +21,14 @@
   "AuthenticationMethod": "",
   "StatusEndpoint": "/api/status",
   "StatusSimpleHealth": true,
-  "ResourcesPath": "/usr/local/orchestrator/resources"
+  "ResourcesPath": "/usr/local/orchestrator/resources",
+  "DiscoveryPollSeconds": 5,
+  "DiscoverByShowSlaveHosts": true,
+  "AutoMasterFailover": true,
+  "AutoIntermediateMasterFailover": true,
+  "FailureDetectionPeriodBlockMinutes": 5,
+  "RecoveryPeriodBlockSeconds": 60,
+  "OnFailureDetectionProcesses": [],
+  "PostMasterFailoverProcesses": [],
+  "PostIntermediateMasterFailoverProcesses": []
 }

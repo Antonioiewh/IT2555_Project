@@ -1,0 +1,329 @@
+{% extends "UserBase.html" %}
+
+{% block head %}
+<!-- Add CSRF token meta tag for sidebar functionality -->
+<meta name="csrf-token" content="{{ csrf_token() }}">
+
+<style>
+/* Google Material Design styles */
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600&family=Roboto:wght@400;500&display=swap');
+
+.google-container {
+    max-width: 600px;
+    margin: 40px auto;
+    padding: 0 24px;
+}
+
+.google-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(60,64,67,0.3), 0 4px 8px 3px rgba(60,64,67,0.15);
+    padding: 0;
+    overflow: hidden;
+    transition: box-shadow 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+.google-card:hover {
+    box-shadow: 0 2px 6px rgba(60,64,67,0.3), 0 8px 24px 4px rgba(60,64,67,0.15);
+}
+
+.google-header {
+    background: #f8f9fa;
+    padding: 24px 32px 16px;
+    border-bottom: 1px solid #e8eaed;
+}
+
+.google-title {
+    font-family: 'Google Sans', sans-serif;
+    font-size: 22px;
+    font-weight: 400;
+    color: #3c4043;
+    margin: 0;
+    text-align: center;
+}
+
+.google-body {
+    padding: 24px 32px 32px;
+}
+
+.google-form-group {
+    margin-bottom: 24px;
+    position: relative;
+}
+
+.google-form-label {
+    display: block;
+    font-family: 'Google Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: #5f6368;
+    margin-bottom: 8px;
+    transition: color 0.2s ease;
+}
+
+.google-select, .google-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #dadce0;
+    border-radius: 8px;
+    background: #fff;
+    font-family: 'Roboto', sans-serif;
+    font-size: 14px;
+    color: #3c4043;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+}
+
+.google-select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, #5f6368 50%), linear-gradient(135deg, #5f6368 50%, transparent 50%);
+    background-position: calc(100% - 18px) calc(1em + 2px), calc(100% - 13px) calc(1em + 2px);
+    background-size: 6px 6px, 6px 6px;
+    background-repeat: no-repeat;
+}
+
+.google-select:focus, .google-input:focus {
+    outline: none;
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 1px #1a73e8;
+}
+
+.google-input::placeholder {
+    color: #9aa0a6;
+}
+
+.post-preview {
+    background: #f8f9fa;
+    padding: 16px;
+    border-radius: 8px;
+    border-left: 4px solid #1a73e8;
+    font-family: 'Roboto', sans-serif;
+    font-size: 14px;
+    color: #3c4043;
+    line-height: 1.5;
+    margin-bottom: 8px;
+}
+
+.visibility-info {
+    background: #e8f0fe;
+    border: 1px solid #aecbfa;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    color: #1557b0;
+    font-family: 'Roboto', sans-serif;
+}
+
+.visibility-info strong {
+    font-weight: 500;
+}
+
+.google-button-group {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid #e8eaed;
+}
+
+.google-btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 24px;
+    font-family: 'Google Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 80px;
+    height: 40px;
+    box-sizing: border-box;
+}
+
+.google-btn:focus {
+    outline: 2px solid #1a73e8;
+    outline-offset: 2px;
+}
+
+.google-btn-primary {
+    background-color: #1a73e8;
+    color: white;
+    box-shadow: 0 1px 2px rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
+}
+
+.google-btn-primary:hover {
+    background-color: #1557b0;
+    box-shadow: 0 2px 3px rgba(60,64,67,0.3), 0 6px 10px 4px rgba(60,64,67,0.15);
+}
+
+.google-btn-primary:active {
+    background-color: #1248a0;
+    box-shadow: 0 4px 4px rgba(60,64,67,0.3), 0 8px 12px 6px rgba(60,64,67,0.15);
+}
+
+.google-btn-secondary {
+    background-color: transparent;
+    color: #1a73e8;
+    border: 1px solid #dadce0;
+}
+
+.google-btn-secondary:hover {
+    background-color: #f8f9fa;
+    border-color: #1a73e8;
+}
+
+.small-text {
+    color: #5f6368;
+    font-size: 12px;
+    margin-top: 4px;
+    display: block;
+    font-family: 'Roboto', sans-serif;
+}
+
+/* Flash messages styling */
+.validation-message {
+    background: #fef7e0;
+    border: 1px solid #fdd663;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    color: #b06000;
+    font-family: 'Roboto', sans-serif;
+}
+
+.validation-message.error {
+    background: #fce8e6;
+    border-color: #f28b82;
+    color: #d93025;
+}
+
+.validation-message.success {
+    background: #e6f4ea;
+    border-color: #81c995;
+    color: #137333;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .google-container {
+        margin: 20px auto;
+        padding: 0 16px;
+    }
+    
+    .google-header {
+        padding: 20px 24px 12px;
+    }
+    
+    .google-body {
+        padding: 20px 24px 24px;
+    }
+    
+    .google-button-group {
+        flex-direction: column-reverse;
+    }
+    
+    .google-btn {
+        width: 100%;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="google-container">
+    <div class="google-card">
+        <div class="google-header">
+            <h1 class="google-title">Edit Post Visibility</h1>
+        </div>
+        
+        <div class="google-body">
+            <!-- Show flash messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="validation-message {{ 'error' if category == 'error' else category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            
+            <!-- Show current post content (read-only) -->
+            <div class="google-form-group">
+                <label class="google-form-label">Post Content</label>
+                <div class="post-preview">{{ post.post_content }}</div>
+            </div>
+            
+            <!-- Current visibility info -->
+            <div class="visibility-info">
+                <strong>Current visibility:</strong> 
+                {% if post.visibility == 'public' %}
+                    Public (Everyone can see this post)
+                {% elif post.visibility == 'friends' %}
+                    Friends Only (Only your friends can see this post)
+                {% elif post.visibility == 'specific' %}
+                    Specific Users Only (Only selected users can see this post)
+                {% endif %}
+            </div>
+            
+            <form method="POST">
+                {{ form.hidden_tag() }}
+                
+                <!-- Visibility Selection -->
+                <div class="google-form-group">
+                    {{ form.visibility.label(class="google-form-label") }}
+                    {{ form.visibility(class="google-select", id="visibility") }}
+                </div>
+                
+                <!-- Specific Users Field -->
+                <div class="google-form-group" id="specificUsersGroup" 
+                     {% if form.visibility.data != 'specific' %}style="display: none;"{% endif %}>
+                    {{ form.specific_users.label(class="google-form-label") }}
+                    {{ form.specific_users(class="google-input", id="specific_users") }}
+                    <small class="small-text">Enter usernames of people who can see this post, separated by commas</small>
+                </div>
+                
+                <div class="google-button-group">
+                    <a href="{{ url_for('account', user_id=current_user.user_id) }}" class="google-btn google-btn-secondary">Cancel</a>
+                    {{ form.submit(class="google-btn google-btn-primary") }}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const visibilitySelect = document.getElementById('visibility');
+    const specificUsersGroup = document.getElementById('specificUsersGroup');
+    
+    if (visibilitySelect && specificUsersGroup) {
+        function toggleSpecificUsersField() {
+            if (visibilitySelect.value === 'specific') {
+                specificUsersGroup.style.display = 'block';
+            } else {
+                specificUsersGroup.style.display = 'none';
+            }
+        }
+        
+        // Listen for changes
+        visibilitySelect.addEventListener('change', toggleSpecificUsersField);
+        
+        // Initialize on page load
+        toggleSpecificUsersField();
+    }
+});
+</script>
+{% endblock %}

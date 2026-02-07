@@ -5,13 +5,12 @@ import os
 
 # Import your models and other dependencies
 from models import db, User, Report, ModSecLog, ErrorLog, UserLog, Notification, Role, user_role_assignments
-from decorators import admin_required
+from decorators_py.decorators import admin_required
 from forms import UpdateUserStatusForm, UpdateReportStatusForm
 from filters import apply_user_filters, apply_user_sorting, apply_report_filters, apply_user_log_filters
-from parse_test import parse_modsec_audit_log, parse_error_log
-from file_validate import validate_file_security
+from modsec_parse_logs import parse_modsec_audit_log, parse_error_log
 from models import db, User, Report, ModSecLog, ErrorLog, UserLog, Notification, Role, user_role_assignments, AdminAction
-from content_checker import SensitiveContentChecker, check_sensitive_content
+from validators_py.content_validate import SensitiveContentChecker, check_sensitive_content, validate_file_security
 
 # Create Blueprint
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
@@ -145,11 +144,7 @@ def manage_reports():
 
     # Base query
     query = Report.query
-
-    # Apply filters using the separate function
     query = apply_report_filters(query, search_query)
-
-    # Apply sorting
     if sort_by == 'submitted_at':
         query = query.order_by(Report.submitted_at.asc() if order == 'asc' else Report.submitted_at.desc())
     elif sort_by == 'resolved_at':

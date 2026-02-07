@@ -65,7 +65,7 @@ from models import (
 )
 
 # Decorators
-from decorators import user_required, admin_required, single_role_required, role_required
+from decorators_py.decorators import user_required, admin_required, single_role_required, role_required
 
 # Filters
 from filters import (
@@ -89,14 +89,11 @@ from user_actions import (
     log_user_login_failure, log_user_logout
 )
 
-# Log parsing utilities
-from parse_test import parse_modsec_audit_log, parse_error_log
-
 # File validation
-from file_validate import validate_file_security, scan_upload
+from validators_py.file_validate import validate_file_security, scan_upload,validate_banner_image, clean_old_file,validate_post_images,validate_cropped_image_data, clean_old_file
 
 # Message validators
-from message_validator import validate_attachment, save_attachment
+from validators_py.message_validate import validate_attachment, save_attachment
 
 # Helper functions
 from functions import get_relative_time, b64encode_all, get_fido2_server, send_user_event_reminders
@@ -815,8 +812,6 @@ def upload_banner():
         if file.filename == '':
             return jsonify({'success': False, 'error': 'No file selected'})
         
-        # Use modular validation
-        from file_validate import validate_banner_image, clean_old_file
         
         upload_dir = os.path.join(app.static_folder, 'uploads')
         result = validate_banner_image(file, current_user.user_id, upload_dir)
@@ -3753,7 +3748,6 @@ def create_post():
                 if image_file and image_file.filename:
                     try:
                         # Use the dedicated post image validation function
-                        from file_validate import validate_post_images
                         
                         upload_dir = os.path.join(current_app.root_path, current_app.config['UPLOAD_FOLDER'])
                         
@@ -4128,7 +4122,7 @@ def edit_profile():
             cropped_image_data = request.form.get('cropped_image_data')
             
             if cropped_image_data:
-                from file_validate import validate_cropped_image_data, clean_old_file
+                
                 
                 upload_dir = app.config['UPLOAD_FOLDER']
                 result = validate_cropped_image_data(cropped_image_data, current_user.user_id, upload_dir)

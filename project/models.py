@@ -222,13 +222,14 @@ class Post(db.Model):
     post_content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
-    # Added visibility column: 'private' | 'friends' | 'public'
-    visibility = db.Column(db.String(16), nullable=False, server_default='friends')
+    # Updated visibility column: 'public' | 'friends' | 'specific'
+    visibility = db.Column(db.String(16), nullable=False, server_default='public')
     
     # Relationships
     user = db.relationship("User", back_populates="posts")
     images = db.relationship("PostImage", back_populates="post", cascade="all, delete-orphan")
     likes = db.relationship("PostLike", back_populates="post", cascade="all, delete-orphan")
+    user_permissions = db.relationship("PostUserPermission", back_populates="post", cascade="all, delete-orphan")
     
     def get_like_count(self):
         """Get the number of likes for this post"""
@@ -261,6 +262,48 @@ class Post(db.Model):
                 'order_index': img.order_index
             } for img in self.images] if self.images else []
         }
+    
+    def can_be_viewed_by(self, user_id):
+        """Check if a user can view this post"""
+        if not user_id:
+            return self.visibility == 'public'
+            
+        # Post owner can always view
+        if self.user_id == user_id:
+            return True
+            
+        # Public posts can be viewed by anyone
+        if self.visibility == 'public':
+            return True
+            
+        # Friends-only posts
+        if self.visibility == 'friends':
+            from models import Friendship  # Import here to avoid circular import
+            # Check if users are friends
+            friendship = Friendship.query.filter(
+                or_(
+                    and_(Friendship.requester_id == self.user_id, Friendship.addressee_id == user_id),
+                    and_(Friendship.requester_id == user_id, Friendship.addressee_id == self.user_id)
+                ),
+                Friendship.status == 'accepted'
+            ).first()
+            return friendship is not None
+            
+        # Specific users only
+        if self.visibility == 'specific':
+            permission = PostUserPermission.query.filter_by(
+                post_id=self.post_id,
+                user_id=user_id
+            ).first()
+            return permission is not None
+            
+        return False
+    
+    def get_allowed_users(self):
+        """Get list of users who can view this post"""
+        if self.visibility == 'specific':
+            return [perm.user for perm in self.user_permissions]
+        return []
     
     def __repr__(self):
         return f"<Post {self.post_id} by User {self.user_id}>"
@@ -321,6 +364,45 @@ class PostLike(db.Model):
     
     def __repr__(self):
         return f"<PostLike User:{self.user_id} Post:{self.post_id}>"
+
+# **************************************
+# 4.1 Post User Permissions
+# **************************************
+class PostUserPermission(db.Model):
+    __tablename__ = 'post_user_permissions'
+    
+    permission_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    post_id = db.Column(db.Integer, db.ForeignKey('posts.post_id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    granted_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    granted_by = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    
+    # Relationships
+    post = db.relationship("Post", back_populates="user_permissions")
+    user = db.relationship("User", foreign_keys=[user_id])
+    granter = db.relationship("User", foreign_keys=[granted_by])
+    
+    # Ensure unique permission per user per post
+    __table_args__ = (
+        db.UniqueConstraint('post_id', 'user_id', name='unique_post_user_permission'),
+    )
+    
+    def to_dict(self):
+        return {
+            'permission_id': self.permission_id,
+            'post_id': self.post_id,
+            'user_id': self.user_id,
+            'granted_at': self.granted_at.isoformat() if self.granted_at else None,
+            'granted_by': self.granted_by,
+            'user': {
+                'user_id': self.user.user_id,
+                'username': self.user.username,
+                'profile_pic_url': self.user.profile_pic_url
+            } if self.user else None
+        }
+    
+    def __repr__(self):
+        return f"<PostUserPermission Post:{self.post_id} User:{self.user_id}>"
 
 # **************************************
 # 5. Notifications

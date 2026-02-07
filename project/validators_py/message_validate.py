@@ -5,8 +5,7 @@ from datetime import datetime
 from typing import Dict, List, Tuple
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
-
-from file_validate import validate_file_security
+from validators_py.file_validate import validate_file_security
 
 
 # Allowed types and caps

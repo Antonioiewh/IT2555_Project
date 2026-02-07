@@ -34,8 +34,7 @@ def validate_password_policy(form, field):
     if not re.search(r'\d', password):
         raise ValidationError('Password must contain at least one number.')
     
-    if not re.search(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\\/~`]', password):
-        raise ValidationError('Password must contain at least one special character (!@#$%^&*(),.?":{}|<>_-+=[]\\\/~`).')
+
 
 class SignupForm(FlaskForm):
     username = StringField('Name', validators=[DataRequired(), Length(min=2, max=50)])
@@ -111,20 +110,41 @@ class CreatePostForm(FlaskForm):
     #title = StringField('Title', validators=[DataRequired(), Length(max=50)])
     post_content = TextAreaField('Content', validators=[DataRequired(), Length(max=300)])
     image = FileField('Upload Image', validators=[Optional(), FileAllowed(['jpg', 'jpeg', 'png'], 'Images only!')])
-    # Added visibility dropdown to match template usage
+    
+    # Updated visibility dropdown with new choices and public as default
     visibility = SelectField(
         'Visibility',
-        choices=[('private', 'Private'), ('friends', 'Friends Only'), ('public', 'Public')],
-        default='friends',
+        choices=[('public', 'Public'), ('friends', 'Friends Only'), ('specific', 'Specific Users Only')],
+        default='public',  # Changed default to public
         render_kw={"class": "form-select"}
     )
+    
+    # New field for specific users (when visibility is 'specific')
+    specific_users = StringField(
+        'Specific Users', 
+        validators=[Optional()],
+        render_kw={"placeholder": "Enter usernames separated by commas", "class": "form-control"}
+    )
 
-    # CAPTCHA field for security
-    recaptcha = RecaptchaField()
     
     # Submit button
     submit = SubmitField('Submit', render_kw={"class": "btn btn-primary"})
     
+
+# --- Edit Post Visibility Form ---
+class EditPostVisibilityForm(FlaskForm):
+    visibility = SelectField(
+        'Visibility',
+        choices=[('public', 'Public'), ('friends', 'Friends Only'), ('specific', 'Specific Users Only')],
+        validators=[DataRequired()],
+        render_kw={"class": "form-select"}
+    )
+    specific_users = StringField(
+        'Specific Users',
+        validators=[Optional()],
+        render_kw={"placeholder": "Enter usernames separated by commas", "class": "form-control"}
+    )
+    submit = SubmitField('Update Visibility', render_kw={"class": "btn btn-primary"})
 
 # --- edit profile form ---
 

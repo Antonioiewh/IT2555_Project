@@ -275,6 +275,61 @@ html, body { height: 100%; }
     outline: none;
     box-shadow: var(--ring);
 }
+
+.chat-box-container { 
+    position: relative; 
+    flex: 1; 
+    display: flex; 
+    flex-direction: column; 
+    overflow: hidden; 
+}
+
+/* The Blur Overlay */
+.lock-overlay {
+    position: absolute; 
+    inset: 0; 
+    background: rgba(255,255,255,0.85); 
+    backdrop-filter: blur(10px);
+    display: none; /* Hidden by default */
+    flex-direction: column; 
+    align-items: center; 
+    justify-content: center;
+    z-index: 20; 
+    color: var(--ink); 
+    text-align: center;
+}
+
+.lock-icon-circle { 
+    width: 64px; height: 64px; 
+    background: #e0e7ff; 
+    border-radius: 50%; 
+    display: flex; align-items: center; justify-content: center; 
+    margin-bottom: 16px; color: var(--blue); 
+}
+
+.lock-pin-input { 
+    width: 200px; padding: 12px; 
+    text-align: center; font-size: 24px; 
+    border: 2px solid var(--border); 
+    border-radius: 12px; letter-spacing: 8px; 
+    margin: 20px 0; outline: none; transition: 0.2s; 
+}
+.lock-pin-input:focus { border-color: var(--blue); }
+
+/* 3-Dot Menu Styles */
+.msg-context-menu { 
+    position: fixed; z-index: 3000; 
+    background: #fff; border: 1px solid var(--border); 
+    border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); 
+    padding: 6px; display: none; flex-direction: column; min-width: 160px; 
+}
+.msg-context-menu .ctx-item { 
+    padding: 10px 12px; display: flex; align-items: center; gap: 10px; 
+    cursor: pointer; border-radius: 8px; color: var(--ink); font-size: 14px; 
+}
+.msg-context-menu .ctx-item:hover { background: #f5f7fb; }
+.icon-btn.sm { width: 28px; height: 28px; opacity: 0; transition: 0.2s; }
+.friend-link:hover .icon-btn.sm { opacity: 1; }
 </style>
 
 <div class="main-messages-wrapper" id="main-interface">
@@ -301,7 +356,7 @@ html, body { height: 100%; }
                 <div class="friend-name">{{ friend.username }}</div>
                 <div class="friend-status">{{ 'Blocked' if friend.is_blocked else ('Online' if friend.is_online else 'Offline') }}</div>
             </div>
-            <button class="icon-btn sm" onclick="showChatListItemMenu(event, '{{ friend.chat_id }}')" style="width:28px; height:28px;">
+            <button class="icon-btn sm" onclick="showChatListItemMenu(event, '{{ friend.chat_id }}')">
                 <span class="material-icons" style="font-size:18px;">more_vert</span>
             </button>
           </li>
@@ -337,7 +392,21 @@ html, body { height: 100%; }
         </div>
 
         <div id="composer-previews" class="composer-previews"></div>
-        <div id="chat-box" class="chat-box" style="display: none;"></div>
+        <div class="chat-box-container" id="chat-box-wrapper" style="display:none;">
+        <div id="chat-box" class="chat-box"></div>
+            <div id="chat-lock-overlay" class="lock-overlay">
+                <div class="lock-icon-circle">
+                    <span class="material-icons" style="font-size:32px">lock</span>
+                </div>
+                <h3>Chat Locked</h3>
+                <p style="margin-top:4px; font-size:14px; opacity:0.7">Enter PIN to view messages</p>
+                
+                <input type="password" id="overlay-pin-input" class="lock-pin-input" maxlength="4" placeholder="****">
+                <div style="margin-top:16px; display:flex; gap:10px;">
+                    <button class="btn-text" onclick="abortUnlock()">Cancel</button>
+                </div>
+            </div>
+        </div>
         
         <form id="chat-form" class="chat-input-row" style="display: none;">
           <input id="attachment-input" type="file" multiple
@@ -488,7 +557,7 @@ html, body { height: 100%; }
   </div>
 </div>
 
-// 8. CHAT LOCKING UI
+
 
 
 <div id="chat-item-context-menu" class="msg-context-menu">
@@ -681,37 +750,63 @@ const CryptoManager = {
 let targetChatIdForLock = null;
 
 function showChatListItemMenu(e, chatId) {
-    e.stopPropagation();
+    e.stopPropagation(); // Stop click from opening the chat
+    e.preventDefault();
+    
+    // Force string conversion to ensure valid ID
     targetChatIdForLock = String(chatId);
-    
-    const menu = document.getElementById('chat-item-context-menu');
-    if (!menu) return;
+    console.log("Menu opened for chat:", targetChatIdForLock); // Debugging
 
-    menu.style.display = 'flex';
-    menu.style.top = e.clientY + 'px';
-    menu.style.left = e.clientX + 'px';
-    
-    setTimeout(() => {
-        document.addEventListener('click', () => menu.style.display = 'none', {once:true});
-    }, 0);
+    const menu = document.getElementById('chat-item-context-menu');
+    if(menu) {
+        menu.style.display = 'flex';
+        menu.style.top = e.clientY + 'px';
+        menu.style.left = e.clientX + 'px';
+        
+        // Close menu when clicking elsewhere
+        setTimeout(() => {
+            document.addEventListener('click', () => {
+                menu.style.display = 'none';
+            }, {once:true});
+        }, 10);
+    }
 }
 
-function initLockSetup() {
-    // Use currentChatId from the active chat (this is set when you open a chat)
-    if (!currentChatId) {
+async function initLockSetup() {
+    console.log("Init Lock Setup. Target:", targetChatIdForLock, "Current:", currentChatId); // Debugging
+
+    // Fallback: If no target from 3-dots, use the currently open chat
+    if (!targetChatIdForLock && currentChatId) {
+        targetChatIdForLock = currentChatId;
+    }
+    
+    if (!targetChatIdForLock) {
         showToast("Please select a chat first", "error");
         return;
     }
 
-    targetChatIdForLock = String(currentChatId);
-    
-    const modal = document.getElementById('lock-setup-modal');
-    if (!modal) {
-        console.error("Lock setup modal not found");
-        return;
+    const existingLock = await Enclave.getLock(targetChatIdForLock);
+
+    if (existingLock) {
+        // A lock exists! User must verify identity to change/overwrite it.
+        const verified = await triggerUnlockChallenge(existingLock, "Enter CURRENT PIN to change lock settings:");
+        
+        if (!verified) {
+            showToast("Authentication failed. Cannot change lock settings.", "error");
+            // Clear target to be safe
+            targetChatIdForLock = null; 
+            return; // STOP HERE. Do not show modal.
+        }
     }
-    
-    modal.style.display = 'flex';
+
+    // 3. If no lock exists OR verification passed, show the setup modal
+    const modal = document.getElementById('lock-setup-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+        // Reset inputs
+        const pinInput = document.getElementById('new-chat-pin');
+        if(pinInput) pinInput.value = '';
+    }
 }
 
 function closeLockModal() {
@@ -754,37 +849,30 @@ async function savePinLock() {
     
     const hashed = await hashPin(pin);
     const chatId = targetChatIdForLock;
+    const lockData = { type: 'pin', secret: hashed };
+
+    await Enclave.saveLock(chatId, lockData);
 
     try {
-        // 1. Save LOCALLY
-        await Enclave.saveLock(chatId, { type: 'pin', secret: hashed });
-        
-        // 2. SYNC TO SERVER (per-user basis - only affects this user)
-        const res = await fetch(`/api/sync_chat_lock/${chatId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-            body: JSON.stringify({ 
-                user_id: myUserId,
-                is_locked: true, 
-                pin_hash: hashed,
-                lock_type: 'pin'
-            })
+        await fetch(`/api/sync_chat_lock/${chatId}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ is_locked: true, pin_hash: hashed })
         });
-        
-        if (res.ok) {
-            showToast("Chat locked with PIN on your devices only!", "success");
-            closeLockModal();
-            pinInput.value = '';
-            if (typeof refreshSidebarLockUI === 'function') {
-                refreshSidebarLockUI();
-            }
-        } else {
-            showToast("Failed to sync lock to server", "error");
-        }
-    } catch (e) {
-        console.error("Error saving PIN lock:", e);
-        showToast("Error saving PIN lock", "error");
-    }
+    } catch(e){}
+
+    // 3. NEW: Sync to HashiCorp Vault
+    try {
+        await fetch('/api/vault/sync_lock', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ chat_id: chatId, lock_data: lockData })
+        });
+        console.log("Lock synced to Vault.");
+    } catch(e) { console.error("Vault sync failed", e); }
+
+    showToast("Chat Locked", "success");
+    pinInput.value = '';
+    closeLockModal();
+    if (chatId === currentChatId) refreshSidebarLockUI();
 }
 
 // Register Biometric Hardware
@@ -807,23 +895,21 @@ async function registerBiometricLock() {
         };
 
         const credential = await navigator.credentials.create(userPath);
-        
+
         if (credential) {
-            const credId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
+            const lockData = { type: 'biometric', secret: 'bio-bound' }; // Biometrics are device-specific, but we mark it in Vault
             
-            // Save locally ONLY (device-bound)
-            await Enclave.saveLock(targetChatIdForLock, { 
-                type: 'biometric', 
-                credId: credId 
+            await Enclave.saveLock(targetChatIdForLock, lockData);
+            
+            // Sync to Vault
+            await fetch('/api/vault/sync_lock', {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                body: JSON.stringify({ chat_id: targetChatIdForLock, lock_data: lockData })
             });
 
-            showToast("Biometrics enabled for this chat on this device!", "success");
+            showToast("Biometrics Enabled & Synced", "success");
             closeLockModal();
-            if (typeof refreshSidebarLockUI === 'function') {
-                refreshSidebarLockUI();
-            }
-        } else {
-            showToast("Biometric registration cancelled", "info");
+            if (targetChatIdForLock === currentChatId) refreshSidebarLockUI();
         }
     } catch (err) {
         console.error("Biometric registration error:", err);
@@ -889,9 +975,9 @@ async function refreshSidebarLockUI() {
 }
 
 // Unlock challenge when opening chat
-async function triggerUnlockChallenge(lock) {
+async function triggerUnlockChallenge(lock, promptText = "Enter 4-digit PIN to unlock chat:") {
     if (lock.type === 'pin') {
-        const input = prompt("Enter 4-digit PIN to unlock chat:");
+        const input = prompt(promptText);
         if (!input || input.length !== 4) return false;
         
         const hashed = await hashPin(input);
@@ -926,7 +1012,7 @@ async function initSecurity() {
         const res = await fetch(`/api/get_public_key/${myUserId}`);
         const data = await res.json();
 
-        // 2. Check IndexedDB for existing keys
+        // 2. Check IndexedDB for existing keys (Local Cache)
         const storedKeys = await Enclave.loadKeys(myUserId);
         
         if (storedKeys) {
@@ -934,51 +1020,122 @@ async function initSecurity() {
             myKeys.private = storedKeys.privateKey;
             myKeys.public = storedKeys.publicKey;
             
-            // Check if server needs resync (edge case)
+            // Sync Public Key if missing on server
             if (!data.public_key) {
                 console.log("Server missing public key. Re-uploading...");
                 const pub64 = await CryptoManager.exportPublicKey(storedKeys.publicKey);
                 await uploadKeys(pub64);
             }
-            
-            // Refresh history immediately
-            if(currentChatId) {
-                 const activeLink = document.querySelector('.friend-link.active');
-                 if(activeLink) loadChatHistoryByFriendId(activeLink.dataset.userId);
-            }
-        } else if (data.public_key) {
-            // CASE: Server has Identity, Browser DOES NOT
-            // This is the "Refresh destroys history" trap. We MUST NOT overwrite.
-            console.warn("Identity Mismatch: Server has keys, Browser does not.");
-            document.getElementById('key-setup-modal').style.display = 'flex';
-            document.getElementById('main-interface').classList.add('blur-overlay');
-            
-            document.getElementById('btn-reset-identity').onclick = async () => {
-                if (confirm("Are you sure? Old chat history will be unreadable.")) {
+        } 
+        else {
+            // 3. No Local Keys? CHECK THE VAULT!
+            console.log("No local keys. Checking Vault...");
+            try {
+                const vaultRes = await fetch('/api/vault/restore_key');
+                const vaultData = await vaultRes.json();
+
+                if (vaultData.success && vaultData.private_key) {
+                    console.log("Keys found in Vault! Restoring...");
+                    
+                    // Import the Private Key from Vault (JWK format)
+                    const privKey = await window.crypto.subtle.importKey(
+                        "jwk", 
+                        JSON.parse(vaultData.private_key), 
+                        { name: "RSA-OAEP", hash: "SHA-256" }, 
+                        true, 
+                        ["decrypt"]
+                    );
+
+                    // We need the Public Key too. 
+                    // If the server has it, download it. If not, we can't fully restore (edge case).
+                    if (data.public_key) {
+                        const pubKey = await CryptoManager.importPublicKey(data.public_key);
+                        
+                        // Save restored keys to Local Enclave
+                        await Enclave.saveKeys(myUserId, { privateKey: privKey, publicKey: pubKey });
+                        myKeys.private = privKey;
+                        myKeys.public = pubKey;
+                        showToast("Identity synced from Vault", "success");
+                    } else {
+                        // Edge case: Vault has private key, but DB lost public key.
+                        // Ideally, we derive public from private, but WebCrypto makes that hard.
+                        // For now, treat as fresh start if critical data missing.
+                        console.warn("Vault has key, but public key missing. Generating new.");
+                        await generateAndSaveIdentity();
+                    }
+                } else {
+                    // 4. No Keys in Vault either. Generate NEW Identity.
+                    console.log("No keys in Vault. Generating new identity...");
                     await generateAndSaveIdentity();
-                    location.reload();
                 }
-            };
-        } else {
-            // CASE: Fresh Account (No Server Key, No Browser Key)
-            await generateAndSaveIdentity();
+            } catch (err) {
+                console.error("Vault check failed", err);
+                // Fallback to generating new if vault is unreachable/error
+                await generateAndSaveIdentity();
+            }
         }
+        
+        // Refresh history immediately if keys loaded
+        if(myKeys.private && currentChatId) {
+             const activeLink = document.querySelector('.friend-link.active');
+             if(activeLink) loadChatHistoryByFriendId(activeLink.dataset.userId);
+        }
+
     } catch (e) {
         console.error("Enclave Error:", e);
         showToast("Security System Failed", "error");
     }
 }
 
+async function syncLocks() {
+    try {
+        console.log("Syncing locks from Vault...");
+        // Fetch from Vault instead of SQL (or do both if you prefer)
+        const res = await fetch('/api/vault/get_locks'); 
+        
+        if (res.ok) {
+            const data = await res.json();
+            if (data.locks) {
+                for (const [chatId, lockData] of Object.entries(data.locks)) {
+                    // lockData looks like { type: 'pin', secret: '...' }
+                    await Enclave.saveLock(chatId, lockData);
+                }
+                console.log(`Synced ${Object.keys(data.locks).length} locks from Vault.`);
+            }
+        }
+    } catch (e) {
+        console.error("Lock Sync Failed:", e);
+    }
+}
 async function generateAndSaveIdentity() {
     console.log("Generating new identity...");
     const kp = await CryptoManager.generateKeyPair();
+    
+    // 1. Save Locally
     await Enclave.saveKeys(myUserId, kp);
+    
+    // 2. Export Keys
     const pub64 = await CryptoManager.exportPublicKey(kp.publicKey);
+    const privJwK = await window.crypto.subtle.exportKey("jwk", kp.privateKey);
+    
+    // 3. Send Public Key to DB (for others to find me)
     await uploadKeys(pub64);
+
+    // 4. BACKUP Private Key to VAULT
+    try {
+        await fetch('/api/vault/backup_key', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+            body: JSON.stringify({ private_key: JSON.stringify(privJwK) })
+        });
+        console.log("Private key backed up to Vault.");
+    } catch (e) {
+        console.error("Failed to backup key to Vault:", e);
+    }
     
     myKeys.public = kp.publicKey;
     myKeys.private = kp.privateKey;
-    showToast("Secure Identity Created", "success");
+    showToast("Secure Identity Created & Backed Up", "success");
 }
 
 async function uploadKeys(pub64) {
@@ -987,14 +1144,18 @@ async function uploadKeys(pub64) {
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
         body: JSON.stringify({ 
             public_key: pub64,
-            encrypted_private_key: 'DEVICE_BOUND', 
-            key_salt: 'DEVICE_BOUND' 
+            encrypted_private_key: 'VAULT_MANAGED', 
+            key_salt: 'VAULT_MANAGED' 
         })
     });
 }
 
-window.addEventListener('DOMContentLoaded', initSecurity);
-
+window.addEventListener('DOMContentLoaded', () => {
+    initSecurity(); // Your existing Key Sync
+    syncLocks();    // <--- ADD THIS: Your Lock Sync
+    
+    // ... rest of your code ...
+});
 // ==========================================
 // 4. CHAT LOGIC
 // ==========================================
@@ -1142,50 +1303,67 @@ async function openChat(link) {
     if (!link) return;
     const chatId = link.dataset.chatId;
     
-    // 1. Check for LOCAL hardware lock first (Fastest/Seamless)
-    let lock = await Enclave.getLock(chatId);
+    // UI Update: Show the container immediately so we can show the lock screen
+    document.getElementById('chat-placeholder').style.display = 'none';
+    document.getElementById('chat-topbar').style.display = 'flex';
+    document.getElementById('chat-box-wrapper').style.display = 'flex';
+    document.getElementById('chat-form').style.display = 'flex';
 
-    // 2. If no local hardware lock, check if the server says it's locked
-    if (!lock) {
-        const res = await fetch(`/api/get_locked_chats`);
-        const data = await res.json();
-        const serverPinHash = data.locked_chats[chatId];
-        
-        if (serverPinHash) {
-            // It's locked on the server but not registered on this device yet!
-            const success = await triggerUnlockChallenge({ type: 'pin', secret: serverPinHash });
-            if (success) {
-                // One-time PIN success! Now offer to enable biometrics locally
-                if (confirm("Chat unlocked. Would you like to enable Biometrics for this device?")) {
-                    targetChatIdForLock = chatId; // Set global context
-                    await registerBiometricLock(); // Hardware registration
-                }
-                actualOpenChat(link);
-                return;
-            } else {
-                showToast("Authentication Failed", "error");
-                return;
-            }
-        }
-    }
-
+    // 1. Check for Lock
+    const lock = await Enclave.getLock(chatId);
+    
     if (lock) {
-        // Chat is locked! Challenge the user before proceeding
-        const success = await triggerUnlockChallenge(lock);
-        if (!success) {
-            showToast("Authentication Failed", "error");
-            return; // Stop here and do not call actualOpenChat
+        // LOCK FOUND: Show Overlay & Blur Content
+        document.getElementById('chat-lock-overlay').style.display = 'flex';
+        document.getElementById('chat-box').style.filter = 'blur(15px)';
+        document.getElementById('chat-form').style.pointerEvents = 'none';
+        document.getElementById('chat-form').style.opacity = '0.5';
+        
+        // Setup PIN Input Listener
+        const pinInput = document.getElementById('overlay-pin-input');
+        pinInput.value = '';
+        pinInput.focus();
+        
+        // Auto-submit PIN
+        pinInput.onkeyup = async (e) => {
+            if (pinInput.value.length === 4) {
+                const hashed = await hashPin(pinInput.value);
+                if (hashed === lock.secret) {
+                    actualOpenChat(link); // SUCCESS: Open the chat
+                } else {
+                    pinInput.style.borderColor = 'red'; // Visual error
+                    setTimeout(()=>pinInput.style.borderColor='', 500);
+                }
+            }
+        };
+        
+        // Try Biometrics (if enabled)
+        if (lock.type === 'biometric') {
+            try {
+                const challenge = window.crypto.getRandomValues(new Uint8Array(32));
+                const assertion = await navigator.credentials.get({ publicKey: { challenge, timeout: 60000, userVerification: "required" } });
+                if (assertion) actualOpenChat(link); // SUCCESS
+            } catch (e) {}
         }
+    } else {
+        // NO LOCK: Proceed normally
+        actualOpenChat(link);
     }
-
-    // 2. If no lock OR challenge succeeded, proceed to the full logic
-    actualOpenChat(link);
 }
 
 // ==========================================
 // CORE LOGIC: Preserves all your existing features
 // ==========================================
 function actualOpenChat(link) {
+    document.getElementById('chat-lock-overlay').style.display = 'none';
+    document.getElementById('chat-box').style.filter = 'none';
+    const chatForm = document.getElementById('chat-form'); 
+    if(chatForm) {
+        chatForm.style.pointerEvents = 'all'; // Re-enable clicking
+        chatForm.style.opacity = '1';         // Restore full brightness
+    }
+    document.getElementById('chat-box-wrapper').style.display = 'flex';
+
     showChat();
     const friendUserId = link.dataset.userId;
     const chatId = link.dataset.chatId || '';
@@ -1228,70 +1406,73 @@ function actualOpenChat(link) {
 
     // --- Wire All Options Buttons (Preserving your logic) ---
     const blockBtn = document.querySelector('#chat-info-sidebar .btn.btn-secondary') || document.querySelector('#chat-info-sidebar .btn.btn-warning');
-    const reportBtn = document.getElementById('report-user-btn');
-    const clearBtn = document.querySelectorAll('#chat-info-sidebar .btn.btn-danger')[0];
-    const deleteBtn = document.querySelectorAll('#chat-info-sidebar .btn.btn-danger')[1];
     
-    // Check block status from server
-    fetch(`/is_blocked/${currentChatId}`)
-        .then(r => r.json())
-        .then(data => {
-            if (data.blocked_by_me) {
-                blockBtn.innerHTML = '<span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">block</span>Unblock User';
-                blockBtn.classList.remove('btn-secondary');
-                blockBtn.classList.add('btn-warning');
-            } else {
-                blockBtn.innerHTML = '<span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">block</span>Block User';
-                blockBtn.classList.remove('btn-warning');
-                blockBtn.classList.add('btn-secondary');
-            }
-        });
-    
-    // Block/Unblock Button logic
-    blockBtn.onclick = () => {
-        const isBlocked = blockBtn.textContent.includes('Unblock');
-        const action = isBlocked ? 'unblock' : 'block';
-        showConfirm(`${action.charAt(0).toUpperCase() + action.slice(1)} this user?`, async () => {
-            try {
-                const res = await fetch(`/${action}_user/${currentChatId}`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
-                if (res.ok) {
-                    location.reload(); // Quickest way to sync all UI states
+    if(blockBtn) {
+        // Check block status
+        fetch(`/is_blocked/${currentChatId}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.blocked_by_me) {
+                    blockBtn.innerHTML = '<span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">block</span>Unblock User';
+                    blockBtn.classList.remove('btn-secondary');
+                    blockBtn.classList.add('btn-warning');
+                } else {
+                    blockBtn.innerHTML = '<span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">block</span>Block User';
+                    blockBtn.classList.remove('btn-warning');
+                    blockBtn.classList.add('btn-secondary');
                 }
-            } catch (e) { showToast('Error updating status', 'error'); }
-        });
-    };
-    
-    // Report Button logic
-    reportBtn.onclick = () => {
-        const reportedUsername = link.querySelector('.friend-name').textContent;
-        const reason = prompt(`Report ${reportedUsername}?\n\nPlease enter reason:`);
-        if (!reason) return;
-        const fd = new FormData();
-        fd.append('reported_user_id', friendUserId);
-        fd.append('report_reason', reason.substring(0, 255));
-        fd.append('report_type', 'user_behavior');
-        fetch('/report_user', { method: 'POST', body: fd, headers: { 'X-CSRFToken': csrfToken } })
-        .then(() => showToast('Report submitted', 'success'));
-    };
-    
-    // Clear Chat logic
-    clearBtn.onclick = () => {
-        showConfirm('Clear history? (This hides messages for you)', async () => {
-            const res = await fetch(`/clear_chat/${currentChatId}`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
-            if (res.ok) { chatBox.innerHTML = ''; showToast('Cleared', 'success'); }
-        });
-    };
-    
-    // Delete Chat logic
-    deleteBtn.onclick = () => {
-        showConfirm('Delete chat permanently?', async () => {
-            const res = await fetch(`/delete_chat/${currentChatId}`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
-            if (res.ok) { link.remove(); showPlaceholder(); currentChatId = null; }
-        });
-    };
+            }).catch(()=>{});
 
-    // --- NEW: Sync the Lock UI in the sidebar ---
-    refreshSidebarLockUI();
+        blockBtn.onclick = () => {
+            const isBlocked = blockBtn.textContent.includes('Unblock');
+            const action = isBlocked ? 'unblock' : 'block';
+            showConfirm(`${action.charAt(0).toUpperCase() + action.slice(1)} this user?`, async () => {
+                try {
+                    const res = await fetch(`/${action}_user/${currentChatId}`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
+                    if (res.ok) location.reload();
+                } catch (e) { showToast('Error updating status', 'error'); }
+            });
+        };
+    }
+
+    const reportBtn = document.getElementById('report-user-btn');
+    if(reportBtn) {
+        reportBtn.onclick = () => {
+            const reportedUsername = link.querySelector('.friend-name').textContent;
+            const reason = prompt(`Report ${reportedUsername}?\n\nPlease enter reason:`);
+            if (!reason) return;
+            const fd = new FormData();
+            fd.append('reported_user_id', friendUserId);
+            fd.append('report_reason', reason.substring(0, 255));
+            fd.append('report_type', 'user_behavior');
+            fetch('/report_user', { method: 'POST', body: fd, headers: { 'X-CSRFToken': csrfToken } })
+            .then(() => showToast('Report submitted', 'success'));
+        };
+    }
+
+    // Clear & Delete Logic
+    const dangerBtns = document.querySelectorAll('#chat-info-sidebar .btn.btn-danger');
+    if(dangerBtns.length >= 2) {
+        const clearBtn = dangerBtns[0];
+        const deleteBtn = dangerBtns[1]; 
+
+        clearBtn.onclick = () => {
+            showConfirm('Clear history? (This hides messages for you)', async () => {
+                const res = await fetch(`/clear_chat/${currentChatId}`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
+                if (res.ok) { chatBox.innerHTML = ''; showToast('Cleared', 'success'); }
+            });
+        };
+
+        deleteBtn.onclick = () => {
+            showConfirm('Delete chat permanently?', async () => {
+                const res = await fetch(`/delete_chat/${currentChatId}`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
+                if (res.ok) { link.remove(); showPlaceholder(); currentChatId = null; }
+            });
+        };
+    }
+
+    // Update Lock UI
+    if(typeof refreshSidebarLockUI === 'function') refreshSidebarLockUI();
 }
 
 
@@ -1436,8 +1617,20 @@ const closeInfoBtn = document.getElementById('close-info-btn');
 const chatInfoSidebar = document.getElementById('chat-info-sidebar');
 
 if (chatInfoBtn) {
-    chatInfoBtn.addEventListener('click', () => {
-        chatInfoSidebar.style.display = chatInfoSidebar.style.display === 'none' ? 'block' : 'none';
+    chatInfoBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent bubbling
+        
+        // SECURITY CHECK: Is the chat currently locked?
+        const lockOverlay = document.getElementById('chat-lock-overlay');
+        if (lockOverlay && getComputedStyle(lockOverlay).display !== 'none') {
+            showToast("Unlock chat to view options", "error");
+            return; // Stop here! Do not open sidebar.
+        }
+
+        // If unlocked, toggle sidebar
+        chatInfoSidebar.style.display = 
+            (chatInfoSidebar.style.display === 'none' || chatInfoSidebar.style.display === '') 
+            ? 'block' : 'none';
     });
 }
 
@@ -1446,6 +1639,16 @@ if (closeInfoBtn) {
         chatInfoSidebar.style.display = 'none';
     });
 }
+
+// Close sidebar if clicking outside of it
+document.addEventListener('click', (e) => {
+    if (chatInfoSidebar.style.display === 'block' && 
+        !chatInfoSidebar.contains(e.target) && 
+        !chatInfoBtn.contains(e.target)) {
+        chatInfoSidebar.style.display = 'none';
+    }
+});
+
 
 // Chat Search
 const chatSearchInput = document.getElementById('chat-search-input');
@@ -1498,6 +1701,34 @@ window.addEventListener('DOMContentLoaded', () => {
     const ta = document.getElementById('chat-input');
     ta.addEventListener('input', () => { ta.style.height='auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; });
 });
+
+function abortUnlock() {
+    // Go back to "Select a chat" placeholder
+    document.getElementById('chat-placeholder').style.display = 'flex';
+    document.getElementById('chat-topbar').style.display = 'none';
+    document.getElementById('chat-box-wrapper').style.display = 'none';
+    document.getElementById('chat-form').style.display = 'none';
+    document.querySelectorAll('.friend-link').forEach(l => l.classList.remove('active'));
+    currentChatId = null;
+}
+
+// Function to handle the 3-dot menu click
+function showChatListItemMenu(e, chatId) {
+    e.stopPropagation(); 
+    targetChatIdForLock = String(chatId);
+    
+    const menu = document.getElementById('chat-item-context-menu');
+    if(menu) {
+        menu.style.display = 'flex';
+        menu.style.top = e.clientY + 'px';
+        menu.style.left = e.clientX + 'px';
+        
+        // Close menu on next click anywhere
+        setTimeout(() => {
+            document.addEventListener('click', () => menu.style.display = 'none', {once:true});
+        }, 0);
+    }
+}
 </script>
 
 

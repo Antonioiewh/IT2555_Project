@@ -54,6 +54,9 @@ from sqlalchemy import and_, or_, func, text
 # --- Forms & Validation Imports ---
 from wtforms import StringField, PasswordField, SubmitField, TextAreaField, SelectField, ValidationError
 
+# --- HashiCorp Vault Imports ---
+from vault import vault_bp
+
 # --- Custom Module Imports ---
 
 # Models
@@ -237,6 +240,9 @@ def create_app(config_name=None):
     
     # Load configuration
     app.config.from_object(config[config_name])
+
+    # Register vault blueprint
+    app.register_blueprint(vault_bp)
     
     # Initialize extensions
     initialize_extensions(app)
@@ -1852,8 +1858,7 @@ def change_password():
         # Handle passkey authentication
         if request.form.get('auth_method') == 'passkey':
             return jsonify({'redirect': url_for('begin_passkey_auth_for_password_change')})
-        
-                if form.validate_on_submit():
+        if form.validate_on_submit():
             try:
                 # Validate current password
                 if not current_user.check_password(form.current_password.data):

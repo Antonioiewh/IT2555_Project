@@ -42,6 +42,7 @@ DROP TABLE IF EXISTS ticket_categories;
 DROP TABLE IF EXISTS notifications;
 DROP TABLE IF EXISTS messages;
 DROP TABLE IF EXISTS chats;
+DROP TABLE IF EXISTS user_chat_locks;
 DROP TABLE IF EXISTS friendships;
 DROP TABLE IF EXISTS posts;
 DROP TABLE IF EXISTS events;
@@ -429,6 +430,24 @@ CREATE TABLE chats (
 );
 
 -- ---------------------------------------------------------------------------------
+-- User Chat Locks
+-- ---------------------------------------------------------------------------------
+CREATE TABLE user_chat_locks (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    chat_id INT NOT NULL,
+    is_locked BOOLEAN DEFAULT TRUE NOT NULL,
+    pin_hash VARCHAR(255) NULL,
+    lock_type VARCHAR(20) NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY _user_chat_lock_uc (user_id, chat_id),
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (chat_id) REFERENCES chats(chat_id) ON DELETE CASCADE
+);
+
+
+-- ---------------------------------------------------------------------------------
 -- Chat Participation
 -- ---------------------------------------------------------------------------------
 CREATE TABLE chat_participants (
@@ -467,6 +486,7 @@ CREATE TABLE messages (
     sent_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     is_deleted_by_sender BOOLEAN NOT NULL DEFAULT FALSE,
     is_deleted_by_receiver BOOLEAN NOT NULL DEFAULT FALSE,
+    expires_at DATETIME NULL,
     -- Encryption Fields ---
     iv VARCHAR(64) NULL, -- Initialization Vector for AES
     sender_enc_key TEXT NULL, -- The AES key encrypted with Sender's Public Key

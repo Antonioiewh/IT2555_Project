@@ -674,6 +674,15 @@
                                 <i class="bi bi-heart{{ '-fill' if post.is_liked else '' }}"></i>
                                 <span class="like-count">{{ post.likes_count }}</span>
                             </button>
+                            {% if post.image_url %}
+                            <a href="{{ url_for('download_post_image', post_id=post.post_id, filename=post.image_url.split('/')[-1]) }}" 
+                               class="post-action-btn" 
+                               title="Download with watermark"
+                               download>
+                                <i class="bi bi-download"></i>
+                                <span>Download</span>
+                            </a>
+                            {% endif %}
                         </div>
                     </article>
                     {% endfor %}

@@ -114,6 +114,7 @@ class Config:
     
     # Basic Flask configuration
     TEMPLATES_AUTO_RELOAD = True
+    SEND_FILE_MAX_AGE_DEFAULT = 0  # Disable static file caching for live reloading
     
     # External APIs
     RECAPTCHA_PUBLIC_KEY = os.getenv('RECAPTCHA_PUBLIC_KEY')
@@ -178,9 +179,11 @@ class Config:
 class DevelopmentConfig(Config):
     """Development configuration"""
     DEBUG = True
-    TESTING = False
+    TESTING = True
     
-    # Development specific settings
+    # Development specific settings for live reloading
+    TEMPLATES_AUTO_RELOAD = True
+    SEND_FILE_MAX_AGE_DEFAULT = 0
     WTF_CSRF_ENABLED = False  # Temporarily disabled for development
     
     # least scuffed but remember generate new token on the web UI and replace here
@@ -192,8 +195,8 @@ class DevelopmentConfig(Config):
 
 class ProductionConfig(Config):
     """Production configuration"""
-    DEBUG = False
-    TESTING = False
+    DEBUG = True
+    TESTING = True
 
 class TestingConfig(Config):
     """Testing configuration"""
@@ -235,6 +238,11 @@ def create_app(config_name=None):
     # Load configuration
     app.config.from_object(config[config_name])
     
+    # Enable template auto-reload for development
+    if config_name in ['development', 'testing'] or app.config.get('DEBUG'):
+        app.jinja_env.auto_reload = True
+        app.config['TEMPLATES_AUTO_RELOAD'] = True
+    
     # Initialize extensions
     initialize_extensions(app)
 
@@ -251,6 +259,17 @@ def create_app(config_name=None):
     
     # Register error handlers
     register_error_handlers(app)
+    
+    # Add cache-busting headers for development
+    if config_name in ['development', 'testing'] or app.config.get('DEBUG'):
+        @app.after_request
+        def add_cache_headers(response):
+            # Apply cache-busting to ALL responses in development
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            response.headers['X-Content-Type-Options'] = 'nosniff'
+            return response
     
     return app
 
@@ -521,18 +540,11 @@ def apply_bottom_right_overlay_bytes(input_image_path, watermark_text):
         BytesIO buffer containing the watermarked image
     """
     try:
-        # Open image and convert to RGB if needed
+        # Open image and ensure it's in RGBA mode for alpha compositing
         with Image.open(input_image_path) as img:
-            # Convert RGBA/P to RGB for JPEG output
-            if img.mode in ('RGBA', 'P'):
-                rgb_img = Image.new('RGB', img.size, (255, 255, 255))
-                if img.mode == 'RGBA':
-                    rgb_img.paste(img, mask=img.split()[3])
-                else:
-                    rgb_img.paste(img)
-                img = rgb_img
-            elif img.mode != 'RGB':
-                img = img.convert('RGB')
+            # Convert to RGBA for proper alpha compositing
+            if img.mode != 'RGBA':
+                img = img.convert('RGBA')
             
             # Create a copy to avoid modifying original
             img = img.copy()
@@ -545,7 +557,7 @@ def apply_bottom_right_overlay_bytes(input_image_path, watermark_text):
             # Try to load a nice font, fallback to default if unavailable
             try:
                 # Try common system fonts
-                font_size = max(int(height * 0.04), 20)  # 4% of image height, minimum 20px
+                font_size = max(int(height * 0.06), 24)  # 6% of image height, minimum 24px
                 font = ImageFont.truetype("arial.ttf", font_size)
             except:
                 try:
@@ -568,13 +580,16 @@ def apply_bottom_right_overlay_bytes(input_image_path, watermark_text):
             x = width - text_width - padding
             y = height - text_height - padding
             
-            # Draw watermark with white text at full opacity (255)
+            # Draw watermark with black text at full opacity (255)
             # In RGBA: (R, G, B, Alpha) where Alpha=255 is fully opaque
-            watermark_color = (255, 255, 255, 255)  # White, fully opaque
+            watermark_color = (0, 0, 0, 255)  # Black, fully opaque
             draw.text((x, y), watermark_text, font=font, fill=watermark_color)
             
-            # Convert overlay to RGB and composite onto image
-            img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
+            # Composite the overlay onto the image (both are RGBA)
+            img = Image.alpha_composite(img, overlay)
+            
+            # Convert to RGB only for JPEG saving
+            img = img.convert('RGB')
             
             # Save to BytesIO buffer
             buf = BytesIO()
@@ -588,10 +603,11 @@ def apply_bottom_right_overlay_bytes(input_image_path, watermark_text):
         # Return original image if watermarking fails
         buf = BytesIO()
         with Image.open(input_image_path) as img:
-            if img.mode in ('RGBA', 'P'):
+            # Convert to RGB for JPEG output
+            if img.mode != 'RGB':
                 img = img.convert('RGB')
-            img.save(buf, format='JPEG', quality=90, optimize=True)
-            buf.seek(0)
+            img.save(buf, format='JPEG', quality=90)
+        buf.seek(0)
         return buf
 
 
@@ -3983,11 +3999,19 @@ def download_post_image(post_id, filename):
     """
     # Validate post exists and image belongs to post
     post = Post.query.get_or_404(post_id)
-    post_image = PostImage.query.filter_by(post_id=post_id, image_url=filename).first()
+    
+    # Check if the post has an image that matches the filename
+    # The image_url in database contains full path like "uploads/filename.jpg"
+    post_image = PostImage.query.filter(
+        PostImage.post_id == post_id,
+        PostImage.image_url.like(f'%{filename}')
+    ).first()
+    
     if not post_image:
         abort(404)
 
-    file_path = os.path.join(app.static_folder, filename)
+    # Construct the full file path
+    file_path = os.path.join(app.static_folder, 'uploads', filename)
     if not os.path.exists(file_path):
         abort(404)
 
@@ -3997,7 +4021,7 @@ def download_post_image(post_id, filename):
         buf,
         mimetype='image/jpeg',
         as_attachment=True,
-        download_name=os.path.basename(filename)
+        download_name=f"watermarked_{filename}"
     )
 @app.route('/delete_post/<int:post_id>', methods=['POST'])
 @login_required

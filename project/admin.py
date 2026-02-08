@@ -10,7 +10,7 @@ from forms import UpdateUserStatusForm, UpdateReportStatusForm
 from filters import apply_user_filters, apply_user_sorting, apply_report_filters, apply_user_log_filters
 from modsec_parse_logs import parse_modsec_audit_log, parse_error_log
 from models import db, User, Report, ModSecLog, ErrorLog, UserLog, Notification, Role, user_role_assignments, AdminAction
-from validators_py.content_validate import SensitiveContentChecker, check_sensitive_content, validate_file_security
+from validators_py.content_validate import SensitiveContentChecker, check_sensitive_content
 
 # Create Blueprint
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')

@@ -508,88 +508,136 @@ def register_error_handlers(app):
         return redirect(url_for('login'))
 
 # --- watermark functions ---
-def _get_font(size=32):
-    """Try to use a truetype font if available, otherwise fallback to default."""
-    try:
-        return ImageFont.truetype("arial.ttf", size)
-    except Exception:
-        return ImageFont.load_default()
-
-def apply_tiled_watermark(input_path: str, watermark_text: str, opacity: int = 128, angle: int = 30, font_size: int = 36) -> str:
+def apply_bottom_right_overlay_bytes(input_image_path, watermark_text):
     """
-    Apply a translucent tiled watermark (50% opacity for screenshots).
-    Overwrites the file at input_path and returns the same path.
+    Apply a watermark text to the bottom-right corner of an image.
+    Returns a BytesIO buffer for direct download.
+    
+    Args:
+        input_image_path: Path to the image file
+        watermark_text: Text to display as watermark (e.g., username)
+    
+    Returns:
+        BytesIO buffer containing the watermarked image
     """
     try:
-        img = Image.open(input_path).convert("RGBA")
-        watermark = Image.new("RGBA", img.size, (0, 0, 0, 0))
-        draw = ImageDraw.Draw(watermark)
-        font = _get_font(font_size)
-
-        # Measure text dimensions
-        bbox = draw.textbbox((0, 0), watermark_text, font=font)
-        text_w = bbox[2] - bbox[0]
-        text_h = bbox[3] - bbox[1]
-
-        # Spacing for tiled watermark
-        x_step = max(200, text_w + 60)
-        y_step = max(120, text_h + 40)
-
-        # Draw repeated watermark across canvas
-        for y in range(-img.size[1], img.size[1] * 2, y_step):
-            for x in range(-img.size[0], img.size[0] * 2, x_step):
-                draw.text((x, y), watermark_text, font=font, fill=(255, 255, 255, opacity))
-
-        # Rotate and composite
-        rotated = watermark.rotate(angle, expand=False)
-        combined = Image.alpha_composite(img, rotated)
-
-        # Save as JPEG
-        out = combined.convert('RGB')
-        out.save(input_path, quality=85)
-        return input_path
+        # Open image and convert to RGB if needed
+        with Image.open(input_image_path) as img:
+            # Convert RGBA/P to RGB for JPEG output
+            if img.mode in ('RGBA', 'P'):
+                rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == 'RGBA':
+                    rgb_img.paste(img, mask=img.split()[3])
+                else:
+                    rgb_img.paste(img)
+                img = rgb_img
+            elif img.mode != 'RGB':
+                img = img.convert('RGB')
+            
+            # Create a copy to avoid modifying original
+            img = img.copy()
+            width, height = img.size
+            
+            # Create overlay layer for watermark
+            overlay = Image.new('RGBA', img.size, (255, 255, 255, 0))
+            draw = ImageDraw.Draw(overlay)
+            
+            # Try to load a nice font, fallback to default if unavailable
+            try:
+                # Try common system fonts
+                font_size = max(int(height * 0.04), 20)  # 4% of image height, minimum 20px
+                font = ImageFont.truetype("arial.ttf", font_size)
+            except:
+                try:
+                    font = ImageFont.truetype("C:\\Windows\\Fonts\\arial.ttf", font_size)
+                except:
+                    try:
+                        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size)
+                    except:
+                        # Fallback to default font
+                        font = ImageFont.load_default()
+                        font_size = 12
+            
+            # Get text bounding box to know its size
+            bbox = draw.textbbox((0, 0), watermark_text, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+            
+            # Calculate position (bottom-right with padding)
+            padding = max(int(width * 0.02), 10)  # 2% of image width, minimum 10px
+            x = width - text_width - padding
+            y = height - text_height - padding
+            
+            # Draw watermark with white text at full opacity (255)
+            # In RGBA: (R, G, B, Alpha) where Alpha=255 is fully opaque
+            watermark_color = (255, 255, 255, 255)  # White, fully opaque
+            draw.text((x, y), watermark_text, font=font, fill=watermark_color)
+            
+            # Convert overlay to RGB and composite onto image
+            img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
+            
+            # Save to BytesIO buffer
+            buf = BytesIO()
+            img.save(buf, format='JPEG', quality=90, optimize=True)
+            buf.seek(0)
+            
+            return buf
+            
     except Exception as e:
-        app.logger.exception(f"apply_tiled_watermark failed for {input_path}: {e}")
-        return input_path
-
-def apply_bottom_right_overlay_bytes(input_path: str, username: str, font_size: int = 32) -> BytesIO:
-    """
-    Return BytesIO with username overlaid bottom-right at 100% opacity.
-    Used for download responses.
-    """
-    buf = BytesIO()
-    try:
-        img = Image.open(input_path).convert("RGBA")
-        draw = ImageDraw.Draw(img)
-        font = _get_font(font_size)
-
-        text = username
-        margin = 12
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_w = bbox[2] - bbox[0]
-        text_h = bbox[3] - bbox[1]
-
-        x = img.width - text_w - margin
-        y = img.height - text_h - margin
-
-        # Draw outline for readability
-        outline_color = (0, 0, 0, 255)
-        for dx, dy in [(-1, -1), (1, -1), (-1, 1), (1, 1)]:
-            draw.text((x + dx, y + dy), text, font=font, fill=outline_color)
-
-        # Draw username in white
-        draw.text((x, y), text, font=font, fill=(255, 255, 255, 255))
-
-        # Save to buffer
-        img.convert('RGB').save(buf, format='JPEG', quality=90)
-        buf.seek(0)
-        return buf
-    except Exception as e:
-        app.logger.exception(f"apply_bottom_right_overlay failed for {input_path}: {e}")
-        with open(input_path, 'rb') as f:
-            buf.write(f.read())
+        app.logger.error(f"Error applying watermark: {str(e)}")
+        # Return original image if watermarking fails
+        buf = BytesIO()
+        with Image.open(input_image_path) as img:
+            if img.mode in ('RGBA', 'P'):
+                img = img.convert('RGB')
+            img.save(buf, format='JPEG', quality=90, optimize=True)
             buf.seek(0)
         return buf
+
+
+def add_watermark_overlay(input_image_path, output_image_path, watermark_text):
+    """Legacy function for applying watermark and saving to file"""
+    try:
+        img = Image.open(input_image_path)
+        if img.mode in ('RGBA', 'P'):
+            rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+            if img.mode == 'RGBA':
+                rgb_img.paste(img, mask=img.split()[3])
+            else:
+                rgb_img.paste(img)
+            img = rgb_img
+        elif img.mode != 'RGB':
+            img = img.convert('RGB')
+        
+        width, height = img.size
+        overlay = Image.new('RGBA', img.size, (255, 255, 255, 30))
+        draw = ImageDraw.Draw(overlay)
+        
+        try:
+            font_size = max(int(height * 0.04), 20)
+            font = ImageFont.truetype("arial.ttf", font_size)
+        except:
+            font = ImageFont.load_default()
+        
+        bbox = draw.textbbox((0, 0), watermark_text, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+        
+        padding = max(int(width * 0.02), 10)
+        x = width - text_width - padding
+        y = height - text_height - padding
+        
+        watermark_color = (255, 255, 255, 255)
+        draw.text((x, y), watermark_text, font=font, fill=watermark_color)
+        
+        img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
+        img.save(output_image_path, 'JPEG', quality=90, optimize=True)
+        
+    except Exception as e:
+        app.logger.error(f"Error in add_watermark_overlay: {str(e)}")
+        # Copy original if watermarking fails
+        import shutil
+        shutil.copy(input_image_path, output_image_path) 
 
 
 # --- Create Flask Application ---

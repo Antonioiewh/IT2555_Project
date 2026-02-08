@@ -604,6 +604,187 @@
     margin-right: 12px;
     font-size: 16px;
 }
+
+/* Post Modal Styles */
+.post-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.85);
+    z-index: 1050;
+    align-items: center;
+    justify-content: center;
+}
+
+.post-modal.active {
+    display: flex;
+}
+
+.post-modal-content {
+    background: white;
+    border-radius: 20px;
+    max-width: 95vw;
+    max-height: 95vh;
+    display: flex;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.post-modal-image {
+    flex: 1;
+    max-width: 700px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+}
+
+.post-modal-image img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.post-modal-sidebar {
+    width: 400px;
+    display: flex;
+    flex-direction: column;
+}
+
+.post-modal-header {
+    padding: 20px;
+    border-bottom: 1px solid #efefef;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #fafbfc;
+}
+
+.post-modal-user {
+    display: flex;
+    align-items: center;
+}
+
+.post-modal-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    margin-right: 16px;
+    object-fit: cover;
+    border: 2px solid #e1e5e9;
+}
+
+.post-modal-username {
+    font-weight: 600;
+    color: #262626;
+    text-decoration: none;
+    font-size: 16px;
+}
+
+.post-modal-content-area {
+    flex: 1;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.post-modal-text {
+    color: #262626;
+    font-size: 16px;
+    line-height: 26px;
+    margin-bottom: 12px;
+}
+
+.post-modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin-bottom: 16px;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.post-action-btn {
+    background: none;
+    border: none;
+    color: #262626;
+    cursor: pointer;
+    font-size: 26px;
+    padding: 12px;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+    min-width: 48px;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.post-action-btn:hover {
+    background: #f8f9fa;
+    transform: scale(1.1);
+    color: #0095f6;
+}
+
+.post-action-btn.liked {
+    color: #ed4956;
+}
+
+.post-modal-date {
+    color: #8e8e8e;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+    margin-top: auto;
+}
+
+.post-modal-close {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(255,255,255,0.1);
+    border: none;
+    color: white;
+    font-size: 32px;
+    cursor: pointer;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    z-index: 1051;
+}
+
+.post-modal-close:hover {
+    background: rgba(255,255,255,0.2);
+    transform: scale(1.1);
+}
+
+@media (max-width: 768px) {
+    .post-modal-content {
+        flex-direction: column;
+        max-width: 95vw;
+        max-height: 90vh;
+        border-radius: 16px;
+    }
+    
+    .post-modal-sidebar {
+        width: 100%;
+        max-height: 300px;
+    }
+    
+    .post-modal-image {
+        max-width: 100%;
+        height: 300px;
+    }
+}
 </style>
 {% endblock %}
 
@@ -642,7 +823,7 @@
             <div id="timelinePosts">
                 {% if posts %}
                     {% for post in posts %}
-                    <article class="timeline-post" data-post-id="{{ post.post_id }}">
+                    <article class="timeline-post" data-post-id="{{ post.post_id }}" onclick="openPostModal({{ post.post_id }})" style="cursor: pointer;">
                         <div class="post-header">
                             <div class="post-user-info">
                                 <img src="{{ post.user.profile_picture }}" alt="{{ post.user.username }}" class="post-avatar">
@@ -652,7 +833,7 @@
                                 </div>
                             </div>
                             {% if post.is_own_post %}
-                            <button class="post-menu-btn" onclick="openPostMenu({{ post.post_id }})">
+                            <button class="post-menu-btn" onclick="openPostMenu({{ post.post_id }}); event.stopPropagation();">
                                 <i class="bi bi-three-dots"></i>
                             </button>
                             {% endif %}
@@ -669,11 +850,21 @@
                         </div>
                         <div class="post-actions">
                             <button class="post-action-btn {{ 'liked' if post.is_liked else '' }}" 
-                                    onclick="toggleLike({{ post.post_id }}, this)" 
+                                    onclick="toggleLike({{ post.post_id }}, this); event.stopPropagation();" 
                                     data-post-id="{{ post.post_id }}">
                                 <i class="bi bi-heart{{ '-fill' if post.is_liked else '' }}"></i>
                                 <span class="like-count">{{ post.likes_count }}</span>
                             </button>
+                            {% if post.image_url %}
+                            <a href="{{ url_for('download_post_image', post_id=post.post_id, filename=post.image_url.split('/')[-1]) }}" 
+                               class="post-action-btn" 
+                               title="Download with watermark"
+                               onclick="event.stopPropagation();"
+                               download>
+                                <i class="bi bi-download"></i>
+                                <span>Download</span>
+                            </a>
+                            {% endif %}
                         </div>
                     </article>
                     {% endfor %}
@@ -725,6 +916,41 @@
     </div>
 </div>
 
+
+<!-- Post Modal -->
+<div class="post-modal" id="postModal">
+    <button class="post-modal-close" onclick="closePostModal()" title="Close modal">&times;</button>
+    <div class="post-modal-content">
+        <div class="post-modal-image" id="modalImageContainer">
+            <img id="modalImage" src="" alt="Post image">
+        </div>
+        <div class="post-modal-sidebar">
+            <div class="post-modal-header">
+                <div class="post-modal-user">
+                    <img id="modalUserAvatar" src="" alt="User" class="post-modal-avatar">
+                    <span id="modalUsername" class="post-modal-username"></span>
+                </div>
+            </div>
+            <div class="post-modal-content-area">
+                <div class="post-modal-actions" style="padding-bottom: 16px; border-bottom: 1px solid #efefef; margin-bottom: 16px;">
+                    <button class="post-action-btn" id="modalLikeBtn" onclick="toggleModalLike()" title="Like this post">
+                        <i id="modalLikeIcon" class="bi bi-heart"></i>
+                    </button>
+                    <a id="modalDownloadBtn" href="#" class="post-action-btn" title="Download with watermark" download style="display: none; text-decoration: none; color: #262626;">
+                        <i class="bi bi-download"></i>
+                    </a>
+                </div>
+                
+                <div class="post-modal-likes" style="margin-bottom: 12px; color: #262626; font-weight: 600;">
+                    <span id="modalLikeCount">0</span> likes
+                </div>
+                
+                <div class="post-modal-text" id="modalText"></div>
+                <div class="post-modal-date" id="modalDate"></div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <div id="bannerModal" class="banner-modal">
     <div class="banner-modal-content">
@@ -787,6 +1013,24 @@ let currentPage = 1;
 let isLoading = false;
 let bannerCropper = null;
 let selectedBannerFile = null;
+let currentPostId = null;
+
+// Store posts data for modal
+const postsData = {
+    {% if posts %}
+    {% for post in posts %}
+    {{ post.post_id }}: {
+        content: {{ (post.content | tojson) if post.content else '""' }},
+        imageUrl: {{ (post.image_url | tojson) if post.image_url else 'null' }},
+        username: {{ post.user.username | tojson }},
+        avatar: {{ post.user.profile_picture | tojson }},
+        date: {{ post.relative_date | tojson }},
+        likesCount: {{ post.likes_count }},
+        isLiked: {{ 'true' if post.is_liked else 'false' }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+    {% endif %}
+};
 
 document.addEventListener('DOMContentLoaded', function() {
     initializeClock();
@@ -1164,6 +1408,19 @@ function createPostElement(post) {
     const article = document.createElement('article');
     article.className = 'timeline-post';
     article.setAttribute('data-post-id', post.post_id);
+    article.onclick = () => openPostModal(post.post_id);
+    article.style.cursor = 'pointer';
+    
+    // Store post data for modal
+    postsData[post.post_id] = {
+        content: post.content || '',
+        imageUrl: post.image_url || null,
+        username: post.user.username,
+        avatar: post.user.profile_picture,
+        date: post.relative_date,
+        likesCount: post.likes_count,
+        isLiked: post.is_liked
+    };
     article.innerHTML = `
         <div class="post-header">
             <div class="post-user-info">
@@ -1174,7 +1431,7 @@ function createPostElement(post) {
                 </div>
             </div>
             ${post.is_own_post ? `
-            <button class="post-menu-btn" onclick="openPostMenu(${post.post_id})">
+            <button class="post-menu-btn" onclick="openPostMenu(${post.post_id}); event.stopPropagation();">
                 <i class="bi bi-three-dots"></i>
             </button>
             ` : ''}
@@ -1189,11 +1446,21 @@ function createPostElement(post) {
         </div>
         <div class="post-actions">
             <button class="post-action-btn ${post.is_liked ? 'liked' : ''}" 
-                    onclick="toggleLike(${post.post_id}, this)" 
+                    onclick="toggleLike(${post.post_id}, this); event.stopPropagation();" 
                     data-post-id="${post.post_id}">
                 <i class="bi bi-heart${post.is_liked ? '-fill' : ''}"></i>
                 <span class="like-count">${post.likes_count}</span>
             </button>
+            ${post.image_url ? `
+            <a href="/download_post_image/${post.post_id}/${post.image_url.split('/').pop()}" 
+               class="post-action-btn" 
+               title="Download with watermark"
+               onclick="event.stopPropagation();"
+               download>
+                <i class="bi bi-download"></i>
+                <span>Download</span>
+            </a>
+            ` : ''}
         </div>
     `;
     return article;
@@ -1219,10 +1486,173 @@ function openPostMenu(postId) {
 // Close modal when clicking outside
 window.onclick = function(event) {
     const modal = document.getElementById('bannerModal');
+    const postModal = document.getElementById('postModal');
     if (event.target === modal) {
         closeBannerModal();
+    } else if (event.target === postModal) {
+        closePostModal();
     }
 }
+
+// Post Modal Functions
+function openPostModal(postId) {
+    const post = postsData[postId];
+    if (!post) return;
+    
+    currentPostId = postId;
+    
+    const modal = document.getElementById('postModal');
+    const modalText = document.getElementById('modalText');
+    const modalDate = document.getElementById('modalDate');
+    const modalLikeCount = document.getElementById('modalLikeCount');
+    const modalImage = document.getElementById('modalImage');
+    const imageContainer = document.getElementById('modalImageContainer');
+    const modalLikeIcon = document.getElementById('modalLikeIcon');
+    const modalUsername = document.getElementById('modalUsername');
+    const modalUserAvatar = document.getElementById('modalUserAvatar');
+    const modalLikeBtn = document.getElementById('modalLikeBtn');
+    const modalDownloadBtn = document.getElementById('modalDownloadBtn');
+    
+    if (!modal) return;
+    
+    // Set modal content
+    if (modalText) modalText.textContent = post.content;
+    if (modalDate) modalDate.textContent = post.date.toUpperCase();
+    if (modalLikeCount) modalLikeCount.textContent = post.likesCount;
+    if (modalUsername) modalUsername.textContent = post.username;
+    if (modalUserAvatar) modalUserAvatar.src = post.avatar;
+    
+    // Set like button state
+    if (modalLikeIcon && modalLikeBtn) {
+        if (post.isLiked) {
+            modalLikeIcon.className = 'bi bi-heart-fill';
+            modalLikeBtn.classList.add('liked');
+        } else {
+            modalLikeIcon.className = 'bi bi-heart';
+            modalLikeBtn.classList.remove('liked');
+        }
+    }
+    
+    // Handle image display
+    if (post.imageUrl) {
+        modalImage.src = post.imageUrl;
+        imageContainer.style.display = 'flex';
+        
+        // Set up download button
+        if (modalDownloadBtn) {
+            const filename = post.imageUrl.split('/').pop();
+            modalDownloadBtn.href = `/download_post_image/${postId}/${filename}`;
+            modalDownloadBtn.style.display = 'flex';
+        }
+    } else {
+        imageContainer.style.display = 'none';
+        
+        // Hide download button if no image
+        if (modalDownloadBtn) {
+            modalDownloadBtn.style.display = 'none';
+        }
+    }
+    
+    // Show modal
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closePostModal() {
+    const modal = document.getElementById('postModal');
+    if (modal) {
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+        currentPostId = null;
+    }
+}
+
+function toggleModalLike() {
+    if (!currentPostId) return;
+    
+    const post = postsData[currentPostId];
+    const modalLikeIcon = document.getElementById('modalLikeIcon');
+    const modalLikeCount = document.getElementById('modalLikeCount');
+    const modalLikeBtn = document.getElementById('modalLikeBtn');
+    
+    if (!post) return;
+    
+    // Update UI immediately
+    if (post.isLiked) {
+        post.isLiked = false;
+        post.likesCount -= 1;
+        modalLikeIcon.className = 'bi bi-heart';
+        modalLikeBtn.classList.remove('liked');
+    } else {
+        post.isLiked = true;
+        post.likesCount += 1;
+        modalLikeIcon.className = 'bi bi-heart-fill';
+        modalLikeBtn.classList.add('liked');
+    }
+    
+    if (modalLikeCount) modalLikeCount.textContent = post.likesCount;
+    
+    // Update the corresponding timeline post
+    const timelinePost = document.querySelector(`[data-post-id="${currentPostId}"]`);
+    if (timelinePost) {
+        const likeBtn = timelinePost.querySelector('.post-action-btn');
+        const likeIcon = timelinePost.querySelector('.post-action-btn i');
+        const likeCountSpan = timelinePost.querySelector('.like-count');
+        
+        if (likeBtn && likeIcon && likeCountSpan) {
+            if (post.isLiked) {
+                likeBtn.classList.add('liked');
+                likeIcon.className = 'bi bi-heart-fill';
+            } else {
+                likeBtn.classList.remove('liked');
+                likeIcon.className = 'bi bi-heart';
+            }
+            likeCountSpan.textContent = post.likesCount;
+        }
+    }
+    
+    // Send request to server
+    const csrfToken = document.querySelector('meta[name=csrf-token]').getAttribute('content');
+    fetch(`/api/toggle_like/${currentPostId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update with server response
+            post.likesCount = data.likes_count;
+            post.isLiked = data.is_liked;
+            if (modalLikeCount) modalLikeCount.textContent = post.likesCount;
+        }
+    })
+    .catch(error => {
+        console.error('Error toggling like:', error);
+        // Revert on error
+        if (post.isLiked) {
+            post.isLiked = false;
+            post.likesCount -= 1;
+            modalLikeIcon.className = 'bi bi-heart';
+            modalLikeBtn.classList.remove('liked');
+        } else {
+            post.isLiked = true;
+            post.likesCount += 1;
+            modalLikeIcon.className = 'bi bi-heart-fill';
+            modalLikeBtn.classList.add('liked');
+        }
+        if (modalLikeCount) modalLikeCount.textContent = post.likesCount;
+    });
+}
+
+// Keyboard navigation
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closePostModal();
+    }
+});
 
 const observerOptions = {
     threshold: 0.1,

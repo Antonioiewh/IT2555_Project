@@ -69,8 +69,13 @@ html, body { height: 100%; }
 .attachment-name{ font-weight:600; }
 .attachment-meta{ font-size:12px; opacity:.8; }
 .attachment-download.btn{ border-radius:18px; padding:6px 10px; }
-#options-images, #options-links { display:none; margin-top:8px; }
-#options-links a { word-break: break-all; overflow-wrap: anywhere; }
+#options-images, #options-links { display:none; margin-top:8px; max-height:300px; overflow-y:auto; }
+#options-links a { word-break: break-all; overflow-wrap: anywhere; display:block; padding:8px; background:#f5f7fb; border-radius:8px; margin:8px 0; color:#1a73e8; text-decoration:none; }
+#options-links a:hover { background:#f0f2f5; }
+#chat-info-sidebar { transition: all 0.3s ease; }
+#chat-info-sidebar .attachment-card { margin-bottom:8px; padding:8px; background:#f5f7fb; border-radius:8px; }
+#images-btn, #links-btn { justify-content:space-between !important; }
+#chat-search-input::placeholder { color:rgba(255,255,255,.6); }
 .message-row{ margin:10px 0; display:flex; }
 .message-row.me{ justify-content:flex-end; }
 .message-bubble{ position:relative; max-width:min(78%, 720px); padding:10px 12px; border-radius:18px; background:#f3f4f6; color:#111827; border:1px solid #eef0f6; box-shadow:0 2px 10px rgba(17,24,39,.06); word-break: break-word; overflow-wrap: anywhere; }
@@ -132,8 +137,201 @@ html, body { height: 100%; }
 .friend-list::-webkit-scrollbar, .chat-box::-webkit-scrollbar { width:10px; }
 .friend-list::-webkit-scrollbar-thumb, .chat-box::-webkit-scrollbar-thumb { background:#e5e7eb; border-radius:8px; }
 .friend-list::-webkit-scrollbar-thumb:hover, .chat-box::-webkit-scrollbar-thumb:hover { background:#d1d5db; }
-@media (max-width: 992px){ .messages-layout{ grid-template-columns: 1fr; gap:12px; } .friend-list{ max-height:40vh; } }
+@media (max-width: 992px){ .messages-layout{ grid-template-columns: 1fr; gap:12px; } .friend-list{ max-height:40vh; } #chat-info-sidebar { position:fixed; right:0; top:0; width:100vw; height:100vh; z-index:1000; border-radius:0; } }
 .blur-overlay { filter: blur(5px); pointer-events: none; }
+.system-msg-row { display: flex; justify-content: center; margin: 15px 0; }
+.system-msg-badge { background: #e0e7ff; color: #4338ca; font-size: 12px; padding: 4px 12px; border-radius: 12px; font-weight: 500; }
+
+
+/* Chat lock UI*/
+.chat-item-menu-btn { opacity: 0; transition: 0.2s; }
+.friend-link:hover .chat-item-menu-btn { opacity: 1; }
+
+#chat-item-context-menu { width: 160px; }
+
+/* Small icon button for chat items */
+.icon-btn.sm { color: var(--muted); background: transparent; border: none; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.icon-btn.sm:hover { background: rgba(0,0,0,0.05); color: var(--ink); }
+
+#lock-setup-modal {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    background: rgba(0, 0, 0, 0.5) !important;
+    display: none !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 2000 !important;
+}
+
+#lock-setup-modal.custom-modal {
+    display: none;
+}
+
+#lock-setup-modal[style*="display: flex"] {
+    display: flex !important;
+}
+
+.modal-box {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 400px;
+    width: 90vw;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.modal-title {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--ink);
+}
+
+.modal-box p {
+    color: var(--muted);
+    font-size: 14px;
+    margin-bottom: 20px;
+}
+
+.modal-box > div {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.action-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border: 1px solid var(--border);
+    background: white;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 14px;
+    color: var(--ink);
+}
+
+.action-btn:hover {
+    background: #f7f7ff;
+    border-color: #c7d2fe;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+}
+
+.action-btn .material-icons {
+    font-size: 20px;
+    color: var(--grad-1);
+}
+
+.modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.btn-text {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 8px 16px;
+    border-radius: 8px;
+}
+
+.btn-text:hover {
+    background: #f5f7fb;
+    color: var(--ink);
+}
+
+.btn-primary {
+    background: var(--grad-1);
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.btn-primary:hover {
+    opacity: 0.9;
+}
+
+#new-chat-pin {
+    text-align: center;
+    font-size: 32px;
+    letter-spacing: 12px;
+    padding: 12px;
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    font-family: monospace;
+}
+
+#new-chat-pin:focus {
+    border-color: var(--grad-1);
+    outline: none;
+    box-shadow: var(--ring);
+}
+
+.chat-box-container { 
+    position: relative; 
+    flex: 1; 
+    display: flex; 
+    flex-direction: column; 
+    overflow: hidden; 
+}
+
+/* The Blur Overlay */
+.lock-overlay {
+    position: absolute; 
+    inset: 0; 
+    background: rgba(255,255,255,0.85); 
+    backdrop-filter: blur(10px);
+    display: none; /* Hidden by default */
+    flex-direction: column; 
+    align-items: center; 
+    justify-content: center;
+    z-index: 20; 
+    color: var(--ink); 
+    text-align: center;
+}
+
+.lock-icon-circle { 
+    width: 64px; height: 64px; 
+    background: #e0e7ff; 
+    border-radius: 50%; 
+    display: flex; align-items: center; justify-content: center; 
+    margin-bottom: 16px; color: var(--blue); 
+}
+
+.lock-pin-input { 
+    width: 200px; padding: 12px; 
+    text-align: center; font-size: 24px; 
+    border: 2px solid var(--border); 
+    border-radius: 12px; letter-spacing: 8px; 
+    margin: 20px 0; outline: none; transition: 0.2s; 
+}
+.lock-pin-input:focus { border-color: var(--blue); }
+
+/* 3-Dot Menu Styles */
+.msg-context-menu { 
+    position: fixed; z-index: 3000; 
+    background: #fff; border: 1px solid var(--border); 
+    border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); 
+    padding: 6px; display: none; flex-direction: column; min-width: 160px; 
+}
+.msg-context-menu .ctx-item { 
+    padding: 10px 12px; display: flex; align-items: center; gap: 10px; 
+    cursor: pointer; border-radius: 8px; color: var(--ink); font-size: 14px; 
+}
+.msg-context-menu .ctx-item:hover { background: #f5f7fb; }
+.icon-btn.sm { width: 28px; height: 28px; opacity: 0; transition: 0.2s; }
+.friend-link:hover .icon-btn.sm { opacity: 1; }
 </style>
 
 <div class="main-messages-wrapper" id="main-interface">
@@ -155,81 +353,180 @@ html, body { height: 100%; }
           <li class="friend-link {% if friend.is_online %}status-online{% else %}status-offline{% endif %}"
               data-user-id="{{ friend.user_id }}"
               data-chat-id="{{ friend.chat_id }}">
-            <img src="{{ url_for('static', filename='uploads/' + friend.profile_pic_url) if friend.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
-                alt="Profile" class="friend-profile"
-                onerror="this.src='{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}'">
-            <div class="friend-info">
-              <div class="friend-name">{{ friend.username }}</div>
-              {% if friend.is_online %}
-              <div class="friend-status">Online</div>
-              {% else %}
-              <div class="friend-status">Offline</div>
-              {% endif %}
+            <img src="{{ url_for('static', filename='uploads/' + friend.profile_pic_url) if friend.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}" class="friend-profile">
+            <div style="flex:1">
+                <div class="friend-name">{{ friend.username }}</div>
+                <div class="friend-status">{{ 'Blocked' if friend.is_blocked else ('Online' if friend.is_online else 'Offline') }}</div>
             </div>
+            <button class="icon-btn sm" onclick="showChatListItemMenu(event, '{{ friend.chat_id }}')">
+                <span class="material-icons" style="font-size:18px;">more_vert</span>
+            </button>
           </li>
         {% endfor %}
       </ul>
     </div>
 
-    <div class="chat-container">
-      <div class="chat-topbar" id="chat-topbar" style="display:none;">
-        <div class="current-chat-info">
-          <img id="current-friend-pic" src="{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
-              alt="Profile" class="friend-profile">
-          <span id="current-friend-name"></span>
-        </div>
-        <button class="btn btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#chatOptions">
-          <span class="material-icons" style="vertical-align:middle;margin-right:6px;">tune</span>
-          Options
-          <span class="material-icons" style="vertical-align:middle;margin-left:4px;">expand_more</span>
-        </button>
-      </div>
-
-      <div class="chat-options collapse" id="chatOptions">
-        <div class="options-inner">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <h5>Chat Options</h5>
+    <div class="chat-container" style="display:grid; grid-template-columns: 1fr auto;">
+      <div style="display:flex; flex-direction:column; gap:12px; height:100%; min-height:0;">
+        <div class="chat-topbar" id="chat-topbar" style="display:none;">
+          <div class="current-chat-info">
+            <img id="current-friend-pic" src="{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
+                alt="Profile" class="friend-profile">
+            <span id="current-friend-name"></span>
           </div>
-          <div class="d-flex gap-3 mb-2">
-            <button id="images-btn" class="btn btn-outline-secondary">Images <span id="images-count" class="badge text-bg-light ms-1">0</span></button>
-            <button id="links-btn" class="btn btn-outline-secondary">Links <span id="links-count" class="badge text-bg-light ms-1">0</span></button>
-            <input type="text" class="form-control w-50" placeholder="Find messages...">
-          </div>
-          <div id="options-images"></div>
-          <div id="options-links"></div>
-          <div class="d-flex gap-2">
-            <button class="btn btn-secondary">Block User</button>
-            <button id="report-user-btn" class="btn btn-warning">Report User</button>
-            <button class="btn btn-danger">Clear Chat</button>
-            <button class="btn btn-danger">Delete Chat</button>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <div style="display:flex; align-items:center; gap:6px; background:rgba(255,255,255,.12); border-radius:20px; padding:8px 12px;">
+              <span class="material-icons" style="color:#fff; font-size:20px;">search</span>
+              <input id="chat-search-input" type="text" placeholder="Search messages..." 
+                     style="border:none; background:transparent; color:#fff; outline:none; width:150px; font-size:14px;">
+            </div>
+            <button id="chat-info-btn" class="btn" style="background:rgba(255,255,255,.12); color:#fff; border:none; border-radius:50%; width:40px; height:40px; padding:0; display:flex; align-items:center; justify-content:center;" title="Chat Info">
+              <span class="material-icons">info</span>
+            </button>
           </div>
         </div>
+
+        <div id="chat-placeholder">
+          <div class="placeholder-inner">
+            <span class="material-icons placeholder-icon" aria-hidden="true">chat_bubble</span>
+            <div>Select a friend to start chatting securely</div>
+          </div>
+        </div>
+
+        <div id="composer-previews" class="composer-previews"></div>
+        <div class="chat-box-container" id="chat-box-wrapper" style="display:none;">
+        <div id="chat-box" class="chat-box"></div>
+            <div id="chat-lock-overlay" class="lock-overlay">
+                <div class="lock-icon-circle">
+                    <span class="material-icons" style="font-size:32px">lock</span>
+                </div>
+                <h3>Chat Locked</h3>
+                <p style="margin-top:4px; font-size:14px; opacity:0.7">Enter PIN to view messages</p>
+                
+                <input type="password" id="overlay-pin-input" class="lock-pin-input" maxlength="4" placeholder="****">
+                <div style="margin-top:16px; display:flex; gap:10px;">
+                    <button class="btn-text" onclick="abortUnlock()">Cancel</button>
+                </div>
+            </div>
+        </div>
+        
+        <form id="chat-form" class="chat-input-row" style="display: none;">
+          <input id="attachment-input" type="file" multiple
+                accept=".jpg,.jpeg,.png,.gif,.webp,.mp4,.webm,.pdf,.txt,.docx,.xlsx,.pptx,image/*,video/mp4,video/webm,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                style="display:none">
+          <button id="attach-btn" class="btn btn-outline-secondary" type="button" title="Attach">
+            <span class="material-icons" style="font-size:18px;vertical-align:middle;margin-right:6px;">attach_file</span>
+            Add
+          </button>
+          <textarea id="chat-input" class="form-control" placeholder="Type a message..." rows="1"></textarea>
+          <button id="chat-send-btn" class="btn btn-primary" type="submit">
+            <span class="material-icons" style="font-size:18px;vertical-align:middle;margin-right:6px;">send</span>
+            Send
+          </button>
+        </form>
       </div>
 
-      <div id="chat-placeholder">
-        <div class="placeholder-inner">
-          <span class="material-icons placeholder-icon" aria-hidden="true">chat_bubble</span>
-          <div>Select a friend to start chatting securely</div>
+      <!-- Chat Info Sidebar -->
+      <div id="chat-info-sidebar" style="display:none; width:320px; background:var(--surface); border-left:1px solid var(--border); overflow-y:auto; border-radius:0; box-shadow:none;">
+        <div style="padding:16px; border-bottom:1px solid var(--border);">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+            <h5 style="margin:0; color:var(--ink);">Chat Info</h5>
+            <button id="close-info-btn" class="btn btn-sm" style="background:transparent; border:none; color:var(--muted); padding:0; width:32px; height:32px; display:flex; align-items:center; justify-content:center;">
+              <span class="material-icons">close</span>
+            </button>
+          </div>
+          <img id="info-friend-pic" src="" alt="Profile" style="width:80px; height:80px; border-radius:50%; object-fit:cover; margin:0 auto 12px; display:block; border:2px solid var(--border);">
+          <div style="text-align:center;">
+            <div id="info-friend-name" style="font-weight:600; color:var(--ink); margin-bottom:4px;"></div>
+            <div id="info-friend-status" style="font-size:12px; color:var(--muted);"></div>
+          </div>
+        </div>
+
+        <div style="padding:12px;">
+          <!-- Images Section -->
+          <div style="margin-bottom:16px;">
+            <button id="images-btn" class="btn btn-outline-secondary w-100" style="border-radius:12px; font-size:14px;">
+              <span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">image</span>
+              Images <span id="images-count" class="badge text-bg-light ms-auto">0</span>
+            </button>
+            <div id="options-images" style="margin-top:8px; display:none;"></div>
+          </div>
+
+          <!-- Links Section -->
+          <div style="margin-bottom:16px;">
+            <button id="links-btn" class="btn btn-outline-secondary w-100" style="border-radius:12px; font-size:14px;">
+              <span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">link</span>
+              Links <span id="links-count" class="badge text-bg-light ms-auto">0</span>
+            </button>
+            <div id="options-links" style="margin-top:8px; display:none;"></div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <button class="btn btn-secondary w-100" style="border-radius:12px; font-size:14px;">
+              <span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">block</span>
+              Block User
+            </button>
+            <button id="report-user-btn" class="btn btn-warning w-100" style="border-radius:12px; font-size:14px;">
+              <span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">flag</span>
+              Report User
+            </button>
+            <button class="btn btn-danger w-100" style="border-radius:12px; font-size:14px;">
+              <span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">delete_sweep</span>
+              Clear Chat
+            </button>
+            <button class="btn btn-danger w-100" style="border-radius:12px; font-size:14px;">
+              <span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">delete</span>
+              Delete Chat
+            </button>
+            <div class="sidebar-section" id="sidebar-lock-section">
+                <div class="media-header">
+                    <span>Chat Privacy</span>
+                </div>
+                
+                <div id="lock-status-info" style="margin-bottom: 12px; font-size: 13px; color: var(--muted);">
+                    <span id="lock-status-text">Not Locked</span>
+                </div>
+
+                <button class="action-btn" id="sidebar-lock-setup-btn" onclick="initLockSetup()">
+                    <span class="material-icons">lock</span>
+                    <span>Setup Chat Lock</span>
+                </button>
+                
+                <button class="action-btn danger" id="sidebar-lock-remove-btn" onclick="removeCurrentChatLock()" style="display:none;">
+                    <span class="material-icons">lock_open</span>
+                    <span>Remove Chat Lock</span>
+                </button>
+            </div>
+            <div class="sidebar-section" style="border-top:1px solid var(--border); padding-top:15px; margin-top:15px;">
+                <div class="media-header">
+                    <span style="display:flex; align-items:center; gap:8px; font-weight:500;">
+                        <span class="material-icons" style="font-size:18px; color:var(--danger);">timer</span> 
+                        Disappearing Messages
+                    </span>
+                </div>
+                
+                <label style="font-size:12px; color:var(--muted); margin:8px 0; display:block;">
+                    Messages will self-destruct after:
+                </label>
+                
+                <select id="dm-timer-select" onchange="updateDmTimer()" class="form-control" style="width:100%; padding:8px; border-radius:8px; border:1px solid var(--border);">
+                    <option value="0" selected>Off (Keep Forever)</option>
+                    <option value="10">10 Seconds</option>
+                    <option value="30">30 Seconds</option>
+                    <option value="60">1 Minute</option>
+                    <option value="300">5 Minutes</option>
+                    <option value="3600">1 Hour</option>
+                </select>
+                
+                <div id="dm-status-badge" style="margin-top:10px; font-size:12px; color:var(--danger); display:none; align-items:center; gap:5px; background: rgba(234, 67, 53, 0.1); padding: 5px; border-radius: 4px;">
+                    <span class="material-icons" style="font-size:14px">check_circle</span> 
+                    <span id="dm-status-text">Timer Active</span>
+                </div>
+            </div>
+          </div>
         </div>
       </div>
-
-      <div id="composer-previews" class="composer-previews"></div>
-      <div id="chat-box" class="chat-box" style="display: none;"></div>
-      
-      <form id="chat-form" class="chat-input-row" style="display: none;">
-        <input id="attachment-input" type="file" multiple
-              accept=".jpg,.jpeg,.png,.gif,.webp,.mp4,.webm,.pdf,.txt,.docx,.xlsx,.pptx,image/*,video/mp4,video/webm,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation"
-              style="display:none">
-        <button id="attach-btn" class="btn btn-outline-secondary" type="button" title="Attach">
-          <span class="material-icons" style="font-size:18px;vertical-align:middle;margin-right:6px;">attach_file</span>
-          Add
-        </button>
-        <textarea id="chat-input" class="form-control" placeholder="Type a message..." rows="1"></textarea>
-        <button id="chat-send-btn" class="btn btn-primary" type="submit">
-          <span class="material-icons" style="font-size:18px;vertical-align:middle;margin-right:6px;">send</span>
-          Send
-        </button>
-      </form>
     </div>
   </div>
 </div>
@@ -288,6 +585,44 @@ html, body { height: 100%; }
   </div>
 </div>
 
+
+
+
+<div id="chat-item-context-menu" class="msg-context-menu">
+    <div class="ctx-item" onclick="initLockSetup()">
+        <span class="material-icons">lock</span> <span>Lock Chat</span>
+    </div>
+</div>
+
+<div id="lock-setup-modal" class="custom-modal">
+    <div class="modal-box">
+        <div class="modal-title">Lock this Chat?</div>
+        <p style="color:var(--muted); font-size:14px; margin-bottom:20px;">
+            Locked chats require authentication to view. Choose your method:
+        </p>
+        
+        <div style="display:flex; flex-direction:column; gap:10px;">
+            <button class="action-btn" onclick="selectLockType('pin')">
+                <span class="material-icons">dialpad</span> <span>Setup PIN Lock</span>
+            </button>
+            <button class="action-btn" onclick="selectLockType('biometric')">
+                <span class="material-icons">fingerprint</span> <span>Setup Biometrics</span>
+            </button>
+        </div>
+
+        <div id="pin-setup-input" style="display:none; margin-top:20px;">
+            <label style="font-size:13px; font-weight:600;">Enter 4-Digit PIN</label>
+            <input type="password" id="new-chat-pin" class="form-control" maxlength="4" placeholder="****" 
+                   style="text-align:center; font-size:24px; letter-spacing:10px; margin-top:8px;">
+            <button class="btn-primary w-100 mt-3" onclick="savePinLock()">Enable PIN Lock</button>
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn-text" onclick="closeLockModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
 
 <script>
@@ -310,54 +645,43 @@ const pendingAttachments = [];
 // 1. SOFTWARE ENCLAVE (IndexedDB)
 // ==========================================
 const Enclave = {
-    dbName: "SecureChatEnclave",
-    storeName: "keys",
-    version: 2, // Bumped to force clean slate
+    dbName: "SecureBookEnclave",
+    storeName: "keychain",
+    lockStore: "chat_locks",
+    version: 2,
 
     openDB: function() {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open(this.dbName, this.version);
-            request.onupgradeneeded = (e) => {
+        return new Promise((res) => {
+            const r = indexedDB.open(this.dbName, this.version);
+            r.onupgradeneeded = (e) => {
                 const db = e.target.result;
-                if (db.objectStoreNames.contains(this.storeName)) {
-                    db.deleteObjectStore(this.storeName);
-                }
-                db.createObjectStore(this.storeName, { keyPath: "userId" });
+                if (!db.objectStoreNames.contains(this.storeName)) db.createObjectStore(this.storeName, { keyPath: "userId" });
+                if (!db.objectStoreNames.contains(this.lockStore)) db.createObjectStore(this.lockStore, { keyPath: "chatId" });
             };
-            request.onsuccess = (e) => resolve(e.target.result);
-            request.onerror = (e) => reject(e);
+            r.onsuccess = (e) => res(e.target.result);
         });
     },
-
-    saveKeys: async function(userId, keyPair) {
+    saveKeys: async function(uid, kp) { 
         const db = await this.openDB();
-        return new Promise((resolve, reject) => {
-            const tx = db.transaction([this.storeName], "readwrite");
-            const store = tx.objectStore(this.storeName);
-            // Store raw CryptoKey objects
-            const req = store.put({
-                userId: userId, 
-                privateKey: keyPair.privateKey,
-                publicKey: keyPair.publicKey,
-                created: Date.now()
-            });
-            req.onsuccess = () => resolve();
-            req.onerror = (e) => reject(e);
-        });
+        return new Promise(r => { const tx = db.transaction([this.storeName], "readwrite"); tx.objectStore(this.storeName).put({userId: uid, privateKey: kp.privateKey, publicKey: kp.publicKey}); tx.oncomplete = () => r(); });
     },
-
-    loadKeys: async function(userId) {
+    loadKeys: async function(uid) { 
         const db = await this.openDB();
-        return new Promise((resolve, reject) => {
-            const tx = db.transaction([this.storeName], "readonly");
-            const store = tx.objectStore(this.storeName);
-            const req = store.get(userId);
-            req.onsuccess = (e) => resolve(e.target.result);
-            req.onerror = (e) => reject(e);
-        });
+        return new Promise(r => { const req = db.transaction([this.storeName]).objectStore(this.storeName).get(uid); req.onsuccess = (e) => r(e.target.result); });
+    }, // <-- MUST HAVE COMMA
+    saveLock: async function(chatId, lockData) {
+        const db = await this.openDB();
+        return new Promise(r => { const tx = db.transaction([this.lockStore], "readwrite"); tx.objectStore(this.lockStore).put({ chatId: String(chatId), ...lockData }); tx.oncomplete = () => r(); });
+    }, // <-- MUST HAVE COMMA
+    getLock: async function(chatId) {
+        const db = await this.openDB();
+        return new Promise(r => { const req = db.transaction([this.lockStore]).objectStore(this.lockStore).get(String(chatId)); req.onsuccess = (e) => r(e.target.result); });
+    }, // <-- MUST HAVE COMMA
+    removeLock: async function(chatId) {
+        const db = await this.openDB();
+        return new Promise(r => { const tx = db.transaction([this.lockStore], "readwrite"); tx.objectStore(this.lockStore).delete(String(chatId)); tx.oncomplete = () => r(); });
     }
 };
-
 // ==========================================
 // 2. CRYPTO OPS
 // ==========================================
@@ -446,6 +770,317 @@ const CryptoManager = {
     }
 };
 
+
+//==========================================
+// CHAT LOCK INTERACTION SETUP
+//==========================================
+
+let targetChatIdForLock = null;
+
+function showChatListItemMenu(e, chatId) {
+    e.stopPropagation(); // Stop click from opening the chat
+    e.preventDefault();
+    
+    // Force string conversion to ensure valid ID
+    targetChatIdForLock = String(chatId);
+    console.log("Menu opened for chat:", targetChatIdForLock); // Debugging
+
+    const menu = document.getElementById('chat-item-context-menu');
+    if(menu) {
+        menu.style.display = 'flex';
+        menu.style.top = e.clientY + 'px';
+        menu.style.left = e.clientX + 'px';
+        
+        // Close menu when clicking elsewhere
+        setTimeout(() => {
+            document.addEventListener('click', () => {
+                menu.style.display = 'none';
+            }, {once:true});
+        }, 10);
+    }
+}
+
+async function initLockSetup() {
+    console.log("Init Lock Setup. Target:", targetChatIdForLock, "Current:", currentChatId); // Debugging
+
+    // Fallback: If no target from 3-dots, use the currently open chat
+    if (!targetChatIdForLock && currentChatId) {
+        targetChatIdForLock = currentChatId;
+    }
+    
+    if (!targetChatIdForLock) {
+        showToast("Please select a chat first", "error");
+        return;
+    }
+
+    const existingLock = await Enclave.getLock(targetChatIdForLock);
+
+    if (existingLock) {
+        // A lock exists! User must verify identity to change/overwrite it.
+        const verified = await triggerUnlockChallenge(existingLock, "Enter CURRENT PIN to change lock settings:");
+        
+        if (!verified) {
+            showToast("Authentication failed. Cannot change lock settings.", "error");
+            // Clear target to be safe
+            targetChatIdForLock = null; 
+            return; // STOP HERE. Do not show modal.
+        }
+    }
+
+    // 3. If no lock exists OR verification passed, show the setup modal
+    const modal = document.getElementById('lock-setup-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+        // Reset inputs
+        const pinInput = document.getElementById('new-chat-pin');
+        if(pinInput) pinInput.value = '';
+    }
+}
+
+function closeLockModal() {
+    const modal = document.getElementById('lock-setup-modal');
+    if (modal) modal.style.display = 'none';
+    const pinInput = document.getElementById('pin-setup-input');
+    if (pinInput) pinInput.style.display = 'none';
+}
+
+function selectLockType(type) {
+    if (type === 'pin') {
+        document.getElementById('pin-setup-input').style.display = 'block';
+    } else if (type === 'biometric') {
+        registerBiometricLock();
+    }
+}
+
+// Helper to hash PINs
+async function hashPin(pin) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(pin + "secure_book_salt");
+    const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Save PIN Lock
+async function savePinLock() {
+    const pinInput = document.getElementById('new-chat-pin');
+    const pin = pinInput.value;
+    
+    if (!pin || pin.length !== 4) {
+        showToast("Enter a 4-digit PIN", "error");
+        return;
+    }
+    
+    if (!/^\d+$/.test(pin)) {
+        showToast("PIN must contain only digits", "error");
+        return;
+    }
+    
+    const hashed = await hashPin(pin);
+    const chatId = targetChatIdForLock;
+    const lockData = { type: 'pin', secret: hashed };
+
+    await Enclave.saveLock(chatId, lockData);
+
+    try {
+        await fetch(`/api/sync_chat_lock/${chatId}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ is_locked: true, pin_hash: hashed })
+        });
+    } catch(e){}
+
+    // 3. NEW: Sync to HashiCorp Vault
+    try {
+        await fetch('/api/vault/sync_lock', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ chat_id: chatId, lock_data: lockData })
+        });
+        console.log("Lock synced to Vault.");
+    } catch(e) { console.error("Vault sync failed", e); }
+
+    showToast("Chat Locked", "success");
+    pinInput.value = '';
+    closeLockModal();
+    if (chatId === currentChatId) refreshSidebarLockUI();
+}
+
+// Register Biometric Hardware
+async function registerBiometricLock() {
+    try {
+        const challenge = window.crypto.getRandomValues(new Uint8Array(32));
+        const userPath = {
+            publicKey: {
+                challenge,
+                rp: { name: "SecureBook" },
+                user: {
+                    id: window.crypto.getRandomValues(new Uint8Array(16)),
+                    name: "user@securebook.local",
+                    displayName: "SecureBook User"
+                },
+                pubKeyCredParams: [{ alg: -7, type: "public-key" }],
+                authenticatorSelection: { authenticatorAttachment: "platform" },
+                timeout: 60000
+            }
+        };
+
+        const credential = await navigator.credentials.create(userPath);
+
+        if (credential) {
+            const lockData = { type: 'biometric', secret: 'bio-bound' }; // Biometrics are device-specific, but we mark it in Vault
+            
+            await Enclave.saveLock(targetChatIdForLock, lockData);
+            
+            // Sync to Vault
+            await fetch('/api/vault/sync_lock', {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                body: JSON.stringify({ chat_id: targetChatIdForLock, lock_data: lockData })
+            });
+
+            showToast("Biometrics Enabled & Synced", "success");
+            closeLockModal();
+            if (targetChatIdForLock === currentChatId) refreshSidebarLockUI();
+        }
+    } catch (err) {
+        console.error("Biometric registration error:", err);
+        showToast("Biometric registration failed: " + err.message, "error");
+    }
+}
+
+// Remove Chat Lock
+async function removeCurrentChatLock() {
+    if (!currentChatId) return;
+    
+    showConfirm("Remove chat lock from your devices?", async () => {
+        try {
+            // Remove locally
+            await Enclave.removeLock(currentChatId);
+
+            // Remove from server (per-user basis)
+            const res = await fetch(`/api/sync_chat_lock/${currentChatId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                body: JSON.stringify({ 
+                    user_id: myUserId,
+                    is_locked: false, 
+                    pin_hash: null,
+                    lock_type: null
+                })
+            });
+
+            if (res.ok) {
+                showToast("Lock removed from your devices", "info");
+                if (typeof refreshSidebarLockUI === 'function') {
+                    refreshSidebarLockUI();
+                }
+            }
+        } catch (e) {
+            console.error("Error removing lock:", e);
+            showToast("Error removing lock", "error");
+        }
+    });
+}
+
+// Update sidebar lock UI
+async function refreshSidebarLockUI() {
+    if (!currentChatId) return;
+
+    const lock = await Enclave.getLock(currentChatId);
+    const setupBtn = document.getElementById('sidebar-lock-setup-btn');
+    const removeBtn = document.getElementById('sidebar-lock-remove-btn');
+    const statusText = document.getElementById('lock-status-text');
+
+    if (lock) {
+        const lockType = lock.type === 'pin' ? 'PIN' : 'Biometric';
+        statusText.innerText = `Locked with ${lockType}`;
+        statusText.style.color = '#1a73e8';
+        if (setupBtn) setupBtn.textContent = '🔄 Change Lock Type';
+        if (removeBtn) removeBtn.style.display = 'flex';
+    } else {
+        statusText.innerText = "Not Locked";
+        statusText.style.color = '#6b7280';
+        if (setupBtn) setupBtn.textContent = '🔒 Setup Chat Lock';
+        if (removeBtn) removeBtn.style.display = 'none';
+    }
+}
+
+// Unlock challenge when opening chat
+async function triggerUnlockChallenge(lock, promptText = "Enter 4-digit PIN to unlock chat:") {
+    if (lock.type === 'pin') {
+        const input = prompt(promptText);
+        if (!input || input.length !== 4) return false;
+        
+        const hashed = await hashPin(input);
+        return hashed === lock.secret;
+    } else if (lock.type === 'biometric') {
+        try {
+            const challenge = window.crypto.getRandomValues(new Uint8Array(32));
+            const options = {
+                publicKey: {
+                    challenge,
+                    timeout: 60000,
+                    userVerification: "required"
+                }
+            };
+            const assertion = await navigator.credentials.get(options);
+            return !!assertion;
+        } catch (e) {
+            console.error("Biometric unlock error:", e);
+            return false;
+        }
+    }
+    return false;
+}
+
+// ==========================================
+// 2. DISAPPEARING MESSAGES
+// ==========================================
+let currentDmTimer = 0; // 0 = Off
+
+async function updateDmTimer() {
+    const select = document.getElementById('dm-timer-select');
+    currentDmTimer = parseInt(select.value);
+    
+    // 1. Update UI Badge
+    const badge = document.getElementById('dm-status-badge');
+    if (currentDmTimer > 0) {
+        badge.style.display = 'flex';
+        document.getElementById('dm-status-text').innerText = "Destructs in " + select.options[select.selectedIndex].text;
+    } else {
+        badge.style.display = 'none';
+    }
+
+    // 2. Send "System Message" to Chat (So friend knows)
+    if (!currentChatId) return;
+
+    try {
+        const msgText = currentDmTimer > 0 
+            ? `Disappearing messages set to ${select.options[select.selectedIndex].text}`
+            : `Disappearing messages disabled`;
+
+        // Get Friend's Key to encrypt the notification
+        const friendId = document.querySelector('.friend-link.active').dataset.userId;
+        let friendKey = friendPublicKeyCache[friendId];
+        if (!friendKey) {
+             const r = await fetch(`/api/get_public_key/${friendId}`);
+             const d = await r.json();
+             friendKey = await CryptoManager.importPublicKey(d.public_key);
+             friendPublicKeyCache[friendId] = friendKey;
+        }
+
+        // Send the special "system" type message
+        const payload = JSON.stringify({ type: 'system', text: msgText });
+        const enc = await CryptoManager.encryptMessage(payload, friendKey, myKeys.public);
+        
+        socket.emit('send_message', { 
+            chat_id: Number(currentChatId), 
+            ...enc,
+            expires_in: 0 // System messages shouldn't disappear, or set to currentDmTimer if you want
+        });
+
+    } catch (e) {
+        console.error("Failed to send system notification", e);
+    }
+}
+
 // ==========================================
 // 3. INITIALIZATION (Seamless)
 // ==========================================
@@ -457,7 +1092,7 @@ async function initSecurity() {
         const res = await fetch(`/api/get_public_key/${myUserId}`);
         const data = await res.json();
 
-        // 2. Check IndexedDB for existing keys
+        // 2. Check IndexedDB for existing keys (Local Cache)
         const storedKeys = await Enclave.loadKeys(myUserId);
         
         if (storedKeys) {
@@ -465,51 +1100,122 @@ async function initSecurity() {
             myKeys.private = storedKeys.privateKey;
             myKeys.public = storedKeys.publicKey;
             
-            // Check if server needs resync (edge case)
+            // Sync Public Key if missing on server
             if (!data.public_key) {
                 console.log("Server missing public key. Re-uploading...");
                 const pub64 = await CryptoManager.exportPublicKey(storedKeys.publicKey);
                 await uploadKeys(pub64);
             }
-            
-            // Refresh history immediately
-            if(currentChatId) {
-                 const activeLink = document.querySelector('.friend-link.active');
-                 if(activeLink) loadChatHistoryByFriendId(activeLink.dataset.userId);
-            }
-        } else if (data.public_key) {
-            // CASE: Server has Identity, Browser DOES NOT
-            // This is the "Refresh destroys history" trap. We MUST NOT overwrite.
-            console.warn("Identity Mismatch: Server has keys, Browser does not.");
-            document.getElementById('key-setup-modal').style.display = 'flex';
-            document.getElementById('main-interface').classList.add('blur-overlay');
-            
-            document.getElementById('btn-reset-identity').onclick = async () => {
-                if (confirm("Are you sure? Old chat history will be unreadable.")) {
+        } 
+        else {
+            // 3. No Local Keys? CHECK THE VAULT!
+            console.log("No local keys. Checking Vault...");
+            try {
+                const vaultRes = await fetch('/api/vault/restore_key');
+                const vaultData = await vaultRes.json();
+
+                if (vaultData.success && vaultData.private_key) {
+                    console.log("Keys found in Vault! Restoring...");
+                    
+                    // Import the Private Key from Vault (JWK format)
+                    const privKey = await window.crypto.subtle.importKey(
+                        "jwk", 
+                        JSON.parse(vaultData.private_key), 
+                        { name: "RSA-OAEP", hash: "SHA-256" }, 
+                        true, 
+                        ["decrypt"]
+                    );
+
+                    // We need the Public Key too. 
+                    // If the server has it, download it. If not, we can't fully restore (edge case).
+                    if (data.public_key) {
+                        const pubKey = await CryptoManager.importPublicKey(data.public_key);
+                        
+                        // Save restored keys to Local Enclave
+                        await Enclave.saveKeys(myUserId, { privateKey: privKey, publicKey: pubKey });
+                        myKeys.private = privKey;
+                        myKeys.public = pubKey;
+                        showToast("Identity synced from Vault", "success");
+                    } else {
+                        // Edge case: Vault has private key, but DB lost public key.
+                        // Ideally, we derive public from private, but WebCrypto makes that hard.
+                        // For now, treat as fresh start if critical data missing.
+                        console.warn("Vault has key, but public key missing. Generating new.");
+                        await generateAndSaveIdentity();
+                    }
+                } else {
+                    // 4. No Keys in Vault either. Generate NEW Identity.
+                    console.log("No keys in Vault. Generating new identity...");
                     await generateAndSaveIdentity();
-                    location.reload();
                 }
-            };
-        } else {
-            // CASE: Fresh Account (No Server Key, No Browser Key)
-            await generateAndSaveIdentity();
+            } catch (err) {
+                console.error("Vault check failed", err);
+                // Fallback to generating new if vault is unreachable/error
+                await generateAndSaveIdentity();
+            }
         }
+        
+        // Refresh history immediately if keys loaded
+        if(myKeys.private && currentChatId) {
+             const activeLink = document.querySelector('.friend-link.active');
+             if(activeLink) loadChatHistoryByFriendId(activeLink.dataset.userId);
+        }
+
     } catch (e) {
         console.error("Enclave Error:", e);
         showToast("Security System Failed", "error");
     }
 }
 
+async function syncLocks() {
+    try {
+        console.log("Syncing locks from Vault...");
+        // Fetch from Vault instead of SQL (or do both if you prefer)
+        const res = await fetch('/api/vault/get_locks'); 
+        
+        if (res.ok) {
+            const data = await res.json();
+            if (data.locks) {
+                for (const [chatId, lockData] of Object.entries(data.locks)) {
+                    // lockData looks like { type: 'pin', secret: '...' }
+                    await Enclave.saveLock(chatId, lockData);
+                }
+                console.log(`Synced ${Object.keys(data.locks).length} locks from Vault.`);
+            }
+        }
+    } catch (e) {
+        console.error("Lock Sync Failed:", e);
+    }
+}
 async function generateAndSaveIdentity() {
     console.log("Generating new identity...");
     const kp = await CryptoManager.generateKeyPair();
+    
+    // 1. Save Locally
     await Enclave.saveKeys(myUserId, kp);
+    
+    // 2. Export Keys
     const pub64 = await CryptoManager.exportPublicKey(kp.publicKey);
+    const privJwK = await window.crypto.subtle.exportKey("jwk", kp.privateKey);
+    
+    // 3. Send Public Key to DB (for others to find me)
     await uploadKeys(pub64);
+
+    // 4. BACKUP Private Key to VAULT
+    try {
+        await fetch('/api/vault/backup_key', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+            body: JSON.stringify({ private_key: JSON.stringify(privJwK) })
+        });
+        console.log("Private key backed up to Vault.");
+    } catch (e) {
+        console.error("Failed to backup key to Vault:", e);
+    }
     
     myKeys.public = kp.publicKey;
     myKeys.private = kp.privateKey;
-    showToast("Secure Identity Created", "success");
+    showToast("Secure Identity Created & Backed Up", "success");
 }
 
 async function uploadKeys(pub64) {
@@ -518,14 +1224,18 @@ async function uploadKeys(pub64) {
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
         body: JSON.stringify({ 
             public_key: pub64,
-            encrypted_private_key: 'DEVICE_BOUND', 
-            key_salt: 'DEVICE_BOUND' 
+            encrypted_private_key: 'VAULT_MANAGED', 
+            key_salt: 'VAULT_MANAGED' 
         })
     });
 }
 
-window.addEventListener('DOMContentLoaded', initSecurity);
-
+window.addEventListener('DOMContentLoaded', () => {
+    initSecurity(); // Your existing Key Sync
+    syncLocks();    // <--- ADD THIS: Your Lock Sync
+    
+    // ... rest of your code ...
+});
 // ==========================================
 // 4. CHAT LOGIC
 // ==========================================
@@ -577,7 +1287,7 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
             if (j.ok) {
                 const payload = JSON.stringify({ type:'attachment', url: j.url, name: j.name, kind: j.kind, size: j.size });
                 const enc = await CryptoManager.encryptMessage(payload, friendKey, myKeys.public);
-                socket.emit('send_message', { chat_id: Number(currentChatId), ...enc });
+                socket.emit('send_message', { chat_id: Number(currentChatId), ...enc, expires_in: currentDmTimer});
                 ensureChatIndexes(currentChatId);
                 chatFilesIndex.get(String(currentChatId)).push({type:'attachment', ...j});
             }
@@ -590,7 +1300,7 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
     if (text) {
         try {
             const enc = await CryptoManager.encryptMessage(text, friendKey, myKeys.public);
-            socket.emit('send_message', { chat_id: Number(currentChatId), ...enc });
+            socket.emit('send_message', { chat_id: Number(currentChatId), ...enc, expires_in: currentDmTimer });
             input.value = '';
             input.style.height = 'auto';
         } catch(e) {
@@ -607,7 +1317,8 @@ socket.on('receive_message', async (data) => {
         return;
     }
     const text = await CryptoManager.decryptMessage(data);
-    appendMessage(String(data.sender_id) === String(myUserId) ? 'me' : 'friend', text, data.sent_at, data.message_id);
+
+    appendMessage(String(data.sender_id) === String(myUserId) ? 'me' : 'friend', text, data.sent_at, data.message_id, false, data.expires_at);
 });
 
 // UI & Helpers
@@ -663,18 +1374,102 @@ function showChat() {
     document.getElementById('chat-box').style.display = 'block';
     document.getElementById('chat-form').style.display = 'flex';
     document.getElementById('chat-topbar').style.display = 'flex';
+
 }
-function openChat(link) {
+
+// ==========================================
+// INTERCEPTOR: Checks for locks before opening
+// ==========================================
+async function openChat(link) {
+    if (!link) return;
+    const chatId = link.dataset.chatId;
+    
+    // UI Update: Show the container immediately so we can show the lock screen
+    document.getElementById('chat-placeholder').style.display = 'none';
+    document.getElementById('chat-topbar').style.display = 'flex';
+    document.getElementById('chat-box-wrapper').style.display = 'flex';
+    document.getElementById('chat-form').style.display = 'flex';
+
+    // 1. Check for Lock
+    const lock = await Enclave.getLock(chatId);
+    
+    if (lock) {
+        // LOCK FOUND: Show Overlay & Blur Content
+        document.getElementById('chat-lock-overlay').style.display = 'flex';
+        document.getElementById('chat-box').style.filter = 'blur(15px)';
+        document.getElementById('chat-form').style.pointerEvents = 'none';
+        document.getElementById('chat-form').style.opacity = '0.5';
+        
+        // Setup PIN Input Listener
+        const pinInput = document.getElementById('overlay-pin-input');
+        pinInput.value = '';
+        pinInput.focus();
+        
+        // Auto-submit PIN
+        pinInput.onkeyup = async (e) => {
+            if (pinInput.value.length === 4) {
+                const hashed = await hashPin(pinInput.value);
+                if (hashed === lock.secret) {
+                    actualOpenChat(link); // SUCCESS: Open the chat
+                } else {
+                    pinInput.style.borderColor = 'red'; // Visual error
+                    setTimeout(()=>pinInput.style.borderColor='', 500);
+                }
+            }
+        };
+        
+        // Try Biometrics (if enabled)
+        if (lock.type === 'biometric') {
+            try {
+                const challenge = window.crypto.getRandomValues(new Uint8Array(32));
+                const assertion = await navigator.credentials.get({ publicKey: { challenge, timeout: 60000, userVerification: "required" } });
+                if (assertion) actualOpenChat(link); // SUCCESS
+            } catch (e) {}
+        }
+    } else {
+        // NO LOCK: Proceed normally
+        actualOpenChat(link);
+    }
+}
+
+// ==========================================
+// CORE LOGIC: Preserves all your existing features
+// ==========================================
+function actualOpenChat(link) {
+    document.getElementById('chat-lock-overlay').style.display = 'none';
+    document.getElementById('chat-box').style.filter = 'none';
+    const chatForm = document.getElementById('chat-form'); 
+    if(chatForm) {
+        chatForm.style.pointerEvents = 'all'; // Re-enable clicking
+        chatForm.style.opacity = '1';         // Restore full brightness
+    }
+    document.getElementById('chat-box-wrapper').style.display = 'flex';
+
     showChat();
     const friendUserId = link.dataset.userId;
     const chatId = link.dataset.chatId || '';
+    
+    // Update active states
     document.querySelectorAll('.friend-link').forEach(l => l.classList.remove('active'));
     link.classList.add('active');
     link.classList.remove('has-unread');
+    
+    // Update Header UI
     document.getElementById('current-friend-name').innerText = link.querySelector('.friend-name').innerText;
     document.getElementById('current-friend-pic').src = link.querySelector('img').src;
+    
+    // Update Info Sidebar UI
+    document.getElementById('info-friend-pic').src = link.querySelector('img').src;
+    document.getElementById('info-friend-name').innerText = link.querySelector('.friend-name').innerText;
+    const statusEl = link.querySelector('.friend-status');
+    if (statusEl) {
+        document.getElementById('info-friend-status').innerText = statusEl.innerText;
+    }
+    
     const chatBox = document.getElementById('chat-box');
     chatBox.innerHTML = '';
+
+    // Handle Chat Context and Socket Join
     if (chatId) {
         currentChatId = String(chatId);
         socket.emit('join_chat', { chat_id: Number(chatId) });
@@ -689,11 +1484,79 @@ function openChat(link) {
             loadChatHistoryByFriendId(friendUserId);
         });
     }
-    // Wire options
-    document.querySelector('.btn.btn-secondary').onclick = function() {
-        showConfirm('Block user?', function() { fetch(`/block_user/${currentChatId}`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } }).then(() => { showToast('Blocked.', 'error'); }); });
-    };
+
+    // --- Wire All Options Buttons (Preserving your logic) ---
+    const blockBtn = document.querySelector('#chat-info-sidebar .btn.btn-secondary') || document.querySelector('#chat-info-sidebar .btn.btn-warning');
+    
+    if(blockBtn) {
+        // Check block status
+        fetch(`/is_blocked/${currentChatId}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.blocked_by_me) {
+                    blockBtn.innerHTML = '<span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">block</span>Unblock User';
+                    blockBtn.classList.remove('btn-secondary');
+                    blockBtn.classList.add('btn-warning');
+                } else {
+                    blockBtn.innerHTML = '<span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">block</span>Block User';
+                    blockBtn.classList.remove('btn-warning');
+                    blockBtn.classList.add('btn-secondary');
+                }
+            }).catch(()=>{});
+
+        blockBtn.onclick = () => {
+            const isBlocked = blockBtn.textContent.includes('Unblock');
+            const action = isBlocked ? 'unblock' : 'block';
+            showConfirm(`${action.charAt(0).toUpperCase() + action.slice(1)} this user?`, async () => {
+                try {
+                    const res = await fetch(`/${action}_user/${currentChatId}`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
+                    if (res.ok) location.reload();
+                } catch (e) { showToast('Error updating status', 'error'); }
+            });
+        };
+    }
+
+    const reportBtn = document.getElementById('report-user-btn');
+    if(reportBtn) {
+        reportBtn.onclick = () => {
+            const reportedUsername = link.querySelector('.friend-name').textContent;
+            const reason = prompt(`Report ${reportedUsername}?\n\nPlease enter reason:`);
+            if (!reason) return;
+            const fd = new FormData();
+            fd.append('reported_user_id', friendUserId);
+            fd.append('report_reason', reason.substring(0, 255));
+            fd.append('report_type', 'user_behavior');
+            fetch('/report_user', { method: 'POST', body: fd, headers: { 'X-CSRFToken': csrfToken } })
+            .then(() => showToast('Report submitted', 'success'));
+        };
+    }
+
+    // Clear & Delete Logic
+    const dangerBtns = document.querySelectorAll('#chat-info-sidebar .btn.btn-danger');
+    if(dangerBtns.length >= 2) {
+        const clearBtn = dangerBtns[0];
+        const deleteBtn = dangerBtns[1]; 
+
+        clearBtn.onclick = () => {
+            showConfirm('Clear history? (This hides messages for you)', async () => {
+                const res = await fetch(`/clear_chat/${currentChatId}`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
+                if (res.ok) { chatBox.innerHTML = ''; showToast('Cleared', 'success'); }
+            });
+        };
+
+        deleteBtn.onclick = () => {
+            showConfirm('Delete chat permanently?', async () => {
+                const res = await fetch(`/delete_chat/${currentChatId}`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
+                if (res.ok) { link.remove(); showPlaceholder(); currentChatId = null; }
+            });
+        };
+    }
+
+    // Update Lock UI
+    if(typeof refreshSidebarLockUI === 'function') refreshSidebarLockUI();
 }
+
+
 async function loadChatHistoryByFriendId(friendId) {
     const chatBox = document.getElementById('chat-box');
     chatBox.innerHTML = '<div class="text-center p-3 text-muted">Decrypting history...</div>';
@@ -724,7 +1587,7 @@ async function loadChatHistoryByFriendId(friendId) {
         chatBox.scrollTop = chatBox.scrollHeight;
     } catch(e) { chatBox.innerHTML = '<div class="text-danger">Failed to load history</div>'; }
 }
-function appendMessage(who, text, time, msgId, isDeleted) {
+function appendMessage(who, text, time, msgId, isDeleted = false, expiresAt = null) {
     const chatBox = document.getElementById('chat-box');
     const div = document.createElement('div');
     div.className = `message-row ${who}`;
@@ -733,21 +1596,62 @@ function appendMessage(who, text, time, msgId, isDeleted) {
     if(msgId) bubble.dataset.messageId = msgId;
     
     let content = text;
+    let isSystem = false;
     if (!isDeleted && text && text.startsWith('{')) {
         try {
             const obj = JSON.parse(text);
-            if (obj.type === 'attachment') {
+            if (obj.type === 'system') {
+                isSystem = true;
+                div.className = 'system-msg-row'; // Centered row
+                // Add the centered badge with icon
+                div.innerHTML = `
+                    <div class="system-msg-badge" style="background:#e0e7ff; color:#4338ca; padding:4px 12px; border-radius:12px; font-size:12px; font-weight:500; display:flex; align-items:center; gap:6px;">
+                        <span class="material-icons" style="font-size:14px;">info</span>
+                        ${obj.text}
+                    </div>`;
+            } 
+            else if (obj.type === 'attachment') {
                 content = `<div class="attachment-card"><span class="material-icons">description</span> ${obj.name} <a href="${obj.url}" download class="btn btn-sm btn-light">Download</a></div>`;
                 if(obj.kind === 'image') content = `<img src="${obj.url}" class="msg-image" onclick="openImageViewer('${obj.url}')">`;
             }
         } catch(e){}
     }
-    
-    bubble.innerHTML = `<div class="message-text">${content}</div><div class="message-time">${time}</div>`;
-    div.appendChild(bubble);
-    chatBox.appendChild(div);
-}
 
+    if (!isSystem) {
+        div.className = `message-row ${who}`;
+        const bubble = document.createElement('div');
+        bubble.className = `message-bubble ${isDeleted ? 'message-deleted' : ''}`;
+        if(msgId) bubble.dataset.messageId = msgId;
+        
+        bubble.innerHTML = `<div class="message-text">${content}</div><div class="message-time">${time}</div>`;
+
+        // Timer Logic
+        if (expiresAt) {
+            const expTime = new Date(expiresAt).getTime(); // Browser now sees 'Z' and handles timezone correctly
+            const now = new Date().getTime();
+            const timeLeft = expTime - now;
+
+            if (timeLeft > 0) {
+                const timeEl = bubble.querySelector('.message-time');
+                if(timeEl) timeEl.innerHTML += ' <span class="material-icons" style="font-size:12px; vertical-align:middle; color:var(--danger);" title="Self-destructs soon">timer</span>';
+                
+                setTimeout(() => {
+                    div.style.transition = "opacity 0.5s ease";
+                    div.style.opacity = "0";
+                    setTimeout(() => div.remove(), 500);
+                }, timeLeft);
+            } else {
+                // If expired, don't append at all
+                return; 
+            }
+        }
+        div.appendChild(bubble);
+    }
+
+    chatBox.appendChild(div);
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+    
 // 7. COMPOSER PREVIEWS & ATTACHMENTS
 document.getElementById('attach-btn').addEventListener('click', () => document.getElementById('attachment-input').click());
 document.getElementById('attachment-input').addEventListener('change', (e) => {
@@ -829,6 +1733,81 @@ async function labelBlockedStatuses() {
 }
 window.addEventListener('DOMContentLoaded', labelBlockedStatuses);
 
+// Chat Info Sidebar
+const chatInfoBtn = document.getElementById('chat-info-btn');
+const closeInfoBtn = document.getElementById('close-info-btn');
+const chatInfoSidebar = document.getElementById('chat-info-sidebar');
+
+if (chatInfoBtn) {
+    chatInfoBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent bubbling
+        
+        // SECURITY CHECK: Is the chat currently locked?
+        const lockOverlay = document.getElementById('chat-lock-overlay');
+        if (lockOverlay && getComputedStyle(lockOverlay).display !== 'none') {
+            showToast("Unlock chat to view options", "error");
+            return; // Stop here! Do not open sidebar.
+        }
+
+        // If unlocked, toggle sidebar
+        chatInfoSidebar.style.display = 
+            (chatInfoSidebar.style.display === 'none' || chatInfoSidebar.style.display === '') 
+            ? 'block' : 'none';
+    });
+}
+
+if (closeInfoBtn) {
+    closeInfoBtn.addEventListener('click', () => {
+        chatInfoSidebar.style.display = 'none';
+    });
+}
+
+// Close sidebar if clicking outside of it
+document.addEventListener('click', (e) => {
+    if (chatInfoSidebar.style.display === 'block' && 
+        !chatInfoSidebar.contains(e.target) && 
+        !chatInfoBtn.contains(e.target)) {
+        chatInfoSidebar.style.display = 'none';
+    }
+});
+
+
+// Chat Search
+const chatSearchInput = document.getElementById('chat-search-input');
+if (chatSearchInput) {
+    chatSearchInput.addEventListener('input', () => {
+        const searchTerm = chatSearchInput.value.toLowerCase().trim();
+        const chatBox = document.getElementById('chat-box');
+        const messages = chatBox.querySelectorAll('.message-row');
+        
+        messages.forEach(msg => {
+            const text = msg.textContent.toLowerCase();
+            msg.style.opacity = searchTerm === '' || text.includes(searchTerm) ? '1' : '0.4';
+            msg.style.pointerEvents = searchTerm === '' || text.includes(searchTerm) ? 'auto' : 'none';
+        });
+        
+        if (searchTerm) {
+            const firstMatch = Array.from(messages).find(msg => 
+                msg.textContent.toLowerCase().includes(searchTerm)
+            );
+            if (firstMatch) {
+                firstMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+    });
+}
+
+// Images and Links toggle
+document.getElementById('images-btn')?.addEventListener('click', function() {
+    const imagesBox = document.getElementById('options-images');
+    imagesBox.style.display = imagesBox.style.display === 'none' ? 'block' : 'none';
+});
+
+document.getElementById('links-btn')?.addEventListener('click', function() {
+    const linksBox = document.getElementById('options-links');
+    linksBox.style.display = linksBox.style.display === 'none' ? 'block' : 'none';
+});
+
 // Initial Load
 window.addEventListener('DOMContentLoaded', () => {
     const params = new URLSearchParams(location.search);
@@ -844,5 +1823,35 @@ window.addEventListener('DOMContentLoaded', () => {
     const ta = document.getElementById('chat-input');
     ta.addEventListener('input', () => { ta.style.height='auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; });
 });
+
+function abortUnlock() {
+    // Go back to "Select a chat" placeholder
+    document.getElementById('chat-placeholder').style.display = 'flex';
+    document.getElementById('chat-topbar').style.display = 'none';
+    document.getElementById('chat-box-wrapper').style.display = 'none';
+    document.getElementById('chat-form').style.display = 'none';
+    document.querySelectorAll('.friend-link').forEach(l => l.classList.remove('active'));
+    currentChatId = null;
+}
+
+// Function to handle the 3-dot menu click
+function showChatListItemMenu(e, chatId) {
+    e.stopPropagation(); 
+    targetChatIdForLock = String(chatId);
+    
+    const menu = document.getElementById('chat-item-context-menu');
+    if(menu) {
+        menu.style.display = 'flex';
+        menu.style.top = e.clientY + 'px';
+        menu.style.left = e.clientX + 'px';
+        
+        // Close menu on next click anywhere
+        setTimeout(() => {
+            document.addEventListener('click', () => menu.style.display = 'none', {once:true});
+        }, 0);
+    }
+}
 </script>
+
+
 {% endblock %}

@@ -71,7 +71,7 @@ import cbor2
 # Models
 from models import (
     db, User, Role, Permission, Event, EventParticipant, Post, PostImage, PostLike,
-    Notification, Report, Chat, ChatParticipant, Message, 
+    Notification, Report, Chat, UserChatLock, ChatParticipant, Message, 
     Friendship, AdminAction, UserLog, ModSecLog, ErrorLog, 
     WebAuthnCredential, user_role_assignments,Event,FriendChatMap,BlockedUser
 

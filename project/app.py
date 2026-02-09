@@ -190,7 +190,7 @@ class DevelopmentConfig(Config):
     WTF_CSRF_ENABLED = False  # Temporarily disabled for development
     
     # least scuffed but remember generate new token on the web UI and replace here
-    SPLUNK_HEC_TOKEN = '56ee284a-a63c-4e59-9f78-5cb13e0edbe3'  # Replace with actual token
+    SPLUNK_HEC_TOKEN = 'f1be25f6-d14f-46fe-b324-c69a82676ec1'  # Replace with actual token
     SPLUNK_HOST = 'splunk'
     SPLUNK_PORT = '8088'
     SPLUNK_INDEX = 'main'

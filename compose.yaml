@@ -187,7 +187,7 @@ services:
   redis:
     image: "redis:alpine"
     ports:
-      - "6666:6666"
+      - "6666:6379"
     networks:
       - flask-sql
     environment:
@@ -270,6 +270,21 @@ services:
       - flask-sql
     restart: unless-stopped
 
+  clamav:
+    image: clamav/clamav:latest
+    container_name: clamav
+    networks:
+      - flask-sql
+    ports:
+      - "3310:3310"
+    volumes:
+      - clamav_db:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 volumes:
   mysql-master-data:
   mysql-slave1-data:
@@ -281,6 +296,7 @@ volumes:
   splunk-data:
   splunk-etc:
   vault_data:
+  clamav_db:
 
 networks:
   flask-sql:

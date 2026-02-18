@@ -57,6 +57,9 @@ from wtforms import StringField, PasswordField, SubmitField, TextAreaField, Sele
 # --- HashiCorp Vault Imports ---
 from vault import vault_bp
 
+# --- virus Scanner Imports ---
+from scanner import scanner_bp, av_scanner
+
 # --- Custom Module Imports ---
 
 # Models
@@ -150,8 +153,7 @@ class Config:
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
     
     # Redis configuration
-    REDIS_URL = os.getenv('REDIS_URL', 'redis://redis:6666/0')
-
+    REDIS_URL = os.getenv('REDIS_URL', 'redis://redis:6379/0')
     # Splunk Configuration
     SPLUNK_HOST = 'splunk'  # Docker service name
     SPLUNK_PORT = '8088'
@@ -243,6 +245,9 @@ def create_app(config_name=None):
 
     # Register vault blueprint
     app.register_blueprint(vault_bp)
+
+    # Register Scanner
+    app.register_blueprint(scanner_bp)
     
     # Enable template auto-reload for development
     if config_name in ['development', 'testing'] or app.config.get('DEBUG'):
@@ -306,7 +311,7 @@ def initialize_extensions(app):
     socketio = SocketIO()
     socketio.init_app(app, 
                      cors_allowed_origins=app.config.get('SOCKETIO_CORS_ORIGINS', "*"),
-                     message_queue=app.config.get('REDIS_URL', 'redis://redis:6666/0'),
+                     message_queue=app.config.get('REDIS_URL', 'redis://redis:6379/0'),
                      ping_interval=25,
                      ping_timeout=60)
     
@@ -2995,69 +3000,7 @@ def update_security_keys():
 
 
 # --- Chat Lock Management ---
-@app.route('/api/sync_chat_lock/<int:chat_id>', methods=['POST'])
-@login_required
-def sync_chat_lock(chat_id):
-    """
-    Sync chat lock per-user.
-    Each user can lock/unlock independently.
-    """
-    try:
-        data = request.get_json()
-        user_id = data.get('user_id')
-        is_locked = data.get('is_locked')
-        pin_hash = data.get('pin_hash')
-        lock_type = data.get('lock_type')
-        
-        # Security: only allow user to lock their own chats
-        if str(user_id) != str(current_user.user_id):
-            return jsonify({'error': 'Unauthorized'}), 403
-        
-        # Verify user is in this chat
-        chat_participant = ChatParticipant.query.filter_by(
-            chat_id=chat_id, 
-            user_id=user_id
-        ).first()
-        
-        if not chat_participant:
-            return jsonify({'error': 'Not a chat participant'}), 403
-        
-        # Update UserChatLock for this user+chat combination
-        lock = UserChatLock.query.filter_by(
-            user_id=user_id,
-            chat_id=chat_id
-        ).first()
-        
-        if is_locked:
-            if not lock:
-                lock = UserChatLock(user_id=user_id, chat_id=chat_id)
-            lock.is_locked = True
-            lock.pin_hash = pin_hash
-            lock.lock_type = lock_type
-            db.session.add(lock)
-        else:
-            # Remove lock if exists
-            if lock:
-                db.session.delete(lock)
-        
-        db.session.commit()
-        return jsonify({'ok': True})
-        
-    except Exception as e:
-        app.logger.error(f"Error syncing chat lock: {e}")
-        return jsonify({'error': str(e)}), 500
-@app.route('/api/get_locked_chats', methods=['GET'])
-@login_required
-def get_locked_chats():
-    """Get all locked chats for current user (per-user locks only)."""
-    locked_chats = UserChatLock.query.filter_by(
-        user_id=current_user.user_id,
-        is_locked=True
-    ).all()
-    
-    return jsonify({
-        'locked_chats': {str(lock.chat_id): lock.pin_hash for lock in locked_chats}
-    })
+
 # --- Messaging ---
 
 @app.route('/messages', methods=['GET'])
@@ -3439,6 +3382,8 @@ def handle_delete_message(data):
     if not current_user.is_authenticated:
         return
     message_id = data.get('message_id')
+    scope = data.get('scope', 'me')
+
     msg = Message.query.get(message_id)
     if not msg:
         return
@@ -3449,38 +3394,36 @@ def handle_delete_message(data):
         return
 
     # Sender can delete for everyone; receiver deletes only for themselves.
-    if msg.sender_id == current_user.user_id:
-        # Delete for both sides
+    if scope == 'everyone' and msg.sender_id == current_user.user_id:
         msg.is_deleted_by_sender = True
         msg.is_deleted_by_receiver = True
-        msg.message_text = "Message deleted"
+        msg.message_text = "Message deleted" # Placeholder text
         db.session.add(msg)
         db.session.commit()
 
+        # Broadcast to EVERYONE in the room
         socketio.emit('message_deleted', {
             'chat_id': msg.chat_id,
             'message_id': msg.message_id,
             'scope': 'everyone'
         }, room=str(msg.chat_id))
+
+    # Logic: Delete for Me (Anyone can do this)
     else:
-        # Delete only for me (the receiver). Do NOT change message_text.
-        msg.is_deleted_by_receiver = True
+        if msg.sender_id == current_user.user_id:
+            msg.is_deleted_by_sender = True
+        else:
+            msg.is_deleted_by_receiver = True
+            
         db.session.add(msg)
         db.session.commit()
 
-        # Notify only the deleting user’s sockets
-        try:
-            emit_to_user(current_user.user_id, 'message_deleted', {
-                'chat_id': msg.chat_id,
-                'message_id': msg.message_id,
-                'scope': 'me'
-            })
-        except NameError:
-            socketio.emit('message_deleted', {
-                'chat_id': msg.chat_id,
-                'message_id': msg.message_id,
-                'scope': 'me'
-            }, room=request.sid)
+        # Send signal ONLY to the requester
+        emit('message_deleted', {
+            'chat_id': msg.chat_id,
+            'message_id': msg.message_id,
+            'scope': 'me'
+        }, room=request.sid)
 
 
 @app.route('/get_chat_id/<int:friend_id>')
@@ -3627,6 +3570,21 @@ def upload_message_attachment():
     if not verdict.get('ok'):
         return jsonify(ok=False, error=verdict.get('error', 'Validation failed'), issues=verdict.get('issues', [])), 400
 
+    if file:
+        # --- NEW: VIRUS SCANNING ---
+        print(f"Scanning {file.filename}...")
+        is_safe, threat_msg = av_scanner.scan_stream(file)
+        
+        # Reset file cursor after reading!
+        file.seek(0)
+        
+        if not is_safe:
+            print(f"SECURITY ALERT: {threat_msg}")
+            return jsonify({
+                'ok': False, 
+                'error': f"Security Block: {threat_msg}"
+            }), 406
+        
     rel_path, _abs = save_attachment(file, current_user.user_id)
     return jsonify(
         ok=True,
@@ -3636,8 +3594,6 @@ def upload_message_attachment():
         mime=verdict['mime'],
         kind=verdict['kind']
     )
-
-
 
 
 # ----------- Message notification -------------

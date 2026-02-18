@@ -1,6 +1,7 @@
 import hvac
 from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
+from models import db, UserChatLock, ChatParticipant
 
 vault_bp = Blueprint('vault', __name__)
 
@@ -85,6 +86,35 @@ class KeyVault:
                 return True
             except:
                 return False
+            
+    def remove_chat_lock(self, user_id, chat_id):
+        try:
+            path = f'locks/{user_id}'
+            # 1. Read the current list of locks
+            try:
+                response = self.client.secrets.kv.v2.read_secret_version(
+                    path=path,
+                    mount_point=self.mount_point
+                )
+                current_locks = response['data']['data']
+            except:
+                return True # If no secret exists, nothing to delete
+
+            # 2. Delete the specific chat_id key
+            chat_key = str(chat_id)
+            if chat_key in current_locks:
+                del current_locks[chat_key]
+
+                # 3. Write the cleaned dictionary back (Replace)
+                self.client.secrets.kv.v2.create_or_update_secret(
+                    path=path,
+                    secret=current_locks,
+                    mount_point=self.mount_point
+                )
+            return True
+        except Exception as e:
+            print(f"Vault Remove Error: {e}")
+            return False    
 
     def get_all_locks(self, user_id):
         try:
@@ -138,7 +168,11 @@ def vault_sync_lock():
     if not chat_id or not lock_data:
         return jsonify({'error': 'Missing data'}), 400
 
-    success = vault_service.update_chat_lock(current_user.user_id, chat_id, lock_data)
+    if lock_data is None:
+        success = vault_service.remove_chat_lock(current_user.user_id, chat_id)
+    else:
+        success = vault_service.update_chat_lock(current_user.user_id, chat_id, lock_data)
+
     return jsonify({'success': success})
 
 @vault_bp.route('/api/vault/get_locks', methods=['GET'])
@@ -146,3 +180,71 @@ def vault_sync_lock():
 def vault_get_locks():
     locks = vault_service.get_all_locks(current_user.user_id)
     return jsonify({'success': True, 'locks': locks})
+
+@vault_bp.route('/api/sync_chat_lock/<int:chat_id>', methods=['POST'])
+@login_required
+def sync_chat_lock(chat_id):
+    """
+    Sync chat lock per-user.
+    Each user can lock/unlock independently.
+    """
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        is_locked = data.get('is_locked')
+        pin_hash = data.get('pin_hash')
+        lock_type = data.get('lock_type')
+        
+        # Security: only allow user to lock their own chats
+        if str(user_id) != str(current_user.user_id):
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        # Verify user is in this chat
+        chat_participant = ChatParticipant.query.filter_by(
+            chat_id=chat_id, 
+            user_id=user_id
+        ).first()
+        
+        if not chat_participant:
+            return jsonify({'error': 'Not a chat participant'}), 403
+        
+        # Update UserChatLock for this user+chat combination
+        lock = UserChatLock.query.filter_by(
+            user_id=user_id,
+            chat_id=chat_id
+        ).first()
+        
+        if is_locked:
+            if not lock:
+                lock = UserChatLock(user_id=user_id, chat_id=chat_id)
+            lock.is_locked = True
+            lock.pin_hash = pin_hash
+            lock.lock_type = lock_type
+            db.session.add(lock)
+        else:
+            # Remove lock if exists
+            if lock:
+                db.session.delete(lock)
+        
+        db.session.commit()
+        return jsonify({'ok': True})
+        
+    except Exception as e:
+        app.logger.error(f"Error syncing chat lock: {e}")
+        return jsonify({'error': str(e)}), 500
+    
+@vault_bp.route('/api/get_locked_chats', methods=['GET'])
+@login_required
+def get_locked_chats():
+    """Get all locked chats for current user (per-user locks only)."""
+    locked_chats = UserChatLock.query.filter_by(
+        user_id=current_user.user_id,
+        is_locked=True
+    ).all()
+    
+    return jsonify({
+        'locked_chats': {str(lock.chat_id): lock.pin_hash for lock in locked_chats}
+    })
+
+
+    

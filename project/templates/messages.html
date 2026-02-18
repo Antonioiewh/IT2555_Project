@@ -85,6 +85,23 @@ html, body { height: 100%; }
 .message-bubble.message-deleted{ background:#fafafa !important; color:#9aa0a6 !important; font-style:italic; border-style:dashed; }
 .message-more{ color:#9aa0a6; margin-left:8px; cursor:pointer; display:none; }
 .message-bubble:hover .message-more{ display:inline; }
+.msg-menu-btn {display: none;position: absolute;top: 5px;right: 5px;background: rgba(255, 255, 255, 0.8);border-radius: 50%;padding: 2px;cursor: pointer;color: #5f6368;z-index: 10;transition: background 0.2s;}
+.message-bubble:hover .msg-menu-btn {display: block;}
+.msg-menu-btn:hover {background: #fff;color: #000;box-shadow: 0 1px 3px rgba(0,0,0,0.2);}
+.message-row.me .msg-dropdown {right: 10px;left: auto;}
+.message-row.friend .msg-dropdown {left: 10px;right: auto}
+
+/* The Dropdown Content */
+.msg-dropdown {display: none;position: absolute;top: 25px;background: #fff;border-radius: 8px;box-shadow: 0 4px 12px rgba(0,0,0,0.15);z-index: 1000;min-width: 160px;overflow: hidden;flex-direction: column;}
+.msg-dropdown.show {display: flex;}
+.msg-dropdown-item {padding: 10px 15px;font-size: 13px;color: #333;cursor: pointer;border-bottom: 1px solid #f1f1f1;display: flex;align-items: center;gap: 8px;}
+.msg-dropdown-item:last-child { border-bottom: none; }
+.msg-dropdown-item:hover { background: #f8f9fa; }
+.msg-dropdown-item.danger { color: #ea4335; }
+.msg-dropdown-item.danger:hover { background: #fce8e6; }
+
+/* Hide menu if message is deleted */
+.message-deleted .msg-menu-btn { display: none !important; }
 .chat-input-row{ display:flex; gap:10px; align-items:center; background:var(--surface); border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow); padding:8px 8px 8px 12px; }
 #chat-input{ resize:none; overflow-y:auto; max-height:140px; line-height:1.4; }
 #chat-input:focus{ box-shadow:none; }
@@ -1321,6 +1338,39 @@ socket.on('receive_message', async (data) => {
     appendMessage(String(data.sender_id) === String(myUserId) ? 'me' : 'friend', text, data.sent_at, data.message_id, false, data.expires_at);
 });
 
+socket.on('message_deleted', (data) => {
+    // data = { chat_id, message_id, scope }
+    if (String(data.chat_id) !== String(currentChatId)) return;
+
+    const bubble = document.querySelector(`.message-bubble[data-message-id="${data.message_id}"]`);
+    const row = document.querySelector(`.message-row[data-row-id="${data.message_id}"]`); // We added this dataset in appendMessage
+
+    if (data.scope === 'everyone') {
+        // "Delete for everyone" -> Change text, remove menu
+        if (bubble) {
+            bubble.classList.add('message-deleted');
+            
+            // Remove menu button
+            const menuBtn = bubble.querySelector('.msg-menu-btn');
+            if (menuBtn) menuBtn.remove();
+            
+            // Update text content
+            const textDiv = bubble.querySelector('.message-text');
+            if (textDiv) textDiv.innerHTML = '<em>Message deleted</em>';
+        }
+    } else {
+        // "Delete for me" -> Remove from DOM entirely
+        if (row) {
+            row.style.transition = "opacity 0.3s";
+            row.style.opacity = "0";
+            setTimeout(() => row.remove(), 300);
+        } else if (bubble) {
+            // Fallback if row id not found
+            bubble.parentElement.remove();
+        }
+    }
+});
+
 // UI & Helpers
 function ensureChatIndexes(chatId) {
   const key = String(chatId);
@@ -1580,7 +1630,7 @@ async function loadChatHistoryByFriendId(friendId) {
             if (msg.message_text !== "Message deleted") {
                 displayText = await CryptoManager.decryptMessage(msg);
             }
-            appendMessage(String(msg.sender_id) === String(myUserId) ? 'me' : 'friend', displayText, msg.sent_at, msg.message_id);
+            appendMessage(String(msg.sender_id) === String(myUserId) ? 'me' : 'friend', displayText, msg.sent_at, msg.message_id,msg.deleted_for_me,msg.expires_at);
         }
         ensureChatIndexes(currentChatId);
         renderOptionsTracker();
@@ -1597,6 +1647,7 @@ function appendMessage(who, text, time, msgId, isDeleted = false, expiresAt = nu
     
     let content = text;
     let isSystem = false;
+
     if (!isDeleted && text && text.startsWith('{')) {
         try {
             const obj = JSON.parse(text);
@@ -1619,11 +1670,34 @@ function appendMessage(who, text, time, msgId, isDeleted = false, expiresAt = nu
 
     if (!isSystem) {
         div.className = `message-row ${who}`;
+        div.dataset.rowId = msgId;
+
         const bubble = document.createElement('div');
         bubble.className = `message-bubble ${isDeleted ? 'message-deleted' : ''}`;
-        if(msgId) bubble.dataset.messageId = msgId;
+        bubble.dataset.messageId = msgId;
         
-        bubble.innerHTML = `<div class="message-text">${content}</div><div class="message-time">${time}</div>`;
+        let menuHtml = '';
+        if (!isDeleted && msgId) { // Only show menu if not deleted
+            const deleteForEveryoneOption = (who === 'me') 
+                ? `<div class="msg-dropdown-item danger" onclick="requestDelete('${msgId}', 'everyone')">
+                     <span class="material-icons" style="font-size:16px">delete_forever</span> Delete for everyone
+                   </div>` 
+                : '';
+            
+            menuHtml = `
+                <div class="msg-menu-btn" onclick="toggleMsgMenu(event, '${msgId}')">
+                    <span class="material-icons" style="font-size:16px">expand_more</span>
+                </div>
+                <div id="menu-${msgId}" class="msg-dropdown">
+                    <div class="msg-dropdown-item" onclick="requestDelete('${msgId}', 'me')">
+                        <span class="material-icons" style="font-size:16px">delete</span> Delete for me
+                    </div>
+                    ${deleteForEveryoneOption}
+                </div>
+            `;
+        }
+
+        bubble.innerHTML = `${menuHtml}<div class="message-text">${content}</div><div class="message-time">${time}</div>`;
 
         // Timer Logic
         if (expiresAt) {
@@ -1851,6 +1925,37 @@ function showChatListItemMenu(e, chatId) {
         }, 0);
     }
 }
+
+function toggleMsgMenu(e, msgId) {
+    e.stopPropagation(); // Prevent bubble click
+    
+    // Close all other menus first
+    document.querySelectorAll('.msg-dropdown').forEach(el => el.classList.remove('show'));
+    
+    const menu = document.getElementById(`menu-${msgId}`);
+    if (menu) {
+        menu.classList.toggle('show');
+    }
+}
+
+// Close menus when clicking anywhere else
+document.addEventListener('click', () => {
+    document.querySelectorAll('.msg-dropdown').forEach(el => el.classList.remove('show'));
+});
+
+function requestDelete(msgId, scope) {
+    if (!confirm(scope === 'everyone' ? "Delete for everyone?" : "Delete for just you?")) return;
+    
+    socket.emit('delete_message', { 
+        message_id: parseInt(msgId), 
+        scope: scope 
+    });
+    
+    // Hide menu immediately
+    document.querySelectorAll('.msg-dropdown').forEach(el => el.classList.remove('show'));
+}
+
+
 </script>
 
 

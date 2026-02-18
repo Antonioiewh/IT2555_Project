@@ -1,0 +1,577 @@
+{% extends "UserBase.html" %}
+{% block title %}File Validation Pipeline Demo - Admin{% endblock %}
+
+{% block head %}
+    <style>
+        .pipeline-step {
+            border: 2px solid #dee2e6;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 15px 0;
+            background: #f8f9fa;
+        }
+        .step-completed {
+            border-color: #28a745;
+            background: #d4edda;
+        }
+        .step-failed {
+            border-color: #dc3545;
+            background: #f8d7da;
+        }
+        .step-warning {
+            border-color: #ffc107;
+            background: #fff3cd;
+        }
+        .file-info-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 20px;
+        }
+        .result-card {
+            border-radius: 15px;
+            border: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .threat-item {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+            padding: 8px 12px;
+            margin: 5px 0;
+        }
+        .warning-item {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 5px;
+            padding: 8px 12px;
+            margin: 5px 0;
+        }
+        .success-item {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 5px;
+            padding: 8px 12px;
+            margin: 5px 0;
+        }
+        .metadata-item {
+            border-left: 3px solid #dee2e6;
+            padding-left: 10px;
+            margin-bottom: 10px;
+        }
+        .metadata-value {
+            word-break: break-word;
+            font-family: 'Courier New', monospace;
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+        .metadata-value-code {
+            word-break: break-word;
+            font-family: 'SF Mono', Monaco, Inconsolata, 'Roboto Mono', monospace;
+            background: #f8f9fa;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            color: #495057;
+            border: 1px solid #e9ecef;
+            display: inline-block;
+            max-width: 100%;
+        }
+        .metadata-container {
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 0;
+            background: #ffffff;
+        }
+        .metadata-container .table {
+            margin-bottom: 0;
+        }
+        .metadata-container .table td, 
+        .metadata-container .table th {
+            border-top: 1px solid #f0f0f0;
+            padding: 8px 12px;
+            vertical-align: middle;
+        }
+        .metadata-container .table tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+        .metadata-container:empty::after {
+            content: "No metadata found";
+            color: #6c757d;
+            font-style: italic;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h2"><i class="bi bi-shield-check"></i> File Validation Pipeline Demo</h1>
+            <a href="/admin" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Admin
+            </a>
+        </div>
+                
+        <!-- Upload Form -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-upload"></i> Upload File for Pipeline Testing</h5>
+            </div>
+                    <div class="card-body">
+                        <form method="post" enctype="multipart/form-data" class="row g-3">
+                            <div class="col-md-8">
+                                <input type="file" class="form-control" id="demo_file" name="demo_file" required>
+                                <div class="form-text">
+                                    Upload any file type to test the validation and metadata removal pipeline. 
+                                    Max size: 16MB
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="bi bi-play-circle"></i> Run Pipeline
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Pipeline Documentation -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-info-circle"></i> Pipeline Process</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <h6>Step 1: Security Validation</h6>
+                                <ul class="list-unstyled">
+                                    <li><i class="bi bi-check2 text-success"></i> File size validation</li>
+                                    <li><i class="bi bi-check2 text-success"></i> Polyglot detection</li>
+                                    <li><i class="bi bi-check2 text-success"></i> Malicious pattern scanning</li>
+                                    <li><i class="bi bi-check2 text-success"></i> File signature analysis</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-4">
+                                <h6>Step 2: Metadata Removal</h6>
+                                <ul class="list-unstyled">
+                                    <li><i class="bi bi-check2 text-success"></i> EXIF data removal (images)</li>
+                                    <li><i class="bi bi-check2 text-success"></i> Document metadata cleanup</li>
+                                    <li><i class="bi bi-check2 text-success"></i> Audio metadata stripping</li>
+                                    <li><i class="bi bi-check2 text-success"></i> ZIP archive processing</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-4">
+                                <h6>Step 3: Watermarking</h6>
+                                <ul class="list-unstyled">
+                                    <li><i class="bi bi-check2 text-success"></i> Red validation watermark</li>
+                                    <li><i class="bi bi-check2 text-success"></i> Bottom-right placement</li>
+                                    <li><i class="bi bi-check2 text-success"></i> Enhanced font size</li>
+                                    <li><i class="bi bi-check2 text-success"></i> Image files only</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {% if result %}
+                <!-- Results Section -->
+                <div class="result-card card">
+                    <div class="card-header bg-{{ result.status_class }} text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-{{ 'check-circle' if result.status_class == 'success' else 'exclamation-triangle' if result.status_class == 'warning' else 'x-circle' }}"></i>
+                            Pipeline Results: {{ result.status }}
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- File Information -->
+                        <div class="file-info-card mb-4">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6><i class="bi bi-file-earmark"></i> File Information</h6>
+                                    <p class="mb-1"><strong>Filename:</strong> {{ result.filename }}</p>
+                                    <p class="mb-1"><strong>Size:</strong> {{ result.file_size_mb }} MB ({{ "{:,}".format(result.file_size) }} bytes)</p>
+                                    <p class="mb-0"><strong>Type:</strong> {{ result.file_type or 'Unknown' }}</p>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6><i class="bi bi-fingerprint"></i> Security Info</h6>
+                                    <p class="mb-1"><strong>MD5 Hash:</strong></p>
+                                    <code class="text-light">{{ result.md5_hash[:32] }}{% if result.md5_hash|length > 32 %}...{% endif %}</code>
+                                    <p class="mb-0 mt-2"><strong>Risk Level:</strong> {{ result.validation_result.risk_level.upper() }}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Pipeline Steps -->
+                        <div class="row">
+                            <div class="col-md-4">
+                                <!-- Step 1: Validation -->
+                                <div class="pipeline-step {% if result.validation_result.is_safe %}step-completed{% else %}step-failed{% endif %}">
+                                    <h6>
+                                        <i class="bi bi-1-circle{% if result.validation_result.is_safe %}-fill text-success{% else %} text-danger{% endif %}"></i>
+                                        Security Validation
+                                    </h6>
+                                    <p class="mb-2">
+                                        <span class="badge bg-{% if result.validation_result.is_safe %}success{% else %}danger{% endif %}">
+                                            {{ "PASSED" if result.validation_result.is_safe else "FAILED" }}
+                                        </span>
+                                    </p>
+                                    
+                                    {% if result.validation_result.threats %}
+                                        <strong class="text-danger">Threats Detected:</strong>
+                                        {% for threat in result.validation_result.threats %}
+                                            <div class="threat-item">
+                                                <i class="bi bi-exclamation-triangle-fill text-danger"></i> {{ threat }}
+                                            </div>
+                                        {% endfor %}
+                                    {% endif %}
+                                    
+                                    {% if result.validation_result.warnings %}
+                                        <strong class="text-warning">Warnings:</strong>
+                                        {% for warning in result.validation_result.warnings %}
+                                            <div class="warning-item">
+                                                <i class="bi bi-exclamation-triangle text-warning"></i> {{ warning }}
+                                            </div>
+                                        {% endfor %}
+                                    {% endif %}
+
+                                    {% if result.validation_result.detection_info %}
+                                        <div class="mt-3">
+                                            <small class="text-muted">
+                                                <strong>Detection Info:</strong><br>
+                                                Expected: {{ result.validation_result.detection_info.expected_type or 'Unknown' }}<br>
+                                                Detected: {{ result.validation_result.detection_info.detected_signatures|join(', ') or 'None' }}<br>
+                                                Polyglot: {{ "Yes" if result.validation_result.detection_info.is_polyglot else "No" }}
+                                            </small>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-4">
+                                <!-- Step 2: Metadata Removal -->
+                                <div class="pipeline-step {% if result.validation_result.metadata_removed %}step-completed{% elif result.validation_result.metadata_removal_error %}step-failed{% else %}step-warning{% endif %}">
+                                    <h6>
+                                        <i class="bi bi-2-circle{% if result.validation_result.metadata_removed %}-fill text-success{% elif result.validation_result.metadata_removal_error %} text-danger{% else %} text-warning{% endif %}"></i>
+                                        Metadata Removal
+                                    </h6>
+                                    <p class="mb-2">
+                                        <span class="badge bg-{% if result.validation_result.metadata_removed %}success{% elif result.validation_result.metadata_removal_error %}danger{% else %}warning{% endif %}">
+                                            {% if result.validation_result.metadata_removed %}
+                                                COMPLETED
+                                            {% elif result.validation_result.metadata_removal_error %}
+                                                FAILED
+                                            {% else %}
+                                                SKIPPED
+                                            {% endif %}
+                                        </span>
+                                    </p>
+                                    
+                                    {% if result.validation_result.metadata_removed %}
+                                        <div class="success-item">
+                                            <i class="bi bi-check-circle text-success"></i> Metadata successfully removed from file
+                                        </div>
+                                    {% endif %}
+                                    
+                                    {% if result.validation_result.metadata_removal_error %}
+                                        <div class="threat-item">
+                                            <i class="bi bi-x-circle text-danger"></i> {{ result.validation_result.metadata_removal_error }}
+                                        </div>
+                                    {% endif %}
+                                    
+                                    {% if result.validation_result.pipeline_info %}
+                                        <div class="mt-3">
+                                            <small class="text-muted">
+                                                <strong>Pipeline Info:</strong><br>
+                                                Enabled: {{ "Yes" if result.validation_result.pipeline_info.metadata_removal_enabled else "No" }}<br>
+                                                Available: {{ "Yes" if result.validation_result.pipeline_info.metadata_removal_available else "No" }}
+                                            </small>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-4">
+                                <!-- Step 3: Watermarking -->
+                                <div class="pipeline-step {% if result.validation_result.watermark_added %}step-completed{% elif result.validation_result.watermark_error %}step-failed{% else %}step-warning{% endif %}">
+                                    <h6>
+                                        <i class="bi bi-3-circle{% if result.validation_result.watermark_added %}-fill text-success{% elif result.validation_result.watermark_error %} text-danger{% else %} text-warning{% endif %}"></i>
+                                        Watermarking
+                                    </h6>
+                                    <p class="mb-2">
+                                        <span class="badge bg-{% if result.validation_result.watermark_added %}success{% elif result.validation_result.watermark_error %}danger{% else %}warning{% endif %}">
+                                            {% if result.validation_result.watermark_added %}
+                                                COMPLETED
+                                            {% elif result.validation_result.watermark_error %}
+                                                FAILED  
+                                            {% else %}
+                                                SKIPPED
+                                            {% endif %}
+                                        </span>
+                                    </p>
+                                    
+                                    {% if result.validation_result.watermark_added %}
+                                        <div class="success-item">
+                                            <i class="bi bi-check-circle text-success"></i> Red validation watermark applied
+                                        </div>
+                                    {% endif %}
+                                    
+                                    {% if result.validation_result.watermark_error %}
+                                        <div class="threat-item">
+                                            <i class="bi bi-x-circle text-danger"></i> {{ result.validation_result.watermark_error }}
+                                        </div>
+                                    {% endif %}
+                                    
+                                    {% if result.validation_result.pipeline_info %}
+                                        <div class="mt-3">
+                                            <small class="text-muted">
+                                                <strong>Watermark Info:</strong><br>
+                                                Enabled: {{ "Yes" if result.validation_result.pipeline_info.watermarking_enabled else "No" }}<br>
+                                                Available: {{ "Yes" if result.validation_result.pipeline_info.watermarking_available else "No" }}
+                                            </small>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        {% if result.metadata_demo %}
+                        <!-- Metadata Before/After Comparison -->
+                        <div class="mt-4">
+                            <h5><i class="bi bi-arrow-left-right"></i> Metadata Before/After Comparison</h5>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="card h-100">
+                                        <div class="card-header bg-info text-white">
+                                            <h6 class="mb-0"><i class="bi bi-file-earmark-text"></i> Before Metadata Removal</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            {% if result.metadata_demo.before %}
+                                                <div class="metadata-container" style="max-height: 400px; overflow-y: auto;">
+                                                    <div class="table-responsive">
+                                                        <table class="table table-sm table-hover">
+                                                            <thead class="table-light">
+                                                                <tr>
+                                                                    <th style="width: 30%;">Field</th>
+                                                                    <th style="width: 70%;">Value</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {% for key, value in result.metadata_demo.before.items() %}
+                                                                    {% if value %}
+                                                                    <tr>
+                                                                        <td class="text-muted fw-semibold">
+                                                                            <small>{{ key | replace('_', ' ') | title }}</small>
+                                                                        </td>
+                                                                        <td>
+                                                                            <code class="metadata-value-code">{{ value }}</code>
+                                                                        </td>
+                                                                    </tr>
+                                                                    {% endif %}
+                                                                {% endfor %}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                                <div class="mt-3">
+                                                    <span class="badge bg-info">{{ result.metadata_demo.before|length }} metadata fields found</span>
+                                                </div>
+                                            {% else %}
+                                                <div class="text-center text-muted py-4">
+                                                    <i class="bi bi-file-earmark-text fs-1 opacity-50"></i>
+                                                    <p class="mt-2">No metadata found in original file</p>
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="card h-100">
+                                        <div class="card-header bg-{% if result.metadata_demo.success %}success{% else %}warning{% endif %} text-white">
+                                            <h6 class="mb-0"><i class="bi bi-file-earmark-check"></i> After Metadata Removal</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            {% if result.metadata_demo.after %}
+                                                <div class="metadata-container" style="max-height: 400px; overflow-y: auto;">
+                                                    <div class="table-responsive">
+                                                        <table class="table table-sm table-hover">
+                                                            <thead class="table-light">
+                                                                <tr>
+                                                                    <th style="width: 30%;">Field</th>
+                                                                    <th style="width: 70%;">Value</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {% for key, value in result.metadata_demo.after.items() %}
+                                                                    {% if value %}
+                                                                    <tr>
+                                                                        <td class="text-muted fw-semibold">
+                                                                            <small>{{ key | replace('_', ' ') | title }}</small>
+                                                                        </td>
+                                                                        <td>
+                                                                            <code class="metadata-value-code">{{ value }}</code>
+                                                                        </td>
+                                                                    </tr>
+                                                                    {% endif %}
+                                                                {% endfor %}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                                <div class="mt-3">
+                                                    <span class="badge bg-secondary">{{ result.metadata_demo.after|length }} metadata fields remaining</span>
+                                                </div>
+                                            {% else %}
+                                                <div class="text-center text-success py-4">
+                                                    <i class="bi bi-check-circle-fill fs-1 text-success opacity-75"></i>
+                                                    <p class="mt-2 fw-semibold">All metadata successfully removed!</p>
+                                                </div>
+                                            {% endif %}
+                                            
+                                            {% if result.metadata_demo.removed_count > 0 %}
+                                                <div class="mt-3">
+                                                    <div class="alert alert-success">
+                                                        <i class="bi bi-trash"></i> <strong>{{ result.metadata_demo.removed_count }}</strong> metadata fields removed
+                                                    </div>
+                                                </div>
+                                            {% elif result.metadata_demo.removed_count == 0 and result.metadata_demo.before %}
+                                                <div class="mt-3">
+                                                    <div class="alert alert-warning">
+                                                        <i class="bi bi-exclamation-triangle"></i> No metadata was removed
+                                                    </div>
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Summary Stats -->
+                            <div class="card mt-3">
+                                <div class="card-body">
+                                    <div class="row text-center">
+                                        <div class="col-md-3">
+                                            <h5 class="text-primary">{{ result.metadata_demo.before|length }}</h5>
+                                            <small class="text-muted">Original Fields</small>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <h5 class="text-success">{{ result.metadata_demo.removed_count }}</h5>
+                                            <small class="text-muted">Fields Removed</small>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <h5 class="text-secondary">{{ result.metadata_demo.after|length }}</h5>
+                                            <small class="text-muted">Fields Remaining</small>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <h5 class="text-{% if result.metadata_demo.success %}success{% else %}danger{% endif %}">
+                                                {% if result.metadata_demo.success %}✓{% else %}✗{% endif %}
+                                            </h5>
+                                            <small class="text-muted">Operation Status</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        {% if result.metadata_demo and result.metadata_demo.download_id %}
+                        <!-- Download Cleaned File Section -->
+                        <div class="mt-4">
+                            <div class="card border-primary">
+                                <div class="card-header bg-primary text-white">
+                                    <h5 class="mb-0"><i class="bi bi-download"></i> Download Cleaned File</h5>
+                                </div>
+                                <div class="card-body">
+                                    <p class="mb-3">
+                                        <i class="bi bi-shield-check text-success"></i> 
+                                        Your file has been validated and cleaned! Metadata has been successfully removed.
+                                    </p>
+                                    <div class="row align-items-center">
+                                        <div class="col-md-8">
+                                            <h6 class="mb-1">cleaned_{{ result.metadata_demo.original_filename }}</h6>
+                                            <small class="text-muted">
+                                                File size: {{ result.file_size_mb }} MB | 
+                                                Metadata fields removed: {{ result.metadata_demo.removed_count }}
+                                            </small>
+                                        </div>
+                                        <div class="col-md-4 text-end">
+                                            <a href="{{ url_for('download_cleaned_file', download_id=result.metadata_demo.download_id) }}" 
+                                               class="btn btn-success btn-lg">
+                                                <i class="bi bi-download"></i> Download Cleaned File
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <div class="alert alert-info mt-3 mb-0">
+                                        <i class="bi bi-info-circle"></i>
+                                        <strong>Note:</strong> This download link will expire in 24 hours for security purposes.
+                                        The cleaned file will be automatically deleted after download.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="mt-4">
+                            <button class="btn btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#technicalDetails">
+                                <i class="bi bi-gear"></i> Show Technical Details
+                            </button>
+                            <div class="collapse mt-3" id="technicalDetails">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <strong>Raw Pipeline Output</strong>
+                                    </div>
+                                    <div class="card-body">
+                                        <pre class="text-muted small">{{ result.validation_result | tojson(indent=2) }}</pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <!-- Example Files Section -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-lightbulb"></i> Testing Suggestions</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <h6 class="text-success">Safe Files (should pass):</h6>
+                                <ul class="list-unstyled">
+                                    <li><i class="bi bi-file-image"></i> Clean JPEG/PNG images</li>
+                                    <li><i class="bi bi-file-pdf"></i> Standard PDF documents</li>
+                                    <li><i class="bi bi-file-word"></i> Office documents (DOCX, XLSX)</li>
+                                    <li><i class="bi bi-file-text"></i> Plain text files</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-4">
+                                <h6 class="text-warning">Metadata-rich Files:</h6>
+                                <ul class="list-unstyled">
+                                    <li><i class="bi bi-camera"></i> Photos with EXIF data</li>
+                                    <li><i class="bi bi-file-music"></i> MP3 files with ID3 tags</li>
+                                    <li><i class="bi bi-file-pdf"></i> PDFs with author info</li>
+                                    <li><i class="bi bi-file-word"></i> Documents with tracked changes</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-4">
+                                <h6 class="text-danger">Potentially Unsafe:</h6>
+                                <ul class="list-unstyled">
+                                    <li><i class="bi bi-file-binary"></i> Executable files (.exe)</li>
+                                    <li><i class="bi bi-file-code"></i> Script files (.php, .js)</li>
+                                    <li><i class="bi bi-file-zip"></i> ZIP with mixed content</li>
+                                    <li><i class="bi bi-file-x"></i> Polyglot files</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -353,7 +353,7 @@ html, body { height: 100%; }
           <li class="friend-link {% if friend.is_online %}status-online{% else %}status-offline{% endif %}"
               data-user-id="{{ friend.user_id }}"
               data-chat-id="{{ friend.chat_id }}">
-            <img src="{{ url_for('static', filename='uploads/' + friend.profile_pic_url) if friend.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}" class="friend-profile">
+            <img src="{{ url_for('static', filename=friend.profile_pic_url) if friend.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}" class="friend-profile">
             <div style="flex:1">
                 <div class="friend-name">{{ friend.username }}</div>
                 <div class="friend-status">{{ 'Blocked' if friend.is_blocked else ('Online' if friend.is_online else 'Offline') }}</div>

@@ -76,7 +76,7 @@
       <div class="avatar-ring">
         <a href="{{ url_for('view_profile', user_id=friend.user_id) }}" class="text-decoration-none">
           {% if friend.profile_pic_url %}
-            <img src="{{ url_for('static', filename='uploads/' + friend.profile_pic_url) }}"
+            <img src="{{ url_for('static', filename=friend.profile_pic_url) }}"
           {% else %}
             <img src="{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}"
           {% endif %}

@@ -882,7 +882,7 @@
 <div class="profile-container">
     <!-- Profile Header -->
     <div class="profile-header">
-        <img src="{% if profile_user.profile_pic_url %}{{ url_for('static', filename='uploads/' + profile_user.profile_pic_url) }}{% else %}{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}{% endif %}" 
+        <img src="{% if profile_user.profile_pic_url %}{{ url_for('static', filename=profile_user.profile_pic_url) }}{% else %}{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}{% endif %}" 
              alt="Profile Picture" class="profile-avatar" onerror="handleImageError(this)">
         
         <div class="profile-info">
@@ -975,7 +975,7 @@
             <div class="post-list-item" data-list-post-id="{{ post.post_id }}" onclick="openPostModal({{ post.post_id }})">
                 <div class="post-list-header">
                     <div class="post-list-user">
-                        <img src="{% if profile_user.profile_pic_url %}{{ url_for('static', filename='uploads/' + profile_user.profile_pic_url) }}{% else %}{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}{% endif %}" 
+                        <img src="{% if profile_user.profile_pic_url %}{{ url_for('static', filename=profile_user.profile_pic_url) }}{% else %}{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}{% endif %}" 
                             alt="Profile" class="post-list-avatar" onerror="handleImageError(this)">
                         <div>
                             <a href="{{ url_for('view_profile', user_id=user.user_id) }}" class="post-list-username">{{ profile_user.username }}</a>
@@ -1034,7 +1034,7 @@
         <div class="post-modal-sidebar">
             <div class="post-modal-header">
                 <div class="post-modal-user">
-                    <img src="{% if profile_user.profile_pic_url %}{{ url_for('static', filename='uploads/' + profile_user.profile_pic_url) }}{% else %}{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}{% endif %}" 
+                    <img src="{% if profile_user.profile_pic_url %}{{ url_for('static', filename=profile_user.profile_pic_url) }}{% else %}{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}{% endif %}" 
                          alt="Profile" class="post-modal-avatar" onerror="handleImageError(this)">
                     <a href="{{ url_for('view_profile', user_id=user.user_id) }}" class="post-modal-username">{{ profile_user.username }}</a>
                 </div>

@@ -716,7 +716,7 @@
                         <div class="profile-section">
                             <!-- Current Profile Picture -->
                             <div class="current-profile-container">
-                                <img src="{{ url_for('static', filename='uploads/' + current_user.profile_pic_url) if current_user.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}" 
+                                <img src="{{ url_for('static', filename=current_user.profile_pic_url) if current_user.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}" 
                                     alt="Current Profile Picture" 
                                     class="current-profile-pic">
                             </div>

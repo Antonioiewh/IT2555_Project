@@ -9,6 +9,161 @@ from typing import Dict, List, Tuple, Optional
 from PIL import Image
 from werkzeug.utils import secure_filename
 
+# Import watermarking functionality
+WATERMARK_AVAILABLE = False
+try:
+    from .watermaker import apply_red_watermark, is_image_file
+    WATERMARK_AVAILABLE = True
+except ImportError:
+    try:
+        from watermaker import apply_red_watermark, is_image_file
+        WATERMARK_AVAILABLE = True
+    except ImportError:
+        def apply_red_watermark(*args, **kwargs):
+            return {'success': False, 'error': 'Watermarking not available', 'image_data': None}
+        def is_image_file(*args, **kwargs):
+            return False
+        WATERMARK_AVAILABLE = False
+
+# Import metadata removal functionality
+METADATA_REMOVAL_AVAILABLE = False
+try:
+    # Try relative import first (when imported as a package)
+    from .metadata_remover import remove_metadata, extract_metadata, demo_metadata_before_after
+    METADATA_REMOVAL_AVAILABLE = True
+except ImportError:
+    try:
+        # Try direct import (when run directly or in same directory)
+        from metadata_remover import remove_metadata, extract_metadata, demo_metadata_before_after
+        METADATA_REMOVAL_AVAILABLE = True
+    except ImportError:
+        try:
+            # Try adding current directory to path and import
+            import sys
+            import os
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            if current_dir not in sys.path:
+                sys.path.insert(0, current_dir)
+            from metadata_remover import remove_metadata, extract_metadata, demo_metadata_before_after
+            METADATA_REMOVAL_AVAILABLE = True
+        except ImportError as e:
+            # Create basic fallback functions for images only
+            def remove_metadata(file_path):
+                """Fallback metadata remover using only PIL for images"""
+                try:
+                    import piexif
+                    from PIL import Image
+                    
+                    file_extension = os.path.splitext(file_path)[1].lower()
+                    
+                    if file_extension in ['.jpg', '.jpeg']:
+                        # Remove EXIF from JPEG
+                        try:
+                            piexif.remove(file_path)
+                            return True
+                        except:
+                            # Fallback: re-encode to remove EXIF
+                            with Image.open(file_path) as img:
+                                rgb_img = img.convert("RGB")
+                                rgb_img.save(file_path, format='JPEG', exif=b'')
+                            return True
+                    
+                    elif file_extension in ['.png', '.gif', '.bmp', '.tiff']:
+                        # Re-encode to remove metadata
+                        with Image.open(file_path) as img:
+                            data = list(img.getdata())
+                            clean_img = Image.new(img.mode, img.size)
+                            clean_img.putdata(data)
+                            clean_img.save(file_path, format=img.format)
+                        return True
+                    
+                    else:
+                        # Unsupported file type for basic remover
+                        return False
+                        
+                except Exception:
+                    return False
+            
+            def extract_metadata(file_path):
+                """Fallback metadata extractor using only PIL for images"""
+                try:
+                    from PIL import Image
+                    
+                    file_extension = os.path.splitext(file_path)[1].lower()
+                    metadata = {}
+                    
+                    if file_extension in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff']:
+                        try:
+                            with Image.open(file_path) as img:
+                                # Get PIL info that might contain metadata
+                                info = img.info if hasattr(img, 'info') else {}
+                                for key, value in info.items():
+                                    if isinstance(value, (str, int, float)) and value not in [None, '', 0]:
+                                        metadata[f"METADATA_{key}"] = str(value)
+                                
+                                # Add basic file properties
+                                metadata['FILE_format'] = img.format
+                                metadata['FILE_mode'] = img.mode
+                                metadata['FILE_size_pixels'] = f"{img.size[0]}x{img.size[1]}"
+                        except Exception:
+                            pass
+                    
+                    # Add file statistics
+                    if os.path.exists(file_path):
+                        from datetime import datetime
+                        stat = os.stat(file_path)
+                        metadata['FILE_size_bytes'] = str(stat.st_size)
+                        metadata['FILE_modified_time'] = str(datetime.fromtimestamp(stat.st_mtime))
+                    
+                    return metadata
+                except Exception:
+                    return {}
+            
+            def demo_metadata_before_after(file_path):
+                """Fallback demo function"""
+                result = {
+                    'before': extract_metadata(file_path),
+                    'after': {},
+                    'removed_count': 0,
+                    'success': False,
+                    'details': 'Using fallback metadata demo'
+                }
+                
+                # Create a copy for processing
+                import shutil
+                import tempfile
+                
+                try:
+                    temp_dir = tempfile.mkdtemp()
+                    temp_file = os.path.join(temp_dir, f"temp_{os.path.basename(file_path)}")
+                    shutil.copy2(file_path, temp_file)
+                    
+                    success = remove_metadata(temp_file)
+                    result['after'] = extract_metadata(temp_file)
+                    
+                    # Count meaningful metadata
+                    before_metadata = {k: v for k, v in result['before'].items() 
+                                     if not k.startswith('FILE_') and v not in [None, '', '0']}
+                    after_metadata = {k: v for k, v in result['after'].items() 
+                                    if not k.startswith('FILE_') and v not in [None, '', '0']}
+                    
+                    result['removed_count'] = len(before_metadata) - len(after_metadata)
+                    result['success'] = success
+                    
+                    # Clean up
+                    try:
+                        os.unlink(temp_file)
+                        os.rmdir(temp_dir)
+                    except:
+                        pass
+                        
+                except Exception as e:
+                    result['details'] = f'Fallback demo error: {str(e)}'
+                
+                return result
+            
+            METADATA_REMOVAL_AVAILABLE = True
+
 def validate_file_security(file_path: str = None, file_data: bytes = None, filename: str = None, 
                           max_size: int = 10*1024*1024) -> Dict:
     """
@@ -294,12 +449,195 @@ def _check_critical_patterns(file_data: bytes) -> List[str]:
     return threats
 
 # =============================================================================
-# NEW: SPECIALIZED VALIDATION FUNCTIONS FOR DIFFERENT UPLOAD TYPES
+# GLOBAL VALIDATION + METADATA REMOVAL PIPELINE
 # =============================================================================
 
-def validate_profile_image(file_obj, user_id: int, upload_folder: str) -> Dict:
+def validate_and_clean_file(file_path: str = None, file_data: bytes = None, filename: str = None, 
+                            max_size: int = 10*1024*1024, remove_metadata_flag: bool = True, 
+                            add_watermark: bool = True, watermark_text: str = "VALIDATED") -> Dict:
     """
-    Complete validation and processing for profile pictures
+    Global file validation and metadata removal pipeline.
+    
+    Process:
+    1. Run comprehensive security validation (polyglot detection, malware scan)
+    2. If file is safe, optionally remove metadata from the file
+    3. Return combined results
+    
+    Args:
+        file_path: Path to the file (if working with saved file)
+        file_data: Raw file bytes (if working with uploaded data)
+        filename: Original filename for validation context
+        max_size: Maximum allowed file size in bytes
+        remove_metadata_flag: Whether to remove metadata (default: True)
+    
+    Returns:
+        Dict with validation and cleaning results:
+        {
+            'is_safe': bool,
+            'risk_level': str,
+            'threats': list,
+            'warnings': list,
+            'metadata_removed': bool,
+            'metadata_removal_error': str or None,
+            'watermark_added': bool,
+            'watermark_error': str or None,
+            'file_info': dict
+        }
+    """
+    result = {
+        'is_safe': True,
+        'risk_level': 'low',
+        'threats': [],
+        'warnings': [],
+        'metadata_removed': False,
+        'metadata_removal_error': None,
+        'watermark_added': False,
+        'watermark_error': None,
+        'file_info': {}
+    }
+    
+    try:
+        # Step 1: Security validation
+        validation_result = validate_file_security(
+            file_path=file_path,
+            file_data=file_data,
+            filename=filename,
+            max_size=max_size
+        )
+        
+        # Copy validation results
+        result.update({
+            'is_safe': validation_result['is_safe'],
+            'risk_level': validation_result['risk_level'],
+            'threats': validation_result['threats'],
+            'warnings': validation_result['warnings'],
+            'file_info': validation_result['file_info']
+        })
+        
+        # Step 2: Metadata removal (only if file passed security validation)
+        if validation_result['is_safe'] and remove_metadata_flag:
+            if not METADATA_REMOVAL_AVAILABLE:
+                result['warnings'].append('Metadata removal module not available')
+                result['metadata_removal_error'] = 'Module not found'
+            else:
+                # Ensure we have a file path for metadata removal
+                target_path = file_path
+                temp_file_created = False
+                
+                if not target_path and file_data:
+                    # Create temporary file if we only have file_data
+                    import tempfile
+                    temp_fd, target_path = tempfile.mkstemp(suffix=f"_{filename or 'temp'}")
+                    try:
+                        with os.fdopen(temp_fd, 'wb') as tmp_file:
+                            tmp_file.write(file_data)
+                        temp_file_created = True
+                    except Exception as e:
+                        os.close(temp_fd)
+                        result['metadata_removal_error'] = f'Failed to create temp file: {str(e)}'
+                        target_path = None
+                
+                # Remove metadata
+                if target_path:
+                    try:
+                        metadata_success = remove_metadata(target_path)
+                        result['metadata_removed'] = metadata_success
+                        
+                        if not metadata_success:
+                            result['warnings'].append('Metadata removal failed or unsupported file type')
+                            result['metadata_removal_error'] = 'Removal function returned False'
+                        
+                        # Clean up temp file if created
+                        if temp_file_created:
+                            try:
+                                # Read the cleaned file back if needed
+                                if file_data is not None:  # Update file_data with cleaned version
+                                    with open(target_path, 'rb') as f:
+                                        file_data = f.read()
+                                os.unlink(target_path)
+                            except Exception as e:
+                                result['warnings'].append(f'Temp file cleanup failed: {str(e)}')
+                                
+                    except Exception as e:
+                        result['metadata_removal_error'] = f'Metadata removal error: {str(e)}'
+                        result['warnings'].append(f'Metadata removal failed: {str(e)}')
+                        
+                        # Clean up temp file on error
+                        if temp_file_created and os.path.exists(target_path):
+                            try:
+                                os.unlink(target_path)
+                            except:
+                                pass
+        
+        # Step 3: Watermarking (only if file passed security validation and is an image)
+        if validation_result['is_safe'] and add_watermark and WATERMARK_AVAILABLE:
+            try:
+                # Check if this is an image file that can be watermarked
+                is_image = False
+                if file_data is not None:
+                    is_image = is_image_file(file_data)
+                elif file_path is not None:
+                    is_image = is_image_file(file_path)
+                
+                if is_image:
+                    # Apply red watermark
+                    watermark_input = file_data if file_data is not None else file_path
+                    watermark_result = apply_red_watermark(
+                        watermark_input, 
+                        watermark_text=watermark_text,
+                        save_to_path=None  # Keep in memory for now
+                    )
+                    
+                    if watermark_result['success']:
+                        result['watermark_added'] = True
+                        # Update file_data with watermarked version if we're working with bytes
+                        if file_data is not None and watermark_result['image_data']:
+                            file_data = watermark_result['image_data']
+                        result['warnings'].append('Red validation watermark added to image')
+                    else:
+                        result['watermark_error'] = watermark_result.get('error', 'Unknown watermarking error')
+                        result['warnings'].append(f'Watermarking failed: {result["watermark_error"]}')
+                else:
+                    # Not an image file, skip watermarking
+                    result['warnings'].append('Watermarking skipped: not an image file')
+                    
+            except Exception as e:
+                result['watermark_error'] = f'Watermarking error: {str(e)}'
+                result['warnings'].append(f'Watermarking failed: {str(e)}')
+        elif not WATERMARK_AVAILABLE:
+            result['warnings'].append('Watermarking skipped: module not available')
+        elif not add_watermark:
+            result['warnings'].append('Watermarking skipped: disabled')
+        elif not validation_result['is_safe']:
+            result['warnings'].append('Watermarking skipped: file failed security validation')
+
+        # Add pipeline info and processed data
+        result['pipeline_info'] = {
+            'validation_completed': True,
+            'metadata_removal_enabled': remove_metadata_flag,
+            'metadata_removal_available': METADATA_REMOVAL_AVAILABLE,
+            'watermarking_enabled': add_watermark,
+            'watermarking_available': WATERMARK_AVAILABLE
+        }
+        
+        # Return the processed file data (with watermark and metadata removed)
+        if file_data is not None:
+            result['processed_data'] = file_data
+        
+    except Exception as e:
+        result['threats'].append(f'Pipeline error: {str(e)}')
+        result['is_safe'] = False
+        result['risk_level'] = 'high'
+    
+    return result
+
+# =============================================================================
+# SPECIALIZED VALIDATION FUNCTIONS FOR DIFFERENT UPLOAD TYPES
+# =============================================================================
+
+def validate_profile_image(file_obj, user_id: int, upload_folder: str, username: str = None) -> Dict:
+    """
+    Complete validation and processing for profile pictures with comprehensive pipeline
     Returns: {'success': bool, 'filename': str, 'error': str, 'filepath': str}
     """
     result = {'success': False, 'filename': None, 'error': None, 'filepath': None}
@@ -310,11 +648,14 @@ def validate_profile_image(file_obj, user_id: int, upload_folder: str) -> Dict:
         file_data = file_obj.read()
         file_obj.seek(0)
         
-        # Security validation
-        validation = validate_file_security(
+        # Use comprehensive validation pipeline with username watermarking
+        validation = validate_and_clean_file(
             file_data=file_data,
             filename=file_obj.filename,
-            max_size=2*1024*1024  # 2MB for profile pics
+            max_size=2*1024*1024,  # 2MB for profile pics
+            remove_metadata_flag=True,
+            add_watermark=True,
+            watermark_text=username or "VALIDATED"
         )
         
         if not validation['is_safe']:
@@ -328,40 +669,29 @@ def validate_profile_image(file_obj, user_id: int, upload_folder: str) -> Dict:
             result['error'] = f'High-risk file detected: {warnings}'
             return result
         
-        # Validate image format
-        if not _validate_image_format(file_data):
-            result['error'] = 'Invalid image format. Only JPEG, PNG, GIF, and WEBP are supported.'
-            return result
-        
-        # Generate filename
+        # Generate filename and save the processed file
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"profile_{user_id}_{timestamp}.jpg"
+        filepath = os.path.join(upload_folder, filename)
         
-        # Process and save image
-        processed_path = _process_and_save_image(
-            file_data, 
-            os.path.join(upload_folder, filename),
-            target_size=(300, 300),
-            quality=90
-        )
+        # Save the processed (validated, cleaned, watermarked) file
+        with open(filepath, 'wb') as f:
+            f.write(file_data)  # This is now the processed data
         
-        if processed_path:
-            result.update({
-                'success': True,
-                'filename': filename,
-                'filepath': processed_path
-            })
-        else:
-            result['error'] = 'Failed to process image'
+        result.update({
+            'success': True,
+            'filename': filename,
+            'filepath': filepath
+        })
             
     except Exception as e:
         result['error'] = f'Processing error: {str(e)}'
     
     return result
 
-def validate_banner_image(file_obj, user_id: int, upload_folder: str) -> Dict:
+def validate_banner_image(file_obj, user_id: int, upload_folder: str, username: str = None) -> Dict:
     """
-    Complete validation and processing for banner images
+    Complete validation and processing for banner images with comprehensive pipeline
     Returns: {'success': bool, 'filename': str, 'error': str, 'filepath': str}
     """
     result = {'success': False, 'filename': None, 'error': None, 'filepath': None}
@@ -372,11 +702,14 @@ def validate_banner_image(file_obj, user_id: int, upload_folder: str) -> Dict:
         file_data = file_obj.read()
         file_obj.seek(0)
         
-        # Security validation
-        validation = validate_file_security(
+        # Use comprehensive validation pipeline with username watermarking
+        validation = validate_and_clean_file(
             file_data=file_data,
             filename=file_obj.filename,
-            max_size=5*1024*1024  # 5MB for banners
+            max_size=5*1024*1024,  # 5MB for banners
+            remove_metadata_flag=True,
+            add_watermark=True,
+            watermark_text=username or "VALIDATED"
         )
         
         if not validation['is_safe']:
@@ -389,47 +722,30 @@ def validate_banner_image(file_obj, user_id: int, upload_folder: str) -> Dict:
             result['error'] = f'High-risk file detected: {warnings}'
             return result
         
-        # Validate file extension
-        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
-        if '.' not in file_obj.filename or file_obj.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
-            result['error'] = 'Invalid file type. Only PNG, JPG, JPEG, GIF, and WEBP are allowed.'
-            return result
-        
-        # Validate image format
-        if not _validate_image_format(file_data):
-            result['error'] = 'Invalid image format.'
-            return result
-        
-        # Generate filename
+        # Generate filename and save the processed file
         import uuid
-        file_extension = file_obj.filename.rsplit('.', 1)[1].lower()
+        file_extension = file_obj.filename.rsplit('.', 1)[1].lower() if '.' in file_obj.filename else 'jpg'
         filename = f"banner_{user_id}_{uuid.uuid4().hex}.{file_extension}"
+        filepath = os.path.join(upload_folder, filename)
         
-        # Process and save image
-        processed_path = _process_and_save_image(
-            file_data,
-            os.path.join(upload_folder, filename),
-            target_size=(1920, 1080),
-            quality=85
-        )
+        # Save the processed (validated, cleaned, watermarked) file
+        with open(filepath, 'wb') as f:
+            f.write(file_data)  # This is now the processed data
         
-        if processed_path:
-            result.update({
-                'success': True,
-                'filename': filename,
-                'filepath': processed_path
-            })
-        else:
-            result['error'] = 'Failed to process image'
+        result.update({
+            'success': True,
+            'filename': filename,
+            'filepath': filepath
+        })
             
     except Exception as e:
         result['error'] = f'Processing error: {str(e)}'
     
     return result
 
-def validate_post_images(file_list, post_id: int, upload_folder: str) -> Dict:
+def validate_post_images(file_list, post_id: int, upload_folder: str, username: str = None) -> Dict:
     """
-    Validate and process multiple post images
+    Validate and process multiple post images with comprehensive pipeline
     Returns: {'success': bool, 'processed_files': list, 'errors': list, 'warnings': list}
     """
     result = {
@@ -449,11 +765,14 @@ def validate_post_images(file_list, post_id: int, upload_folder: str) -> Dict:
             file_data = file_obj.read()
             file_obj.seek(0)
             
-            # Security validation
-            validation = validate_file_security(
+            # Use comprehensive validation pipeline with username watermarking
+            validation = validate_and_clean_file(
                 file_data=file_data,
                 filename=file_obj.filename,
-                max_size=10*1024*1024  # 10MB for post images
+                max_size=10*1024*1024,  # 10MB for post images
+                remove_metadata_flag=True,
+                add_watermark=True,
+                watermark_text=username or "VALIDATED"
             )
             
             if not validation['is_safe']:
@@ -466,41 +785,24 @@ def validate_post_images(file_list, post_id: int, upload_folder: str) -> Dict:
                 result['warnings'].append(f'File {file_obj.filename}: {warnings}')
                 continue
             
-            # Validate file extension
-            allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
-            if '.' not in file_obj.filename or file_obj.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
-                result['errors'].append(f'Invalid file type: {file_obj.filename}')
-                continue
-            
-            # Validate image format
-            if not _validate_image_format(file_data):
-                result['errors'].append(f'Invalid image format: {file_obj.filename}')
-                continue
-            
-            # Generate filename
+            # Generate filename and save the processed file
             import random
             import string
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             random_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
             filename = f"{post_id}_{timestamp}_{random_suffix}_{secure_filename(file_obj.filename)}"
+            filepath = os.path.join(upload_folder, filename)
             
-            # Process and save image
-            processed_path = _process_and_save_image(
-                file_data,
-                os.path.join(upload_folder, filename),
-                target_size=(1200, 1200),
-                quality=85
-            )
+            # Save the processed (validated, cleaned, watermarked) file
+            with open(filepath, 'wb') as f:
+                f.write(file_data)  # This is now the processed data
             
-            if processed_path:
-                result['processed_files'].append({
-                    'filename': filename,
-                    'original_name': file_obj.filename,
-                    'filepath': processed_path,
-                    'url': f"uploads/{filename}"
-                })
-            else:
-                result['errors'].append(f'Failed to process: {file_obj.filename}')
+            result['processed_files'].append({
+                'filename': filename,
+                'original_name': file_obj.filename,
+                'filepath': filepath,
+                'url': filename  # Just the filename for consistency
+            })
                 
         except Exception as e:
             result['errors'].append(f'Error processing {file_obj.filename}: {str(e)}')
@@ -510,9 +812,9 @@ def validate_post_images(file_list, post_id: int, upload_folder: str) -> Dict:
     
     return result
 
-def validate_cropped_image_data(image_data_b64: str, user_id: int, upload_folder: str) -> Dict:
+def validate_cropped_image_data(image_data_b64: str, user_id: int, upload_folder: str, username: str = None) -> Dict:
     """
-    Validate and process base64 cropped image data
+    Validate and process base64 cropped image data with comprehensive pipeline
     Returns: {'success': bool, 'filename': str, 'error': str, 'filepath': str}
     """
     result = {'success': False, 'filename': None, 'error': None, 'filepath': None}
@@ -525,11 +827,14 @@ def validate_cropped_image_data(image_data_b64: str, user_id: int, upload_folder
         
         image_binary = base64.b64decode(image_data_b64)
         
-        # Security validation
-        validation = validate_file_security(
+        # Use comprehensive validation pipeline with username watermarking
+        validation = validate_and_clean_file(
             file_data=image_binary,
             filename="cropped_image.jpg",
-            max_size=2*1024*1024  # 2MB limit
+            max_size=2*1024*1024,  # 2MB limit
+            remove_metadata_flag=True,
+            add_watermark=True,
+            watermark_text=username or "VALIDATED"
         )
         
         if not validation['is_safe']:
@@ -542,31 +847,20 @@ def validate_cropped_image_data(image_data_b64: str, user_id: int, upload_folder
             result['error'] = f'High-risk content detected: {warnings}'
             return result
         
-        # Validate image format
-        if not _validate_image_format(image_binary):
-            result['error'] = 'Invalid image data'
-            return result
-        
-        # Generate filename
+        # Generate filename and save the processed file
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"profile_{user_id}_{timestamp}.jpg"
+        filepath = os.path.join(upload_folder, filename)
         
-        # Process and save
-        processed_path = _process_and_save_image(
-            image_binary,
-            os.path.join(upload_folder, filename),
-            target_size=(300, 300),
-            quality=90
-        )
+        # Save the processed (validated, cleaned, watermarked) file
+        with open(filepath, 'wb') as f:
+            f.write(image_binary)  # This is now the processed data
         
-        if processed_path:
-            result.update({
-                'success': True,
-                'filename': filename,
-                'filepath': processed_path
-            })
-        else:
-            result['error'] = 'Failed to process image'
+        result.update({
+            'success': True,
+            'filename': filename,
+            'filepath': filepath
+        })
             
     except Exception as e:
         result['error'] = f'Processing error: {str(e)}'

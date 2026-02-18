@@ -622,6 +622,12 @@
                         Security Test
                     </a>
                 </div>
+                <div class="nav-item">
+                    <a href="{{ url_for('file_pipeline_demo') }}" class="nav-link-google">
+                        <i class="bi bi-gear-fill nav-icon"></i>
+                        File Pipeline Demo
+                    </a>
+                </div>
                 
                 <div class="nav-divider"></div>
                 
@@ -844,7 +850,7 @@
             <div style="display: flex; align-items: center;">
                 <div class="user-avatar">
                     {% if current_user.profile_pic_url %}
-                        <img src="{{ url_for('static', filename='uploads/' + current_user.profile_pic_url) }}" 
+                        <img src="{{ url_for('static', filename=current_user.profile_pic_url) }}" 
                              alt="Profile Picture"
                              onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
                         <span class="user-avatar-text" style="display: none;">{{ current_user.username[0].upper() }}</span>

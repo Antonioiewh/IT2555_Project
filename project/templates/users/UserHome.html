@@ -11,7 +11,7 @@
 .hero-banner {
     background: {% if current_user.banner_url %}
         linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.3)), 
-        url('{{ url_for('static', filename='uploads/' + current_user.banner_url) }}') center/cover no-repeat
+        url('{{ url_for('static', filename=current_user.banner_url) }}') center/cover no-repeat
     {% else %}
         linear-gradient(135deg, #667eea 0%, #764ba2 100%)
     {% endif %};
@@ -797,7 +797,7 @@
         </button>
         <div class="hero-content">
             <div class="hero-left">
-                <img src="{{ url_for('static', filename='uploads/' + current_user.profile_pic_url) if current_user.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}" 
+                <img src="{{ url_for('static', filename=current_user.profile_pic_url) if current_user.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}" 
                      alt="{{ current_user.username }}" class="hero-avatar">
                 <div class="hero-user-info">
                     <h2>Welcome back, {{ current_user.username }}!</h2>
@@ -815,7 +815,7 @@
     <div class="main-content">
         <div class="timeline-feed">
             <div class="create-post-prompt" onclick="window.location.href='{{ url_for('create_post') }}'">
-                <img src="{{ url_for('static', filename='uploads/' + current_user.profile_pic_url) if current_user.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}" 
+                <img src="{{ url_for('static', filename=current_user.profile_pic_url) if current_user.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}" 
                      alt="Your avatar" class="create-post-avatar">
                 <div class="create-post-input">What's on your mind, {{ current_user.username }}?</div>
                 <i class="bi bi-camera create-post-icon"></i>
@@ -1023,7 +1023,7 @@ const postsData = {
         content: {{ (post.content | tojson) if post.content else '""' }},
         imageUrl: {{ (post.image_url | tojson) if post.image_url else 'null' }},
         username: {{ post.user.username | tojson }},
-        avatar: {{ post.user.profile_picture | tojson }},
+        avatar: {{ (post.user.profile_picture | tojson) if post.user.profile_picture else 'null' }},
         date: {{ post.relative_date | tojson }},
         likesCount: {{ post.likes_count }},
         isLiked: {{ 'true' if post.is_liked else 'false' }}
@@ -1249,7 +1249,7 @@ function removeBanner() {
 
 function updateBannerDisplay(bannerUrl) {
     const banner = document.querySelector('.hero-banner');
-    const fullUrl = `/static/uploads/${bannerUrl}`;
+    const fullUrl = `{{ url_for('static', filename='') }}${bannerUrl}`;
     banner.style.background = `linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.3)), url('${fullUrl}') center/cover no-repeat`;
 }
 
@@ -1416,7 +1416,7 @@ function createPostElement(post) {
         content: post.content || '',
         imageUrl: post.image_url || null,
         username: post.user.username,
-        avatar: post.user.profile_picture,
+        avatar: post.user.profile_picture || null,
         date: post.relative_date,
         likesCount: post.likes_count,
         isLiked: post.is_liked

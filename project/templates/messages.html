@@ -57,11 +57,18 @@ html, body { height: 100%; }
 .chat-box{ background:var(--surface) !important; border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow); padding:16px !important; flex: 1 1 auto; min-height: 0; max-height: none; overflow:auto; }
 #report-user-btn.btn.btn-warning{ background:#fbbc04; color:#1f2937; border:none; }
 #report-user-btn.btn.btn-warning:hover{ filter:brightness(.96); }
-.composer-previews{ display:none; gap:8px; padding:8px; border:1px dashed #e5e7eb; border-radius:10px; margin:8px 0; flex-wrap:wrap; }
-.preview-item{ position:relative; display:flex; align-items:center; gap:8px; background:#f8fafc; border:1px solid #e5e7eb; border-radius:10px; padding:6px 8px; }
-.preview-item img{ width:56px; height:56px; object-fit:cover; border-radius:8px; }
-.preview-remove{ position:absolute; top:-8px; right:-8px; width:22px; height:22px; border:none; border-radius:50%; background:#ef4444; color:#fff; font-size:14px; cursor:pointer; }
-.preview-meta{ font-size:12px; color:#6b7280; }
+
+.composer-previews {display: none;gap: 12px;padding: 12px 16px;background: #f8fafc;border-top: 1px solid #e2e8f0;border-bottom: 1px solid #e2e8f0;overflow-x: auto;white-space: nowrap;animation: slideUp 0.2s ease-out;}
+@keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.preview-card {position: relative;display: inline-flex;align-items: center;gap: 10px;background: #fff;padding: 8px 12px;border-radius: 12px;border: 1px solid #cbd5e1;box-shadow: 0 2px 5px rgba(0,0,0,0.05);min-width: 140px;max-width: 200px;}
+.preview-icon {width: 36px; height: 36px;border-radius: 8px;object-fit: cover;background: #e0f2fe;color: #0284c7;display: flex; align-items: center; justify-content: center;}
+.preview-info {display: flex; flex-direction: column;overflow: hidden;}
+.preview-name {font-size: 13px; font-weight: 600; color: #334155;text-overflow: ellipsis; overflow: hidden; white-space: nowrap;}
+.preview-status {font-size: 11px; color: #64748b;display: flex; align-items: center; gap: 4px;}
+.preview-remove {position: absolute; top: -6px; right: -6px;width: 20px; height: 20px;background: #ef4444; color: #fff;border-radius: 50%; border: 2px solid #fff;display: flex; align-items: center; justify-content: center;cursor: pointer; font-size: 12px;box-shadow: 0 2px 4px rgba(0,0,0,0.1);}
+/* Loading Bar / Scanner State */
+.preview-loader {position: absolute; bottom: 0; left: 0; height: 3px; background: #22c55e;width: 0%; transition: width 0.3s; border-radius: 0 0 12px 12px;}
+
 .msg-image{ max-width:min(60vw, 480px); max-height:360px; border-radius:12px; display:block; cursor: pointer; }
 .msg-video{ max-width:min(60vw, 480px); max-height:360px; border-radius:12px; }
 .attachment-card{ display:flex; align-items:center; gap:10px; background:rgba(255,255,255,.72); border-radius:12px; padding:10px; }
@@ -349,6 +356,53 @@ html, body { height: 100%; }
 .msg-context-menu .ctx-item:hover { background: #f5f7fb; }
 .icon-btn.sm { width: 28px; height: 28px; opacity: 0; transition: 0.2s; }
 .friend-link:hover .icon-btn.sm { opacity: 1; }
+.message-bubble.virus-alert {
+    background: #fff5f5 !important;
+    border: 1px solid #fed7d7;
+    border-left: 4px solid #e53e3e;
+    color: #c53030 !important;
+    padding: 8px 12px;
+    min-width: 260px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.virus-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.virus-icon-box {
+    color: #e53e3e;
+    display: flex;
+    align-items: center;
+}
+
+.virus-title {
+    font-weight: 700;
+    font-size: 13px;
+    color: #9b2c2c;
+}
+
+.virus-body {
+    font-size: 13px;
+    color: #2d3748;
+    background: rgba(255,255,255,0.6);
+    padding: 6px;
+    border-radius: 6px;
+    font-family: monospace;
+}
+
+.virus-footer {
+    font-size: 11px;
+    color: #e53e3e;
+    opacity: 0.8;
+    align-self: flex-end; /* Pushes timestamp to bottom right inside bubble */
+    margin-top: 4px;
+}
 </style>
 
 <div class="main-messages-wrapper" id="main-interface">
@@ -462,18 +516,18 @@ html, body { height: 100%; }
         <div style="padding:12px;">
           <!-- Images Section -->
           <div style="margin-bottom:16px;">
-            <button id="images-btn" class="btn btn-outline-secondary w-100" style="border-radius:12px; font-size:14px;">
-              <span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">image</span>
-              Images <span id="images-count" class="badge text-bg-light ms-auto">0</span>
+            <button id="images-btn" class="btn btn-outline-secondary w-100" onclick="openMediaGallery('images')">
+                <span class="material-icons" style="font-size:18px; margin-right:6px;">image</span>
+                Media <span id="images-count" class="badge text-bg-light ms-auto">0</span>
             </button>
             <div id="options-images" style="margin-top:8px; display:none;"></div>
           </div>
 
           <!-- Links Section -->
           <div style="margin-bottom:16px;">
-            <button id="links-btn" class="btn btn-outline-secondary w-100" style="border-radius:12px; font-size:14px;">
-              <span class="material-icons" style="font-size:18px; margin-right:6px; vertical-align:middle;">link</span>
-              Links <span id="links-count" class="badge text-bg-light ms-auto">0</span>
+            <button id="links-btn" class="btn btn-outline-secondary w-100" onclick="openMediaGallery('links')">
+                <span class="material-icons" style="font-size:18px; margin-right:6px;">link</span>
+                Links <span id="links-count" class="badge text-bg-light ms-auto">0</span>
             </button>
             <div id="options-links" style="margin-top:8px; display:none;"></div>
           </div>
@@ -585,6 +639,19 @@ html, body { height: 100%; }
       <button id="confirm-modal-yes" class="btn btn-danger">Continue</button>
     </div>
   </div>
+</div>
+
+<div id="media-gallery-modal" class="chat-modal" style="display:none; z-index:3000;">
+    <div class="chat-modal-content" style="height: 80vh; display:flex; flex-direction:column;">
+        <div class="chat-modal-header">
+            <div class="chat-modal-title" id="gallery-title">Media</div>
+            <button class="chat-modal-close" onclick="closeMediaGallery()">✕</button>
+        </div>
+        <div class="chat-modal-body" style="flex:1; overflow-y:auto; background:#f0f2f5; padding:16px;">
+            <div id="gallery-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap:8px;">
+                </div>
+        </div>
+    </div>
 </div>
 
 <div id="key-setup-modal" class="chat-modal" style="display:none;">
@@ -1256,11 +1323,22 @@ window.addEventListener('DOMContentLoaded', () => {
 // ==========================================
 // 4. CHAT LOGIC
 // ==========================================
+function resolveUrl(url) {
+    if (!url) return '';
+    if (url.startsWith('https')) return url; 
+    
+    return url.startsWith('/') ? url : '/' + url; 
+}
 
 document.getElementById('chat-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!currentChatId) { showToast("Select a chat", "warn"); return; }
     
+    const submitBtn = document.getElementById('chat-send-btn');
+    const input = document.getElementById('chat-input');
+    const text = input.value.trim();
+
+
     // Auto-init if missing
     if (!myKeys.public) {
         console.log("Keys missing on send. Retrying init...");
@@ -1270,9 +1348,6 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
             return;
         }
     }
-
-    const input = document.getElementById('chat-input');
-    const text = input.value.trim();
 
     // 1. Get Friend Key
     const friendId = document.querySelector('.friend-link.active').dataset.userId;
@@ -1293,26 +1368,64 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
     }
 
     // 2. Attachments
-    const attachmentsToSend = [...pendingAttachments];
-    for (const item of attachmentsToSend) {
-        try {
-            const fd = new FormData();
-            fd.append('file', item.file);
-            fd.append('csrf_token', csrfToken);
-            const res = await fetch('/upload_message_attachment', {method:'POST', body:fd, headers:{'X-CSRFToken':csrfToken}});
-            const j = await res.json();
-            if (j.ok) {
-                const payload = JSON.stringify({ type:'attachment', url: j.url, name: j.name, kind: j.kind, size: j.size });
-                const enc = await CryptoManager.encryptMessage(payload, friendKey, myKeys.public);
-                socket.emit('send_message', { chat_id: Number(currentChatId), ...enc, expires_in: currentDmTimer});
-                ensureChatIndexes(currentChatId);
-                chatFilesIndex.get(String(currentChatId)).push({type:'attachment', ...j});
-            }
-        } catch(err) {}
-    }
-    pendingAttachments.length = 0;
-    renderComposerPreviews();
+    if (pendingAttachments.length > 0) {
+        // Lock UI during scan
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="material-icons spin" style="font-size:16px">sync</span> Sending...';
+        
+        
+        // Process each file
+        for (const item of pendingAttachments) {
+            const statusEl = document.getElementById(`status-${item.id}`);
+            const loaderEl = document.getElementById(`loader-${item.id}`);
 
+            if(statusEl) statusEl.innerHTML = '<span class="material-icons" style="font-size:10px">shield</span> Scanning...';
+            if(loaderEl) loaderEl.style.width = '60%'; // Fake progress to start
+
+
+            try {
+                const fd = new FormData();
+                fd.append('file', item.file);
+                fd.append('csrf_token', csrfToken);
+                
+                // Upload & Scan
+                const res = await fetch('/upload_message_attachment', {
+                    method: 'POST', 
+                    body: fd, 
+                    headers: {'X-CSRFToken': csrfToken}
+                });
+
+                if(loaderEl) loaderEl.style.width = '100%';
+                
+                // Check specifically for Virus (406) or Success
+                if (res.status === 406) {
+                    const errData = await res.json();
+                    // Show red bubble locally
+                    appendVirusMessage(item.file.name, errData.error || "Malicious Content Detected");
+                } else {
+                    const j = await res.json();
+                    if (j.ok) {
+                        // Safe: Send Encrypted Metadata
+                        const payload = JSON.stringify({ type:'attachment', url: j.url, name: j.name, kind: j.kind, size: j.size });
+                        const enc = await CryptoManager.encryptMessage(payload, friendKey, myKeys.public);
+                        socket.emit('send_message', { chat_id: Number(currentChatId), ...enc, expires_in: currentDmTimer});
+                        
+                        ensureChatIndexes(currentChatId);
+                        chatFilesIndex.get(String(currentChatId)).push({type:'attachment', ...j});
+                    }
+                }
+            } catch(err) {
+                console.error("Upload error:", err);
+                showToast(`Failed to upload ${item.file.name}`, "error");
+            }
+        }
+        pendingAttachments.length = 0;
+        renderComposerPreviews();
+        submitBtn.disabled = false;
+        
+        submitBtn.innerHTML = '<span class="material-icons" style="font-size:18px;vertical-align:middle;margin-right:6px;">send</span> Send';
+        // Reset file input so same file can be selected again if needed
+    }
     // 3. Text
     if (text) {
         try {
@@ -1662,8 +1775,27 @@ function appendMessage(who, text, time, msgId, isDeleted = false, expiresAt = nu
                     </div>`;
             } 
             else if (obj.type === 'attachment') {
-                content = `<div class="attachment-card"><span class="material-icons">description</span> ${obj.name} <a href="${obj.url}" download class="btn btn-sm btn-light">Download</a></div>`;
-                if(obj.kind === 'image') content = `<img src="${obj.url}" class="msg-image" onclick="openImageViewer('${obj.url}')">`;
+                const safeUrl = resolveUrl(obj.url);
+                // ROBUST IMAGE CHECK: Check 'kind' OR file extension
+                const isImg = (obj.kind === 'image') || /\.(jpg|jpeg|png|gif|webp)$/i.test(obj.name);
+                
+                if(isImg) {
+                    // Render as Image
+                    content = `<img src="${obj.url}" class="msg-image" onclick="openImageViewer('${obj.url}')" style="max-width:300px; border-radius:12px; cursor:pointer;">`;
+                } else {
+                    // Render as File Card
+                    content = `
+                    <div class="attachment-card">
+                        <span class="material-icons">description</span> 
+                        <div style="flex:1; overflow:hidden;">
+                            <div class="attachment-name" style="text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${obj.name}</div>
+                            <div class="attachment-meta">${formatBytes(obj.size || 0)}</div>
+                        </div>
+                        <a href="${obj.url}" download class="btn btn-sm btn-light">
+                            <span class="material-icons" style="font-size:16px">download</span>
+                        </a>
+                    </div>`;
+                }
             }
         } catch(e){}
     }
@@ -1698,6 +1830,7 @@ function appendMessage(who, text, time, msgId, isDeleted = false, expiresAt = nu
         }
 
         bubble.innerHTML = `${menuHtml}<div class="message-text">${content}</div><div class="message-time">${time}</div>`;
+        div.appendChild(bubble);
 
         // Timer Logic
         if (expiresAt) {
@@ -1726,21 +1859,137 @@ function appendMessage(who, text, time, msgId, isDeleted = false, expiresAt = nu
     chatBox.scrollTop = chatBox.scrollHeight;
 }
     
-// 7. COMPOSER PREVIEWS & ATTACHMENTS
+// ==========================================
+// 7. ATTACHMENT HANDLER
+// ==========================================
+
+function openMediaGallery(type) {
+    const modal = document.getElementById('media-gallery-modal');
+    const grid = document.getElementById('gallery-grid');
+    const title = document.getElementById('gallery-title');
+    
+    // Get Data
+    const key = String(currentChatId || '');
+    const files = chatFilesIndex.get(key) || [];
+    const links = Array.from(chatLinksIndex.get(key) || []);
+    
+    grid.innerHTML = '';
+    modal.style.display = 'flex';
+
+    if (type === 'images') {
+        title.innerText = "Photos & Videos";
+        const images = files.filter(f => f.kind === 'image'); // Filter images
+        
+        if (images.length === 0) {
+            grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; color:#888; padding:20px;">No media found</div>';
+        } else {
+            images.forEach(f => {
+                const safeUrl = resolveUrl(f.url);
+                const item = document.createElement('div');
+                item.style.cssText = "position:relative; padding-top:100%; cursor:pointer; border-radius:8px; overflow:hidden; background:#e0e0e0;";
+                item.innerHTML = `<img src="${f.url}" style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover;">`;
+                item.onclick = () => openImageViewer(f.url);
+                grid.appendChild(item);
+            });
+        }
+    } 
+    else if (type === 'links') {
+        title.innerText = "Shared Links";
+        grid.style.display = 'flex';
+        grid.style.flexDirection = 'column';
+        
+        if (links.length === 0) {
+            grid.innerHTML = '<div style="text-align:center; color:#888; padding:20px;">No links shared</div>';
+        } else {
+            links.forEach(link => {
+                const item = document.createElement('div');
+                item.style.cssText = "padding:12px; background:white; border-radius:8px; margin-bottom:8px; word-break:break-all;";
+                item.innerHTML = `<a href="${link}" target="_blank" style="text-decoration:none; color:#1a73e8; display:flex; align-items:center; gap:8px;"><span class="material-icons">link</span> ${link}</a>`;
+                grid.appendChild(item);
+            });
+        }
+    }
+}
+
+function closeMediaGallery() {
+    document.getElementById('media-gallery-modal').style.display = 'none';
+    // Reset grid style for next time
+    document.getElementById('gallery-grid').style.display = 'grid'; 
+}
+
+function appendVirusMessage(filename, reason) {
+    const chatBox = document.getElementById('chat-box');
+    const div = document.createElement('div');
+    div.className = 'message-row me'; 
+    
+    div.innerHTML = `
+        <div class="message-bubble virus-alert">
+            <div class="virus-header">
+                <div class="virus-icon-box">
+                    <span class="material-icons">gpp_bad</span>
+                </div>
+                <div class="virus-title">Security Threat Blocked</div>
+            </div>
+            <div class="virus-body">
+                File: ${filename}<br>
+                Reason: ${reason}
+            </div>
+            <div class="virus-footer">
+                ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+            </div>
+        </div>
+    `;
+    
+    chatBox.appendChild(div);
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+
 document.getElementById('attach-btn').addEventListener('click', () => document.getElementById('attachment-input').click());
 document.getElementById('attachment-input').addEventListener('change', (e) => {
     for (const f of e.target.files) {
-        pendingAttachments.push({ id: Math.random(), file: f, kind: 'file' });
+        pendingAttachments.push({ 
+            id: Math.random(), 
+            file: f,
+             
+            status:'pending'
+        });
     }
     renderComposerPreviews();
     e.target.value = '';
 });
-function renderComposerPreviews(){
-    const el = document.getElementById('composer-previews');
-    if(!pendingAttachments.length) { el.style.display='none'; return; }
-    el.style.display='flex';
-    el.innerHTML = pendingAttachments.map(a => `<div class="preview-item">${a.file.name} <button onclick="removeAttach(${a.id})">x</button></div>`).join('');
+function renderComposerPreviews() {
+    const container = document.getElementById('composer-previews');
+    
+    if (pendingAttachments.length === 0) {
+        container.style.display = 'none';
+        return;
+    }
+    
+    container.style.display = 'flex';
+    container.innerHTML = pendingAttachments.map(item => {
+        const isImage = item.file.type.startsWith('image/');
+        const iconHtml = isImage 
+            ? `<img src="${URL.createObjectURL(item.file)}" class="preview-icon">`
+            : `<div class="preview-icon"><span class="material-icons">description</span></div>`;
+
+        return `
+            <div class="preview-card" id="preview-${item.id}">
+                ${iconHtml}
+                <div class="preview-info">
+                    <span class="preview-name">${item.file.name}</span>
+                    <span class="preview-status" id="status-${item.id}">
+                        ${formatBytes(item.file.size)}
+                    </span>
+                </div>
+                <div class="preview-remove" onclick="removeAttach(${item.id})">
+                    <span class="material-icons" style="font-size:14px">close</span>
+                </div>
+                <div class="preview-loader" id="loader-${item.id}"></div>
+            </div>
+        `;
+    }).join('');
 }
+
 window.removeAttach = (id) => {
     const idx = pendingAttachments.findIndex(x => x.id === id);
     if(idx >= 0) pendingAttachments.splice(idx, 1);

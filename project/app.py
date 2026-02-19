@@ -709,11 +709,11 @@ def add_watermark_overlay(input_image_path, output_image_path, watermark_text):
 # --- Cleanup Functions ---
 def cleanup_old_downloads():
     """
-    Clean up old downloaded files from the downloads directory
+    Clean up old downloaded files from the clean/posts directory
     This function should be called periodically to prevent disk space issues
     """
     try:
-        downloads_dir = os.path.join(os.path.dirname(__file__), 'static', 'downloads')
+        downloads_dir = os.path.join(os.path.dirname(__file__), 'static', 'clean', 'posts')
         if not os.path.exists(downloads_dir):
             return
         
@@ -1044,11 +1044,8 @@ def upload_banner():
         current_user.banner_url = f"clean/banner/{safe_filename}"
         db.session.commit()
         
-        app.logger.info(f"User {current_user.user_id} successfully uploaded banner through full pipeline: {safe_filename}")
-        if validation_result['metadata_removed']:
-            app.logger.info(f"Metadata removed from banner for user {current_user.user_id}")
-        if validation_result['watermark_added']:
-            app.logger.info(f"Username watermark added to banner for user {current_user.user_id}")
+        # Log pipeline results (no verbose messages - not demo mode)
+        app.logger.info(f"Banner upload processed: user_id={current_user.user_id}, watermark={validation_result['watermark_added']}, metadata_removed={validation_result['metadata_removed']}")
         
         return jsonify({
             'success': True,
@@ -3832,11 +3829,8 @@ def upload_message_attachment():
         
         rel_path = f"clean/chat/{safe_filename}"
         
-        app.logger.info(f"Message attachment processed through full pipeline for user {current_user.user_id}: {safe_filename}")
-        if validation_result['metadata_removed']:
-            app.logger.info(f"Metadata removed from message attachment for user {current_user.user_id}")
-        if validation_result['watermark_added']:
-            app.logger.info(f"Username watermark added to message attachment for user {current_user.user_id}")
+        # Log pipeline results (no verbose messages - not demo mode)
+        app.logger.info(f"Message attachment processed: user_id={current_user.user_id}, watermark={validation_result['watermark_added']}, metadata_removed={validation_result['metadata_removed']}")
         
         return jsonify(
             ok=True,
@@ -4134,14 +4128,13 @@ def create_post():
                         )
                         
                         if validation_result['is_safe']:
-                            # Generate secure filename and save processed file
-                            clean_posts_dir = os.path.join(current_app.root_path, 'static', 'clean', 'posts')
+                            # Generate secure filename for processed file
+                            clean_posts_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'posts')
                             os.makedirs(clean_posts_dir, exist_ok=True)
                             
-                            filename = secure_filename(image_file.filename)
                             timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-                            name_part, ext_part = os.path.splitext(filename)
-                            safe_filename = f"clean_post_{new_post.post_id}_{current_user.user_id}_{timestamp}_{name_part[:30]}{ext_part}"
+                            file_ext = os.path.splitext(image_file.filename)[1].lower() or '.jpg'
+                            safe_filename = f"post_{new_post.post_id}_{current_user.user_id}_{timestamp}{file_ext}"
                             
                             upload_path = os.path.join(clean_posts_dir, safe_filename)
                             
@@ -4153,22 +4146,19 @@ def create_post():
                             # Create PostImage record
                             post_image = PostImage(
                                 post_id=new_post.post_id,
-                                image_url=f"clean/posts/{safe_filename}",  # Store path relative to static folder
+                                image_url=f"uploads/posts/{safe_filename}",
                                 order_index=1
                             )
                             db.session.add(post_image)
                             
-                            app.logger.info(f"Post image processed through full pipeline for post {new_post.post_id}: {safe_filename}")
-                            if validation_result['metadata_removed']:
-                                app.logger.info(f"Metadata removed from post image for post {new_post.post_id}")
-                            if validation_result['watermark_added']:
-                                app.logger.info(f"Username watermark added to post image for post {new_post.post_id}")
+                            # Log pipeline results (no flash messages - not demo mode)
+                            app.logger.info(f"Post image processed: post_id={new_post.post_id}, watermark={validation_result['watermark_added']}, metadata_removed={validation_result['metadata_removed']}")
                             
                         else:
                             # Security validation failed - log errors but continue with post creation
                             threats_msg = '; '.join(validation_result['threats'][:2])
                             app.logger.warning(f"Post image failed validation for post {new_post.post_id}: {threats_msg}")
-                            flash('Post created but image upload failed security validation: ' + threats_msg, 'warning')
+                            flash('Post created but image upload failed security validation.', 'warning')
                         
                     except Exception as img_error:
                         app.logger.error(f"Error processing post image for post {new_post.post_id}: {str(img_error)}")
@@ -4579,11 +4569,8 @@ def edit_profile():
                     
                     current_user.profile_pic_url = f"clean/profile_pictures/{safe_filename}"
                     
-                    app.logger.info(f"User {current_user.user_id} updated profile picture through full pipeline: {safe_filename}")
-                    if validation_result['metadata_removed']:
-                        app.logger.info(f"Metadata removed from profile picture for user {current_user.user_id}")
-                    if validation_result['watermark_added']:
-                        app.logger.info(f"Username watermark added to profile picture for user {current_user.user_id}")
+                    # Log pipeline results (no verbose messages - not demo mode)
+                    app.logger.info(f"Profile picture processed: user_id={current_user.user_id}, watermark={validation_result['watermark_added']}, metadata_removed={validation_result['metadata_removed']}")
                         
                 except Exception as img_error:
                     app.logger.error(f"Error processing profile image for user {current_user.user_id}: {str(img_error)}")
@@ -5056,8 +5043,8 @@ def file_pipeline_demo():
             import os
             import uuid
             
-            # Create downloads directory if it doesn't exist
-            downloads_dir = os.path.join(app.root_path, 'static', 'downloads')
+            # Create clean/posts directory if it doesn't exist (following file structure)
+            downloads_dir = os.path.join(app.root_path, 'static', 'clean', 'posts')
             os.makedirs(downloads_dir, exist_ok=True)
             
             # Save file temporarily for metadata extraction demo
@@ -5072,27 +5059,69 @@ def file_pipeline_demo():
                 file_data = file.read()
                 file.seek(0)
                 
-                # Run the pipeline
+                # Check if this is an image file for before/after display
+                is_image = False
+                file_ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+                if file_ext in ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp']:
+                    is_image = True
+                
+                # Save original image for before/after comparison (if it's an image)
+                original_image_id = None
+                original_image_url = None
+                if is_image:
+                    original_image_id = str(uuid.uuid4())
+                    original_filename = f"original_{original_image_id}_{secure_filename(file.filename)}"
+                    original_path = os.path.join(downloads_dir, original_filename)
+                    
+                    # Save original file
+                    with open(original_path, 'wb') as f:
+                        f.write(file_data)
+                    
+                    original_image_url = url_for('serve_pipeline_image', filename=original_filename)
+                    
+                    # Store in session for cleanup
+                    session[f'original_image_{original_image_id}'] = {
+                        'filepath': original_path,
+                        'created_at': datetime.now().timestamp()
+                    }
+                
+                # Run the pipeline (enable OCR for demo)
                 pipeline_result = validate_and_clean_file(
                     file_data=file_data,
                     filename=file.filename,
                     max_size=16*1024*1024,  # 16MB max for demo
                     remove_metadata_flag=True,
                     add_watermark=True,  # Enable watermarking step
-                    watermark_text=current_user.username  # Use current user's username
+                    watermark_text=current_user.username,  # Use current user's username
+                    enable_ocr=True  # Enable OCR for demo showcase
                 )
+                
+                # Remove processed_data from result (bytes aren't JSON serializable for template)
+                # We've already used it if needed, so safe to remove for display
+                pipeline_result.pop('processed_data', None)
                 
                 # Run metadata demo (before/after comparison) and create cleaned file
                 metadata_demo = None
+                cleaned_image_url = None
                 
                 try:
-                    # Call the updated demo function with downloads directory
-                    metadata_demo = demo_metadata_before_after(temp_path, downloads_dir, current_user.username)
+                    # Call the updated demo function with downloads directory and original filename
+                    metadata_demo = demo_metadata_before_after(
+                        temp_path, 
+                        downloads_dir, 
+                        current_user.username,
+                        original_filename=file.filename
+                    )
                     
                     # If file is safe and metadata demo was successful and produced a download
                     if (pipeline_result['is_safe'] and 
                         metadata_demo.get('success', False) and 
                         metadata_demo.get('download_id')):
+                        
+                        # Get cleaned image URL for display
+                        if is_image and metadata_demo.get('cleaned_file_path'):
+                            cleaned_filename = os.path.basename(metadata_demo['cleaned_file_path'])
+                            cleaned_image_url = url_for('serve_pipeline_image', filename=cleaned_filename)
                         
                         # Store download info in session for security
                         session[f'download_{metadata_demo["download_id"]}'] = {
@@ -5119,7 +5148,10 @@ def file_pipeline_demo():
                     'validation_result': pipeline_result,
                     'metadata_demo': metadata_demo,
                     'md5_hash': pipeline_result.get('file_info', {}).get('md5_hash', 'N/A'),
-                    'file_type': pipeline_result.get('file_info', {}).get('expected_type', 'Unknown')
+                    'file_type': pipeline_result.get('file_info', {}).get('expected_type', 'Unknown'),
+                    'is_image': is_image,
+                    'original_image_url': original_image_url,
+                    'cleaned_image_url': cleaned_image_url
                 }
                 
                 # Add human-readable status
@@ -5218,6 +5250,33 @@ def download_cleaned_file(download_id):
         app.logger.error(f'Download error: {str(e)}')
         flash('Error downloading file', 'error')
         return redirect(url_for('admin.file_pipeline_demo'))
+
+@app.route('/admin/pipeline_image/<path:filename>')
+@admin_required
+def serve_pipeline_image(filename):
+    """
+    Serve pipeline demo images with proper authorization
+    """
+    try:
+        # Build the full path
+        image_dir = os.path.join(app.root_path, 'static', 'clean', 'posts')
+        file_path = os.path.join(image_dir, filename)
+        
+        # Security: Ensure the file is within the allowed directory
+        if not os.path.abspath(file_path).startswith(os.path.abspath(image_dir)):
+            abort(403)
+        
+        # Check if file exists
+        if not os.path.exists(file_path):
+            app.logger.error(f'Pipeline image not found: {file_path}')
+            abort(404)
+        
+        # Serve the file
+        return send_file(file_path, mimetype='image/jpeg')
+        
+    except Exception as e:
+        app.logger.error(f'Error serving pipeline image: {str(e)}')
+        abort(500)
 
 @app.route('/admin/create_support_agent', methods=['GET', 'POST'])
 @admin_required  

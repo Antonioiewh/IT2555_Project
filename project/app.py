@@ -11,6 +11,7 @@ import base64
 import cbor2
 import pyotp
 import qrcode
+import bleach
 from io import BytesIO
 from datetime import datetime, timedelta
 from functools import wraps
@@ -64,7 +65,7 @@ from models import (
     db, User, Role, Permission, Event, EventParticipant, Post, PostImage, PostLike, PostUserPermission,
     Notification, Report, Chat, ChatParticipant, Message, 
     Friendship, AdminAction, UserLog, ModSecLog, ErrorLog, 
-    WebAuthnCredential, user_role_assignments, Event, FriendChatMap, BlockedUser
+    WebAuthnCredential, user_role_assignments, Event, FriendChatMap, BlockedUser, SupportAgent, UserChatLock
 )
 
 # Decorators
@@ -93,7 +94,10 @@ from user_actions import (
 )
 
 # File validation
-from validators_py.file_validate import validate_file_security, scan_upload,validate_banner_image, clean_old_file,validate_post_images,validate_cropped_image_data, clean_old_file
+from validators_py.file_validate import validate_file_security, scan_upload, validate_banner_image, clean_old_file, validate_post_images, validate_cropped_image_data, validate_and_clean_file, demo_metadata_before_after
+
+# Metadata removal
+from validators_py.metadata_remover import remove_metadata
 
 # Message validators
 from validators_py.message_validate import validate_attachment, save_attachment
@@ -532,6 +536,46 @@ def register_error_handlers(app):
         flash('Security violation detected. Please log in again.', 'error')
         return redirect(url_for('login'))
 
+def _get_profile_pic_url(profile_pic_url):
+    """Helper function to get the correct profile picture URL for both old and new file structures"""
+    if not profile_pic_url:
+        return url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp')
+    
+    # If it already contains a path separator, it's the full path
+    if '/' in profile_pic_url:
+        return url_for('static', filename=profile_pic_url)
+    else:
+        # Legacy filename only - try clean folder first, then uploads
+        clean_path = f'clean/profile_pictures/{profile_pic_url}'
+        uploads_path = f'uploads/{profile_pic_url}'
+        
+        # Check if clean version exists
+        clean_full_path = os.path.join(current_app.static_folder, 'clean', 'profile_pictures', profile_pic_url)
+        if os.path.exists(clean_full_path):
+            return url_for('static', filename=clean_path)
+        else:
+            return url_for('static', filename=uploads_path)
+
+def _get_banner_url(banner_url):
+    """Helper function to get the correct banner URL for both old and new file structures"""
+    if not banner_url:
+        return None
+    
+    # If it already contains a path separator, it's the full path
+    if '/' in banner_url:
+        return url_for('static', filename=banner_url)
+    else:
+        # Legacy filename only - try clean folder first, then uploads
+        clean_path = f'clean/banner/{banner_url}'
+        uploads_path = f'uploads/{banner_url}'
+        
+        # Check if clean version exists
+        clean_full_path = os.path.join(current_app.static_folder, 'clean', 'banner', banner_url)
+        if os.path.exists(clean_full_path):
+            return url_for('static', filename=clean_path)
+        else:
+            return url_for('static', filename=uploads_path)
+
 # --- watermark functions ---
 def apply_bottom_right_overlay_bytes(input_image_path, watermark_text):
     """
@@ -662,6 +706,38 @@ def add_watermark_overlay(input_image_path, output_image_path, watermark_text):
         shutil.copy(input_image_path, output_image_path) 
 
 
+# --- Cleanup Functions ---
+def cleanup_old_downloads():
+    """
+    Clean up old downloaded files from the downloads directory
+    This function should be called periodically to prevent disk space issues
+    """
+    try:
+        downloads_dir = os.path.join(os.path.dirname(__file__), 'static', 'downloads')
+        if not os.path.exists(downloads_dir):
+            return
+        
+        current_time = datetime.now().timestamp()
+        max_age = 24 * 60 * 60  # 24 hours in seconds
+        
+        for filename in os.listdir(downloads_dir):
+            if filename == '.gitignore':
+                continue
+                
+            file_path = os.path.join(downloads_dir, filename)
+            try:
+                # Check file age
+                file_modified_time = os.path.getmtime(file_path)
+                if current_time - file_modified_time > max_age:
+                    os.unlink(file_path)
+                    app.logger.info(f"Cleaned up old download file: {filename}")
+            except Exception as e:
+                app.logger.error(f"Error cleaning up file {filename}: {str(e)}")
+                
+    except Exception as e:
+        app.logger.error(f"Error in cleanup_old_downloads: {str(e)}")
+
+
 # --- Create Flask Application ---
 app = create_app()
 socketio = app.socketio
@@ -781,6 +857,46 @@ def google_maps_api_key():
 # Helper function for relative time in functions.py
 
 # load posts
+def _get_profile_pic_url(profile_pic_url):
+    """Helper function to get the correct profile picture URL for both old and new file structures"""
+    if not profile_pic_url:
+        return url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp')
+    
+    # If it already contains a path separator, it's the full path
+    if '/' in profile_pic_url:
+        return url_for('static', filename=profile_pic_url)
+    else:
+        # Legacy filename only - try clean folder first, then uploads
+        clean_path = f'clean/profile_pictures/{profile_pic_url}'
+        uploads_path = f'uploads/{profile_pic_url}'
+        
+        # Check if clean version exists
+        clean_full_path = os.path.join(current_app.static_folder, 'clean', 'profile_pictures', profile_pic_url)
+        if os.path.exists(clean_full_path):
+            return url_for('static', filename=clean_path)
+        else:
+            return url_for('static', filename=uploads_path)
+
+def _get_banner_url(banner_url):
+    """Helper function to get the correct banner URL for both old and new file structures"""
+    if not banner_url:
+        return None
+    
+    # If it already contains a path separator, it's the full path
+    if '/' in banner_url:
+        return url_for('static', filename=banner_url)
+    else:
+        # Legacy filename only - try clean folder first, then uploads
+        clean_path = f'clean/banner/{banner_url}'
+        uploads_path = f'uploads/{banner_url}'
+        
+        # Check if clean version exists
+        clean_full_path = os.path.join(current_app.static_folder, 'clean', 'banner', banner_url)
+        if os.path.exists(clean_full_path):
+            return url_for('static', filename=clean_path)
+        else:
+            return url_for('static', filename=uploads_path)
+
 @app.route('/api/load_more_posts')
 @role_required('user')
 def load_more_posts():
@@ -851,7 +967,7 @@ def load_more_posts():
                 'user': {
                     'user_id': post.user.user_id,
                     'username': post.user.username,
-                    'profile_picture': url_for('static', filename=f'uploads/{post.user.profile_pic_url}') if post.user.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp')
+                    'profile_picture': _get_profile_pic_url(post.user.profile_pic_url)
                 },
                 'likes_count': PostLike.query.filter_by(post_id=post.post_id).count(),
                 'is_liked': PostLike.query.filter_by(post_id=post.post_id, user_id=current_user.user_id).first() is not None,
@@ -882,27 +998,62 @@ def upload_banner():
         if file.filename == '':
             return jsonify({'success': False, 'error': 'No file selected'})
         
+        # Read file data for pipeline processing 
+        file.seek(0)
+        file_data = file.read()
+        file.seek(0)
         
-        upload_dir = os.path.join(app.static_folder, 'uploads')
-        result = validate_banner_image(file, current_user.user_id, upload_dir)
+        # Run comprehensive validation pipeline with username watermarking
+        validation_result = validate_and_clean_file(
+            file_data=file_data,
+            filename=file.filename,
+            max_size=10*1024*1024,  # 10MB for banners
+            remove_metadata_flag=True,
+            add_watermark=True,
+            watermark_text=current_user.username
+        )
+
+        if not validation_result['is_safe']:
+            threats_msg = '; '.join(validation_result['threats'][:3])
+            app.logger.warning(f"Banner upload failed security validation for user {current_user.user_id}: {threats_msg}")
+            return jsonify({'success': False, 'error': f'File security validation failed: {threats_msg}'})
+
+        # Generate secure filename and save processed file
+        clean_banner_dir = os.path.join(app.static_folder, 'clean', 'banner')
+        os.makedirs(clean_banner_dir, exist_ok=True)
         
-        if not result['success']:
-            app.logger.warning(f"Banner upload failed for user {current_user.user_id}: {result['error']}")
-            return jsonify({'success': False, 'error': result['error']})
+        filename = secure_filename(file.filename)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        name_part, ext_part = os.path.splitext(filename)
+        safe_filename = f"clean_banner_{current_user.user_id}_{timestamp}_{name_part[:50]}{ext_part}"
         
-        # Remove old banner
-        clean_old_file(upload_dir, current_user.banner_url)
+        upload_path = os.path.join(clean_banner_dir, safe_filename)
         
-        # Update database
-        current_user.banner_url = result['filename']
+        # Save the processed (validated, cleaned, watermarked) file
+        processed_data = validation_result.get('processed_data', file_data)
+        with open(upload_path, 'wb') as f:
+            f.write(processed_data)
+        
+        # Remove old banner (check both old uploads dir and new clean/banner dir)
+        if current_user.banner_url:
+            old_upload_dir = os.path.join(app.static_folder, 'uploads')
+            clean_old_file(old_upload_dir, current_user.banner_url)
+            clean_old_file(clean_banner_dir, current_user.banner_url)
+        
+        # Update database with new path structure
+        current_user.banner_url = f"clean/banner/{safe_filename}"
         db.session.commit()
         
-        app.logger.info(f"User {current_user.user_id} successfully uploaded banner: {result['filename']}")
+        app.logger.info(f"User {current_user.user_id} successfully uploaded banner through full pipeline: {safe_filename}")
+        if validation_result['metadata_removed']:
+            app.logger.info(f"Metadata removed from banner for user {current_user.user_id}")
+        if validation_result['watermark_added']:
+            app.logger.info(f"Username watermark added to banner for user {current_user.user_id}")
         
         return jsonify({
             'success': True,
-            'banner_url': result['filename'],
-            'message': 'Banner updated successfully!'
+            'banner_url': f"clean/banner/{safe_filename}",
+            'message': 'Banner updated successfully with security validation and watermarking!'
         })
         
     except Exception as e:
@@ -1026,7 +1177,7 @@ def home():
                 'user': {
                     'user_id': post.user.user_id,
                     'username': post.user.username,
-                    'profile_picture': url_for('static', filename=f'uploads/{post.user.profile_pic_url}') if post.user.profile_pic_url else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp')
+                    'profile_picture': _get_profile_pic_url(post.user.profile_pic_url)
                 },
                 'likes_count': PostLike.query.filter_by(post_id=post.post_id).count(),
                 'is_liked': PostLike.query.filter_by(post_id=post.post_id, user_id=current_user.user_id).first() is not None,
@@ -2419,9 +2570,7 @@ def notifications():
         message_stacks.append({
             **info,
             'sender_username': u.username if u else 'Unknown',
-            'sender_profile_pic': (url_for('static', filename=f'uploads/{u.profile_pic_url}')
-                                   if (u and u.profile_pic_url)
-                                   else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp'))
+            'sender_profile_pic': _get_profile_pic_url(u.profile_pic_url if u else None)
         })
 
     message_unread_count = sum(stack['unread'] for stack in message_stacks)
@@ -3623,19 +3772,84 @@ def api_friends_to_readd():
 @single_role_required('user')
 def upload_message_attachment():
     file = request.files.get('file')
-    verdict = validate_attachment(file)
-    if not verdict.get('ok'):
-        return jsonify(ok=False, error=verdict.get('error', 'Validation failed'), issues=verdict.get('issues', [])), 400
-
-    rel_path, _abs = save_attachment(file, current_user.user_id)
-    return jsonify(
-        ok=True,
-        url=url_for('static', filename=rel_path),
-        name=verdict['name'],
-        size=verdict['size'],
-        mime=verdict['mime'],
-        kind=verdict['kind']
-    )
+    if not file or not file.filename:
+        return jsonify(ok=False, error='No file provided'), 400
+    
+    try:
+        # Read file data for pipeline processing
+        file.seek(0)
+        file_data = file.read()
+        file.seek(0)
+        
+        # Run comprehensive validation pipeline with username watermarking
+        validation_result = validate_and_clean_file(
+            file_data=file_data,
+            filename=file.filename,
+            max_size=16*1024*1024,  # 16MB for attachments
+            remove_metadata_flag=True,
+            add_watermark=True,  # Will only watermark images
+            watermark_text=current_user.username
+        )
+        
+        if not validation_result['is_safe']:
+            threats_msg = '; '.join(validation_result['threats'][:3])
+            app.logger.warning(f"Message attachment failed validation for user {current_user.user_id}: {threats_msg}")
+            return jsonify(ok=False, error=f'File security validation failed: {threats_msg}'), 400
+        
+        # Generate secure filename and save processed file
+        clean_chat_dir = os.path.join(app.static_folder, 'clean', 'chat')
+        os.makedirs(clean_chat_dir, exist_ok=True)
+        
+        filename = secure_filename(file.filename)
+        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')
+        name_part, ext_part = os.path.splitext(filename)
+        safe_filename = f"clean_msg_{current_user.user_id}_{timestamp}_{name_part[:30]}{ext_part}"
+        
+        upload_path = os.path.join(clean_chat_dir, safe_filename)
+        
+        # Save the processed (validated, cleaned, potentially watermarked) file
+        processed_data = validation_result.get('processed_data', file_data)
+        with open(upload_path, 'wb') as f:
+            f.write(processed_data)
+        
+        # Determine file type and size
+        file_size = len(processed_data)
+        mime_type = file.content_type or 'application/octet-stream'
+        
+        # Determine file kind
+        if mime_type.startswith('image/'):
+            kind = 'image'
+        elif mime_type.startswith('video/'):
+            kind = 'video'
+        elif mime_type.startswith('audio/'):
+            kind = 'audio'
+        elif mime_type == 'application/pdf':
+            kind = 'document'
+        elif mime_type in ['application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']:
+            kind = 'document'
+        else:
+            kind = 'file'
+        
+        rel_path = f"clean/chat/{safe_filename}"
+        
+        app.logger.info(f"Message attachment processed through full pipeline for user {current_user.user_id}: {safe_filename}")
+        if validation_result['metadata_removed']:
+            app.logger.info(f"Metadata removed from message attachment for user {current_user.user_id}")
+        if validation_result['watermark_added']:
+            app.logger.info(f"Username watermark added to message attachment for user {current_user.user_id}")
+        
+        return jsonify(
+            ok=True,
+            url=url_for('static', filename=rel_path),
+            name=filename,
+            size=file_size,
+            mime=mime_type,
+            kind=kind
+        )
+        
+    except Exception as e:
+        app.logger.error(f"Error processing message attachment for user {current_user.user_id}: {str(e)}")
+        return jsonify(ok=False, error='File processing failed'), 500
 
 
 
@@ -3709,9 +3923,7 @@ def api_message_notification_stacks():
             stacks.append({
                 **info,
                 'sender_username': u.username if u else 'Unknown',
-                'sender_profile_pic': (url_for('static', filename=f'uploads/{u.profile_pic_url}')
-                                       if (u and u.profile_pic_url)
-                                       else url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp'))
+                'sender_profile_pic': _get_profile_pic_url(u.profile_pic_url if u else None)
             })
         return jsonify({'ok': True, 'items': stacks})
     except Exception as e:
@@ -3902,40 +4114,65 @@ def create_post():
                             db.session.add(permission)
                             print(f"DEBUG: Added permission for user {username} (ID: {user.user_id})")
                 
-                # Handle image upload using the proper validation function
+                # Handle image upload using comprehensive validation pipeline
                 image_file = form.image.data
                 if image_file and image_file.filename:
                     try:
-                        # Use the dedicated post image validation function
+                        # Read image data for pipeline processing
+                        image_file.seek(0)
+                        image_data = image_file.read()
+                        image_file.seek(0)
                         
-                        upload_dir = os.path.join(current_app.root_path, current_app.config['UPLOAD_FOLDER'])
+                        # Run comprehensive validation pipeline with username watermarking
+                        validation_result = validate_and_clean_file(
+                            file_data=image_data,
+                            filename=image_file.filename,
+                            max_size=5*1024*1024,  # 5MB for post images
+                            remove_metadata_flag=True,
+                            add_watermark=True,
+                            watermark_text=current_user.username
+                        )
                         
-                        # validate_post_images expects a list of files
-                        validation_result = validate_post_images([image_file], new_post.post_id, upload_dir)
-                        
-                        if validation_result['success'] and validation_result['processed_files']:
-                            # Get the first (and only) processed file
-                            processed_file = validation_result['processed_files'][0]
+                        if validation_result['is_safe']:
+                            # Generate secure filename and save processed file
+                            clean_posts_dir = os.path.join(current_app.root_path, 'static', 'clean', 'posts')
+                            os.makedirs(clean_posts_dir, exist_ok=True)
                             
-                            # Create PostImage record using just the filename
+                            filename = secure_filename(image_file.filename)
+                            timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+                            name_part, ext_part = os.path.splitext(filename)
+                            safe_filename = f"clean_post_{new_post.post_id}_{current_user.user_id}_{timestamp}_{name_part[:30]}{ext_part}"
+                            
+                            upload_path = os.path.join(clean_posts_dir, safe_filename)
+                            
+                            # Save the processed (validated, cleaned, watermarked) file
+                            processed_data = validation_result.get('processed_data', image_data)
+                            with open(upload_path, 'wb') as f:
+                                f.write(processed_data)
+                            
+                            # Create PostImage record
                             post_image = PostImage(
                                 post_id=new_post.post_id,
-                                image_url=processed_file['url'],  # Just the filename, like profile pics
+                                image_url=f"clean/posts/{safe_filename}",  # Store path relative to static folder
                                 order_index=1
                             )
                             db.session.add(post_image)
-                            print(f"DEBUG: Added image {processed_file['filename']} to post")
+                            
+                            app.logger.info(f"Post image processed through full pipeline for post {new_post.post_id}: {safe_filename}")
+                            if validation_result['metadata_removed']:
+                                app.logger.info(f"Metadata removed from post image for post {new_post.post_id}")
+                            if validation_result['watermark_added']:
+                                app.logger.info(f"Username watermark added to post image for post {new_post.post_id}")
                             
                         else:
-                            # Log validation errors but don't fail the post creation
-                            if validation_result['errors']:
-                                print(f"DEBUG: Image validation errors: {validation_result['errors']}")
-                                flash('Post created but image upload failed: ' + '; '.join(validation_result['errors'][:2]), 'warning')
+                            # Security validation failed - log errors but continue with post creation
+                            threats_msg = '; '.join(validation_result['threats'][:2])
+                            app.logger.warning(f"Post image failed validation for post {new_post.post_id}: {threats_msg}")
+                            flash('Post created but image upload failed security validation: ' + threats_msg, 'warning')
                         
                     except Exception as img_error:
-                        print(f"DEBUG: Image upload error: {img_error}")
-                        # Continue without image if there's an error
-                        flash('Post created but image upload failed', 'warning')
+                        app.logger.error(f"Error processing post image for post {new_post.post_id}: {str(img_error)}")
+                        flash('Post created but image processing failed', 'warning')
                 
                 db.session.commit()
                 print("DEBUG: Post committed successfully")
@@ -4096,18 +4333,28 @@ def download_post_image(post_id, filename):
     post = Post.query.get_or_404(post_id)
     
     # Check if the post has an image that matches the filename
-    # The image_url in database contains full path like "uploads/filename.jpg"
+    # The image_url in database now contains "uploads/filename.jpg"
     post_image = PostImage.query.filter(
         PostImage.post_id == post_id,
-        PostImage.image_url.like(f'%{filename}')
+        or_(
+            PostImage.image_url == f'uploads/{filename}',
+            PostImage.image_url.like(f'%{filename}')
+        )
     ).first()
     
     if not post_image:
         abort(404)
 
-    # Construct the full file path
-    file_path = os.path.join(app.static_folder, 'uploads', filename)
-    if not os.path.exists(file_path):
+    # Construct the full file path - check both clean/posts and uploads (legacy)
+    clean_file_path = os.path.join(app.static_folder, 'clean', 'posts', filename)
+    legacy_file_path = os.path.join(app.static_folder, 'uploads', filename)
+    
+    file_path = None
+    if os.path.exists(clean_file_path):
+        file_path = clean_file_path
+    elif os.path.exists(legacy_file_path):
+        file_path = legacy_file_path
+    else:
         abort(404)
 
     # Apply username overlay and return
@@ -4285,24 +4532,63 @@ def edit_profile():
                     return render_template('EditProfile.html', form=form)
                 current_user.username = form.username.data
             
-            # Handle profile picture upload with modular validation
+            # Handle profile picture upload with comprehensive pipeline
             cropped_image_data = request.form.get('cropped_image_data')
             
             if cropped_image_data:
-                
-                
-                upload_dir = app.config['UPLOAD_FOLDER']
-                result = validate_cropped_image_data(cropped_image_data, current_user.user_id, upload_dir)
-                
-                if not result['success']:
-                    app.logger.warning(f"Profile image upload failed for user {current_user.user_id}: {result['error']}")
-                    flash(result['error'], 'error')
+                import base64
+                try:
+                    # Decode base64 image data
+                    header, encoded = cropped_image_data.split(',', 1)
+                    image_data = base64.b64decode(encoded)
+                    
+                    # Run comprehensive validation pipeline with username watermarking
+                    validation_result = validate_and_clean_file(
+                        file_data=image_data,
+                        filename="profile_picture.png",
+                        max_size=5*1024*1024,  # 5MB for profile pics
+                        remove_metadata_flag=True,
+                        add_watermark=True,
+                        watermark_text=current_user.username
+                    )
+                    
+                    if not validation_result['is_safe']:
+                        threats_msg = '; '.join(validation_result['threats'][:3])
+                        app.logger.warning(f"Profile image upload failed security validation for user {current_user.user_id}: {threats_msg}")
+                        flash(f'Profile picture security validation failed: {threats_msg}', 'error')
+                        return render_template('EditProfile.html', form=form)
+                    
+                    # Generate secure filename and save processed file
+                    clean_profile_dir = os.path.join(app.static_folder, 'clean', 'profile_pictures')
+                    os.makedirs(clean_profile_dir, exist_ok=True)
+                    
+                    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+                    safe_filename = f"clean_profile_{current_user.user_id}_{timestamp}.png"
+                    upload_path = os.path.join(clean_profile_dir, safe_filename)
+                    
+                    # Save the processed (validated, cleaned, watermarked) file
+                    processed_data = validation_result.get('processed_data', image_data)
+                    with open(upload_path, 'wb') as f:
+                        f.write(processed_data)
+                    
+                    # Clean old files from both old and new directories
+                    if current_user.profile_pic_url:
+                        old_upload_dir = os.path.join(app.static_folder, 'uploads')
+                        clean_old_file(old_upload_dir, current_user.profile_pic_url)
+                        clean_old_file(clean_profile_dir, current_user.profile_pic_url)
+                    
+                    current_user.profile_pic_url = f"clean/profile_pictures/{safe_filename}"
+                    
+                    app.logger.info(f"User {current_user.user_id} updated profile picture through full pipeline: {safe_filename}")
+                    if validation_result['metadata_removed']:
+                        app.logger.info(f"Metadata removed from profile picture for user {current_user.user_id}")
+                    if validation_result['watermark_added']:
+                        app.logger.info(f"Username watermark added to profile picture for user {current_user.user_id}")
+                        
+                except Exception as img_error:
+                    app.logger.error(f"Error processing profile image for user {current_user.user_id}: {str(img_error)}")
+                    flash('Failed to process profile picture. Please try again.', 'error')
                     return render_template('EditProfile.html', form=form)
-                
-                # Clean old file and update database
-                clean_old_file(upload_dir, current_user.profile_pic_url)
-                current_user.profile_pic_url = result['filename']
-                app.logger.info(f"User {current_user.user_id} updated profile picture: {result['filename']}")
             
             current_user.updated_at = datetime.utcnow()
             db.session.commit()
@@ -4747,11 +5033,194 @@ def send_user_event_reminders(user_id):
         print(f"Error sending user event reminders: {e}")
         db.session.rollback()
 
-# ADMIN - CREATE AGENT
-# Add this route to app.py
+@app.route('/admin/file_pipeline_demo', methods=['GET', 'POST'])
+@admin_required
+def file_pipeline_demo():
+    """
+    Admin page to demonstrate file validation and metadata removal pipeline
+    """
+    result = None
+    
+    if request.method == 'POST':
+        if 'demo_file' not in request.files:
+            flash('No file selected', 'error')
+            return redirect(request.url)
+        
+        file = request.files['demo_file']
+        if file.filename == '':
+            flash('No file selected', 'error')
+            return redirect(request.url)
+        
+        try:
+            import tempfile
+            import os
+            import uuid
+            
+            # Create downloads directory if it doesn't exist
+            downloads_dir = os.path.join(app.root_path, 'static', 'downloads')
+            os.makedirs(downloads_dir, exist_ok=True)
+            
+            # Save file temporarily for metadata extraction demo
+            temp_fd, temp_path = tempfile.mkstemp(suffix=f"_{secure_filename(file.filename)}")
+            try:
+                with os.fdopen(temp_fd, 'wb') as temp_file:
+                    file.seek(0)
+                    temp_file.write(file.read())
+                    file.seek(0)
+                
+                # Read file data for validation
+                file_data = file.read()
+                file.seek(0)
+                
+                # Run the pipeline
+                pipeline_result = validate_and_clean_file(
+                    file_data=file_data,
+                    filename=file.filename,
+                    max_size=16*1024*1024,  # 16MB max for demo
+                    remove_metadata_flag=True,
+                    add_watermark=True,  # Enable watermarking step
+                    watermark_text=current_user.username  # Use current user's username
+                )
+                
+                # Run metadata demo (before/after comparison) and create cleaned file
+                metadata_demo = None
+                
+                try:
+                    # Call the updated demo function with downloads directory
+                    metadata_demo = demo_metadata_before_after(temp_path, downloads_dir, current_user.username)
+                    
+                    # If file is safe and metadata demo was successful and produced a download
+                    if (pipeline_result['is_safe'] and 
+                        metadata_demo.get('success', False) and 
+                        metadata_demo.get('download_id')):
+                        
+                        # Store download info in session for security
+                        session[f'download_{metadata_demo["download_id"]}'] = {
+                            'filepath': metadata_demo['cleaned_file_path'],
+                            'original_filename': metadata_demo['original_filename'],
+                            'created_at': datetime.now().timestamp()
+                        }
+                        
+                except Exception as e:
+                    app.logger.warning(f'Metadata demo failed: {str(e)}')
+                    metadata_demo = {
+                        'before': {}, 
+                        'after': {}, 
+                        'removed_count': 0, 
+                        'success': False,
+                        'details': f'Demo error: {str(e)}'
+                    }
+                
+                # Create result summary
+                result = {
+                    'filename': file.filename,
+                    'file_size': len(file_data),
+                    'file_size_mb': round(len(file_data) / (1024*1024), 2),
+                    'validation_result': pipeline_result,
+                    'metadata_demo': metadata_demo,
+                    'md5_hash': pipeline_result.get('file_info', {}).get('md5_hash', 'N/A'),
+                    'file_type': pipeline_result.get('file_info', {}).get('expected_type', 'Unknown')
+                }
+                
+                # Add human-readable status
+                if pipeline_result['is_safe']:
+                    if pipeline_result['metadata_removed']:
+                        result['status'] = 'SAFE - Metadata Removed'
+                        result['status_class'] = 'success'
+                    elif pipeline_result.get('metadata_removal_error'):
+                        result['status'] = 'SAFE - Metadata Removal Failed'
+                        result['status_class'] = 'warning'
+                    else:
+                        result['status'] = 'SAFE - No Metadata Removal'
+                        result['status_class'] = 'info'
+                else:
+                    result['status'] = 'UNSAFE - File Rejected'
+                    result['status_class'] = 'danger'
+                
+            finally:
+                # Clean up temp file
+                try:
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
+                except Exception:
+                    pass
+                
+        except Exception as e:
+            flash(f'Error processing file: {str(e)}', 'error')
+            app.logger.error(f'File pipeline demo error: {str(e)}')
+    
+    return render_template('admin/file_pipeline_demo.html', result=result)
+
+@app.route('/admin/download_cleaned_file/<download_id>')
+@admin_required
+def download_cleaned_file(download_id):
+    """
+    Download a cleaned file that was processed through the pipeline demo
+    """
+    try:
+        # Check if download info exists in session
+        download_key = f'download_{download_id}'
+        if download_key not in session:
+            flash('Download link expired or invalid', 'error')
+            return redirect(url_for('admin.file_pipeline_demo'))
+        
+        download_info = session[download_key]
+        
+        # Check if file still exists
+        file_path = download_info['filepath']
+        if not os.path.exists(file_path):
+            flash('File no longer available for download', 'error')
+            # Clean up session entry
+            session.pop(download_key, None)
+            return redirect(url_for('admin.file_pipeline_demo'))
+        
+        # Check if download is not too old (24 hours limit)
+        created_at = download_info['created_at']
+        if datetime.now().timestamp() - created_at > 24 * 60 * 60:  # 24 hours
+            # Clean up old file and session
+            try:
+                os.unlink(file_path)
+            except Exception:
+                pass
+            session.pop(download_key, None)
+            flash('Download link expired', 'error')
+            return redirect(url_for('admin.file_pipeline_demo'))
+        
+        # Send file for download
+        original_filename = download_info['original_filename']
+        cleaned_filename = f"cleaned_{original_filename}"
+        
+        # Clean up session entry after successful access
+        session.pop(download_key, None)
+        
+        # Schedule file cleanup after download
+        def cleanup_file():
+            import time
+            time.sleep(60)  # Wait 1 minute
+            try:
+                if os.path.exists(file_path):
+                    os.unlink(file_path)
+            except Exception:
+                pass
+        
+        # Start cleanup in background
+        import threading
+        threading.Thread(target=cleanup_file, daemon=True).start()
+        
+        return send_file(
+            file_path,
+            as_attachment=True,
+            download_name=cleaned_filename,
+            mimetype='application/octet-stream'
+        )
+        
+    except Exception as e:
+        app.logger.error(f'Download error: {str(e)}')
+        flash('Error downloading file', 'error')
+        return redirect(url_for('admin.file_pipeline_demo'))
 
 @app.route('/admin/create_support_agent', methods=['GET', 'POST'])
-@admin_required
+@admin_required  
 def create_support_agent():
     """Admin route to create support agents"""
     if request.method == 'POST':
@@ -4797,7 +5266,7 @@ def create_support_agent():
             db.session.commit()
             
             flash(f'Support agent created for {user.username} with L{clearance_level} clearance!', 'success')
-            return redirect(url_for('admin_dashboard'))
+            return redirect(url_for('create_support_agent'))
             
         except Exception as e:
             db.session.rollback()
@@ -4814,6 +5283,7 @@ def create_support_agent():
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=send_event_reminders, trigger="interval", hours=24)
 scheduler.add_job(func=delete_expired_messages, trigger="interval", seconds=30)
+scheduler.add_job(func=cleanup_old_downloads, trigger="interval", hours=6)  # Clean up downloads every 6 hours
 scheduler.start()
 # --- Run the App ---
 if __name__ == '__main__':

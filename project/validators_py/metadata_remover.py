@@ -267,7 +267,7 @@ def extract_metadata(file_path):
     
     return metadata
 
-def demo_metadata_before_after(file_path, downloads_dir=None, watermark_text="VALIDATED"):
+def demo_metadata_before_after(file_path, downloads_dir=None, watermark_text="VALIDATED", original_filename=None):
     """
     Demonstration function to show metadata before and after removal
     Creates a copy of the file to preserve the original and make a clear before/after
@@ -286,8 +286,8 @@ def demo_metadata_before_after(file_path, downloads_dir=None, watermark_text="VA
     }
     
     try:
-        # Store original filename for download
-        result['original_filename'] = os.path.basename(file_path)
+        # Store original filename for download (use provided original_filename if available)
+        result['original_filename'] = original_filename if original_filename else os.path.basename(file_path)
         
         # Extract metadata before (from original file)
         result['before'] = extract_metadata(file_path)

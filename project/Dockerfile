@@ -8,4 +8,4 @@ RUN pip install -r requirements.txt
 COPY . . 
 #use 127.0.0.1
 
-CMD gunicorn --certfile=/code/certs/cert.pem --keyfile=/code/certs/key.pem --reload -b 0.0.0.0:5000 app:app
+CMD gunicorn --certfile=/code/certs/cert.pem --keyfile=/code/certs/key.pem --reload --reload-extra-file /code/templates --reload-extra-file /code/static -b 0.0.0.0:5000 app:app

@@ -423,7 +423,7 @@
                     <td>
                         <div style="display: flex; align-items: center; gap: 12px;">
                             <!-- Profile Picture -->
-                            <img src="{% if user.profile_pic_url %}{{ url_for('static', filename='uploads/' + user.profile_pic_url) }}{% else %}{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}{% endif %}" 
+                            <img src="{% if user.profile_pic_url %}{{ url_for('static', filename=user.profile_pic_url) }}{% else %}{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}{% endif %}" 
                                  alt="{{ user.username }}" 
                                  style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 2px solid var(--google-grey-200);"
                                  onerror="this.src='{{ url_for('static', filename='imgs/blank-profile-picture-973460_1280.webp') }}'">

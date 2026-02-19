@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Dict, List, Tuple
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
-from validators_py.file_validate import validate_file_security
+from validators_py.file_validate import validate_and_clean_file
 
 
 # Allowed types and caps
@@ -52,8 +52,13 @@ def validate_attachment(file: FileStorage, max_bytes: int = MAX_ATTACHMENT_BYTES
     data = file.read()
     file.seek(0)
 
-    # security scan
-    result = validate_file_security(file_data=data, filename=name, max_size=max_bytes)
+    # security scan with metadata removal
+    result = validate_and_clean_file(
+        file_data=data, 
+        filename=name, 
+        max_size=max_bytes,
+        remove_metadata_flag=True
+    )
     if not result.get('is_safe', False):
         return {'ok': False, 'error': 'File failed security validation', 'issues': result.get('threats', [])}
     if result.get('risk_level') in ('high', 'critical'):

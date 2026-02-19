@@ -12,12 +12,15 @@ import cbor2
 import pyotp
 import qrcode
 import bleach
+
 from io import BytesIO
 from datetime import datetime, timedelta
 from functools import wraps
 
 # --- Third Party Library Imports ---
 from PIL import Image, ImageDraw, ImageFont
+
+
 
 # --- Flask Core Imports ---
 from flask import Flask, render_template, redirect, url_for, flash, request, current_app, abort, jsonify, session, make_response, send_file 
@@ -101,6 +104,10 @@ from validators_py.metadata_remover import remove_metadata
 
 # Message validators
 from validators_py.message_validate import validate_attachment, save_attachment
+
+# S3 Storage
+from s3_service import s3_service
+from file_upload_handler import create_upload_handler
 
 # Helper functions
 from functions import get_relative_time, b64encode_all, get_fido2_server, send_user_event_reminders
@@ -255,6 +262,10 @@ def create_app(config_name=None):
     
     # Initialize extensions
     initialize_extensions(app)
+
+    # Initialize upload handler
+    app.upload_handler = create_upload_handler(app)
+    app.logger.info(f"Upload handler initialized. S3 enabled: {app.upload_handler.use_s3}")
 
      # Initialize database manager
     initialize_database_manager(app)  # Add this line
@@ -607,7 +618,7 @@ def apply_bottom_right_overlay_bytes(input_image_path, watermark_text):
             # Try to load a nice font, fallback to default if unavailable
             try:
                 # Try common system fonts
-                font_size = max(int(height * 0.06), 24)  # 6% of image height, minimum 24px
+                font_size = max(int(height * 0.10), 36)  # 10% of image height, minimum 24px
                 font = ImageFont.truetype("arial.ttf", font_size)
             except:
                 try:
@@ -618,7 +629,7 @@ def apply_bottom_right_overlay_bytes(input_image_path, watermark_text):
                     except:
                         # Fallback to default font
                         font = ImageFont.load_default()
-                        font_size = 12
+                        font_size = 36  # Approx size for default font
             
             # Get text bounding box to know its size
             bbox = draw.textbbox((0, 0), watermark_text, font=font)
@@ -1018,21 +1029,42 @@ def upload_banner():
             app.logger.warning(f"Banner upload failed security validation for user {current_user.user_id}: {threats_msg}")
             return jsonify({'success': False, 'error': f'File security validation failed: {threats_msg}'})
 
-        # Generate secure filename and save processed file
-        clean_banner_dir = os.path.join(app.static_folder, 'clean', 'banner')
-        os.makedirs(clean_banner_dir, exist_ok=True)
-        
+        # Generate secure filename
         filename = secure_filename(file.filename)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         name_part, ext_part = os.path.splitext(filename)
         safe_filename = f"clean_banner_{current_user.user_id}_{timestamp}_{name_part[:50]}{ext_part}"
         
+        # Save processed file to local storage (clean/banner directory)
+        clean_banner_dir = os.path.join(app.static_folder, 'clean', 'banner')
+        os.makedirs(clean_banner_dir, exist_ok=True)
         upload_path = os.path.join(clean_banner_dir, safe_filename)
         
-        # Save the processed (validated, cleaned, watermarked) file
         processed_data = validation_result.get('processed_data', file_data)
         with open(upload_path, 'wb') as f:
             f.write(processed_data)
+        
+        # Upload cleaned image to S3 as backup
+        try:
+            # Create BytesIO from cleaned/watermarked data
+            processed_file = BytesIO(processed_data)
+            processed_file.filename = safe_filename
+            processed_file.seek(0)
+            
+            file_ext = ext_part.lstrip('.') or 'jpg'
+            s3_path = f"banners/user_{current_user.user_id}/{safe_filename}"
+            s3_result = app.upload_handler.save_file(
+                processed_file,
+                s3_path,
+                content_type=f'image/{file_ext}',
+                save_local=False
+            )
+            if s3_result['success']:
+                app.logger.info(f"Banner backed up to S3: {s3_result['s3_key']}")
+            else:
+                app.logger.warning(f"S3 backup failed for banner: {s3_result.get('error')}")
+        except Exception as s3_error:
+            app.logger.warning(f"Failed to backup banner to S3: {str(s3_error)}")
         
         # Remove old banner (check both old uploads dir and new clean/banner dir)
         if current_user.banner_url:
@@ -1040,11 +1072,11 @@ def upload_banner():
             clean_old_file(old_upload_dir, current_user.banner_url)
             clean_old_file(clean_banner_dir, current_user.banner_url)
         
-        # Update database with new path structure
+        # Update database with new path structure 
         current_user.banner_url = f"clean/banner/{safe_filename}"
         db.session.commit()
         
-        # Log pipeline results (no verbose messages - not demo mode)
+        # Log pipeline results
         app.logger.info(f"Banner upload processed: user_id={current_user.user_id}, watermark={validation_result['watermark_added']}, metadata_removed={validation_result['metadata_removed']}")
         
         return jsonify({
@@ -1200,7 +1232,7 @@ def home():
         import traceback
         traceback.print_exc()
         flash('Error loading feed. Please try again.', 'error')
-        return render_template('UserHome.html', 
+        return render_template('users/UserHome.html', 
                              posts=[], 
                              pagination=None, 
                              has_more=False,
@@ -3809,6 +3841,27 @@ def upload_message_attachment():
         with open(upload_path, 'wb') as f:
             f.write(processed_data)
         
+        # Upload cleaned file to S3 as backup (for all file types)
+        try:
+            # Create BytesIO from cleaned data
+            processed_file = BytesIO(processed_data)
+            processed_file.filename = safe_filename
+            processed_file.seek(0)
+            
+            s3_path = f"chat_attachments/user_{current_user.user_id}/{safe_filename}"
+            s3_result = app.upload_handler.save_file(
+                processed_file,
+                s3_path,
+                content_type=file.content_type or 'application/octet-stream',
+                save_local=False
+            )
+            if s3_result['success']:
+                app.logger.info(f"Chat attachment backed up to S3: {s3_result['s3_key']}")
+            else:
+                app.logger.warning(f"S3 backup failed for attachment: {s3_result.get('error')}")
+        except Exception as s3_error:
+            app.logger.warning(f"Failed to backup attachment to S3: {str(s3_error)}")
+        
         # Determine file type and size
         file_size = len(processed_data)
         mime_type = file.content_type or 'application/octet-stream'
@@ -4150,6 +4203,28 @@ def create_post():
                                 order_index=1
                             )
                             db.session.add(post_image)
+                            
+                            # Upload cleaned image to S3 as backup
+                            try:
+                                # Create BytesIO from cleaned/watermarked data
+                                processed_file = BytesIO(processed_data)
+                                processed_file.filename = safe_filename
+                                processed_file.seek(0)
+                                
+                                s3_path = f"posts/post_{new_post.post_id}/{safe_filename}"
+                                s3_result = app.upload_handler.save_file(
+                                    processed_file,
+                                    s3_path,
+                                    content_type=f'image/{file_ext.lstrip(".")}',
+                                    save_local=False
+                                )
+                                if s3_result['success']:
+                                    app.logger.info(f"Post image backed up to S3: {s3_result['s3_key']}")
+                                else:
+                                    app.logger.warning(f"S3 backup failed: {s3_result.get('error')}")
+                                    
+                            except Exception as s3_error:
+                                app.logger.warning(f"Failed to backup post image to S3: {str(s3_error)}")
                             
                             # Log pipeline results (no flash messages - not demo mode)
                             app.logger.info(f"Post image processed: post_id={new_post.post_id}, watermark={validation_result['watermark_added']}, metadata_removed={validation_result['metadata_removed']}")
@@ -4560,6 +4635,27 @@ def edit_profile():
                     processed_data = validation_result.get('processed_data', image_data)
                     with open(upload_path, 'wb') as f:
                         f.write(processed_data)
+                    
+                    # Upload cleaned image to S3 as backup
+                    try:
+                        # Create BytesIO from cleaned/watermarked data
+                        processed_file = BytesIO(processed_data)
+                        processed_file.filename = safe_filename
+                        processed_file.seek(0)
+                        
+                        s3_path = f"profile_pictures/user_{current_user.user_id}/{safe_filename}"
+                        s3_result = app.upload_handler.save_file(
+                            processed_file,
+                            s3_path,
+                            content_type='image/png',
+                            save_local=False
+                        )
+                        if s3_result['success']:
+                            app.logger.info(f"Profile picture backed up to S3: {s3_result['s3_key']}")
+                        else:
+                            app.logger.warning(f"S3 backup failed for profile pic: {s3_result.get('error')}")
+                    except Exception as s3_error:
+                        app.logger.warning(f"Failed to backup profile picture to S3: {str(s3_error)}")
                     
                     # Clean old files from both old and new directories
                     if current_user.profile_pic_url:
@@ -5096,6 +5192,9 @@ def file_pipeline_demo():
                     enable_ocr=True  # Enable OCR for demo showcase
                 )
                 
+                # Keep processed_data for S3 upload before removing it
+                processed_data = pipeline_result.get('processed_data')
+                
                 # Remove processed_data from result (bytes aren't JSON serializable for template)
                 # We've already used it if needed, so safe to remove for display
                 pipeline_result.pop('processed_data', None)
@@ -5139,6 +5238,47 @@ def file_pipeline_demo():
                         'success': False,
                         'details': f'Demo error: {str(e)}'
                     }
+                
+                # S3 Backup - Final step after all validation checks
+                if pipeline_result['is_safe'] and processed_data:
+                    try:
+                        # Create BytesIO object from processed data
+                        processed_file = BytesIO(processed_data)
+                        processed_file.filename = secure_filename(file.filename)
+                        processed_file.seek(0)
+                        
+                        # Generate S3 path with timestamp
+                        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                        s3_path = f"demo/{timestamp}/{secure_filename(file.filename)}"
+                        
+                        # Determine content type
+                        content_type = 'application/octet-stream'
+                        if is_image:
+                            if file_ext in ['jpg', 'jpeg']:
+                                content_type = 'image/jpeg'
+                            elif file_ext == 'png':
+                                content_type = 'image/png'
+                            elif file_ext == 'gif':
+                                content_type = 'image/gif'
+                            elif file_ext == 'webp':
+                                content_type = 'image/webp'
+                        
+                        # Upload to S3
+                        s3_result = app.upload_handler.save_file(
+                            processed_file,
+                            s3_path,
+                            content_type=content_type,
+                            save_local=False
+                        )
+                        
+                        if s3_result['success']:
+                            app.logger.info(f"Demo file backed up to S3: {s3_result['s3_key']}")
+                        else:
+                            app.logger.warning(f"Demo S3 backup failed: {s3_result.get('error', 'Unknown error')}")
+                    
+                    except Exception as e:
+                        # Don't fail the demo if S3 backup fails, just log it
+                        app.logger.warning(f'Demo S3 backup error: {str(e)}')
                 
                 # Create result summary
                 result = {

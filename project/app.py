@@ -11,12 +11,17 @@ import base64
 import cbor2
 import pyotp
 import qrcode
+import pytesseract 
 from io import BytesIO
 from datetime import datetime, timedelta
 from functools import wraps
+from dotenv import load_dotenv
 
 # --- Third Party Library Imports ---
 from PIL import Image, ImageDraw, ImageFont
+
+# Load environment variables
+load_dotenv()
 
 # --- Flask Core Imports ---
 from flask import Flask, render_template, redirect, url_for, flash, request, current_app, abort, jsonify, session, make_response, send_file 
@@ -97,6 +102,10 @@ from validators_py.file_validate import validate_file_security, scan_upload,vali
 
 # Message validators
 from validators_py.message_validate import validate_attachment, save_attachment
+
+# S3 Storage
+from s3_service import s3_service
+from file_upload_handler import create_upload_handler
 
 # Helper functions
 from functions import get_relative_time, b64encode_all, get_fido2_server, send_user_event_reminders
@@ -251,6 +260,10 @@ def create_app(config_name=None):
     
     # Initialize extensions
     initialize_extensions(app)
+
+    # Initialize upload handler
+    app.upload_handler = create_upload_handler(app)
+    app.logger.info(f"Upload handler initialized. S3 enabled: {app.upload_handler.use_s3}")
 
      # Initialize database manager
     initialize_database_manager(app)  # Add this line
@@ -563,7 +576,7 @@ def apply_bottom_right_overlay_bytes(input_image_path, watermark_text):
             # Try to load a nice font, fallback to default if unavailable
             try:
                 # Try common system fonts
-                font_size = max(int(height * 0.06), 24)  # 6% of image height, minimum 24px
+                font_size = max(int(height * 0.10), 36)  # 10% of image height, minimum 24px
                 font = ImageFont.truetype("arial.ttf", font_size)
             except:
                 try:
@@ -574,7 +587,7 @@ def apply_bottom_right_overlay_bytes(input_image_path, watermark_text):
                     except:
                         # Fallback to default font
                         font = ImageFont.load_default()
-                        font_size = 12
+                        font_size = 36  # Approx size for default font
             
             # Get text bounding box to know its size
             bbox = draw.textbbox((0, 0), watermark_text, font=font)
@@ -890,18 +903,36 @@ def upload_banner():
             app.logger.warning(f"Banner upload failed for user {current_user.user_id}: {result['error']}")
             return jsonify({'success': False, 'error': result['error']})
         
+        # Upload to S3 and/or local storage
+        s3_path = f"banners/user_{current_user.user_id}_{result['filename']}"
+        file.seek(0)  # Reset file pointer
+        upload_result = app.upload_handler.save_file(
+            file, 
+            s3_path, 
+            content_type=result.get('content_type', 'image/jpeg'),
+            save_local=True
+        )
+        
+        if not upload_result['success']:
+            app.logger.warning(f"Banner upload to storage failed: {upload_result['error']}")
+            return jsonify({'success': False, 'error': f"Upload failed: {upload_result['error']}"})
+        
         # Remove old banner
-        clean_old_file(upload_dir, current_user.banner_url)
+        if current_user.banner_url:
+            app.upload_handler.delete_file(current_user.banner_url)
+        
+        # Store S3 key if available, otherwise use local path
+        banner_url = upload_result['s3_key'] or upload_result['local_path'] or result['filename']
         
         # Update database
-        current_user.banner_url = result['filename']
+        current_user.banner_url = banner_url
         db.session.commit()
         
-        app.logger.info(f"User {current_user.user_id} successfully uploaded banner: {result['filename']}")
+        app.logger.info(f"User {current_user.user_id} successfully uploaded banner: {banner_url}")
         
         return jsonify({
             'success': True,
-            'banner_url': result['filename'],
+            'banner_url': banner_url,
             'message': 'Banner updated successfully!'
         })
         
@@ -1052,7 +1083,7 @@ def home():
         import traceback
         traceback.print_exc()
         flash('Error loading feed. Please try again.', 'error')
-        return render_template('UserHome.html', 
+        return render_template('users/UserHome.html', 
                              posts=[], 
                              pagination=None, 
                              has_more=False,
@@ -3628,6 +3659,24 @@ def upload_message_attachment():
         return jsonify(ok=False, error=verdict.get('error', 'Validation failed'), issues=verdict.get('issues', [])), 400
 
     rel_path, _abs = save_attachment(file, current_user.user_id)
+    
+    # Also upload to S3 for backup
+    try:
+        s3_path = f"attachments/user_{current_user.user_id}/{rel_path}"
+        file.seek(0)
+        upload_result = app.upload_handler.save_file(
+            file,
+            s3_path,
+            content_type=verdict.get('mime', 'application/octet-stream'),
+            save_local=False  # Local save is already done by save_attachment
+        )
+        
+        if upload_result['success'] and upload_result['s3_key']:
+            app.logger.info(f"Attachment backed up to S3: {upload_result['s3_key']}")
+    except Exception as e:
+        app.logger.warning(f"Failed to backup attachment to S3: {str(e)}")
+        # Continue anyway, file is already saved locally
+    
     return jsonify(
         ok=True,
         url=url_for('static', filename=rel_path),
@@ -3925,6 +3974,22 @@ def create_post():
                             )
                             db.session.add(post_image)
                             print(f"DEBUG: Added image {processed_file['filename']} to post")
+                            
+                            # Backup to S3
+                            try:
+                                s3_path = f"posts/post_{new_post.post_id}/{processed_file['filename']}"
+                                image_file.seek(0)
+                                s3_result = app.upload_handler.save_file(
+                                    image_file,
+                                    s3_path,
+                                    content_type='image/jpeg',
+                                    save_local=False
+                                )
+                                if s3_result['success']:
+                                    app.logger.info(f"Post image backed up to S3: {s3_result['s3_key']}")
+                            except Exception as s3_error:
+                                app.logger.warning(f"Failed to backup post image to S3: {str(s3_error)}")
+                                # Continue anyway, local save was successful
                             
                         else:
                             # Log validation errors but don't fail the post creation

@@ -87,18 +87,6 @@
                 {% endif %}
             </div>
 
-            <!-- CAPTCHA -->
-            <div class="mb-4">
-                {{ form.recaptcha() }}
-                {% if form.recaptcha.errors %}
-                    <div class="text-danger small mt-1">
-                        {% for error in form.recaptcha.errors %}
-                            <div>{{ error }}</div>
-                        {% endfor %}
-                    </div>
-                {% endif %}
-            </div>
-
             <!-- Submit Button -->
             <div class="d-grid mb-3">
                 {{ form.submit(class="btn btn-primary btn-lg") }}

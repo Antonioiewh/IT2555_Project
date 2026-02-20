@@ -275,11 +275,7 @@
     }
 }
 
-.g-recaptcha {
-    margin: 20px 0;
-    display: flex;
-    justify-content: center;
-}
+
 
 .form-control.is-invalid {
     border-color: #ea4335;
@@ -372,17 +368,6 @@
                     {% endfor %}
                 {% endif %}
             </div>
-
-            {% if form.recaptcha %}
-            <div class="google-form-group">
-                {{ form.recaptcha }}
-                {% if form.recaptcha.errors %}
-                    {% for error in form.recaptcha.errors %}
-                        <span class="google-error-text">{{ error }}</span>
-                    {% endfor %}
-                {% endif %}
-            </div>
-            {% endif %}
 
             <button type="submit" class="google-btn google-btn-primary">
                 <i class="bi bi-box-arrow-in-right google-btn-icon"></i>

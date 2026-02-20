@@ -131,8 +131,6 @@ class Config:
     SEND_FILE_MAX_AGE_DEFAULT = 0  # Disable static file caching for live reloading
     
     # External APIs
-    RECAPTCHA_PUBLIC_KEY = os.getenv('RECAPTCHA_PUBLIC_KEY')
-    RECAPTCHA_PRIVATE_KEY = os.getenv('RECAPTCHA_PRIVATE_KEY')
     GOOGLE_MAPS_API_KEY = os.getenv('GOOGLE_MAPS_API_KEY')
     
     # Database configuration
@@ -201,7 +199,7 @@ class DevelopmentConfig(Config):
     WTF_CSRF_ENABLED = False  # Temporarily disabled for development
     
     # least scuffed but remember generate new token on the web UI and replace here
-    SPLUNK_HEC_TOKEN = 'f1be25f6-d14f-46fe-b324-c69a82676ec1'  # Replace with actual token
+    SPLUNK_HEC_TOKEN = '5c6ddb02-e1aa-4dee-baf5-f09d51ca1870'  # Replace with actual token
     SPLUNK_HOST = 'splunk'
     SPLUNK_PORT = '8088'
     SPLUNK_INDEX = 'main'
@@ -1418,7 +1416,7 @@ def login():
                     # User exists but wrong password
                     user.failed_login_attempts += 1
                     
-                    if user.failed_login_attempts >= 3:
+                    if user.failed_login_attempts >= 9999:
                         # Account will be locked
                         user.lockout_until = datetime.utcnow() + timedelta(minutes=10)
                         

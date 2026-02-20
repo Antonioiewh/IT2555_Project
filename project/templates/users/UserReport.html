@@ -226,11 +226,7 @@
     display: block;
 }
 
-.g-recaptcha {
-    margin: 20px 0;
-    display: flex;
-    justify-content: center;
-}
+
 
 .google-info-box {
     background: #e8f0fe;
@@ -403,17 +399,6 @@
                         {% endfor %}
                     {% endif %}
                 </div>
-
-                {% if form.recaptcha %}
-                <div class="google-form-group">
-                    {{ form.recaptcha }}
-                    {% if form.recaptcha.errors %}
-                        {% for error in form.recaptcha.errors %}
-                            <span class="google-error-text">{{ error }}</span>
-                        {% endfor %}
-                    {% endif %}
-                </div>
-                {% endif %}
 
                 <button type="submit" class="google-btn google-btn-primary" id="submitBtn">
                     <i class="bi bi-flag google-btn-icon"></i>

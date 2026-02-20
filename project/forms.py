@@ -4,7 +4,6 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField, IntegerField,SelectField,TextAreaField,HiddenField
 from wtforms.validators import DataRequired, Length, Email, EqualTo,ValidationError, Optional
 from flask_wtf.file import FileField, FileAllowed, FileRequired
-from flask_wtf.recaptcha import RecaptchaField 
 from wtforms.fields import DateTimeLocalField, BooleanField
 import re
 
@@ -44,14 +43,11 @@ class SignupForm(FlaskForm):
         validate_password_policy
     ])
     phone_no = StringField('Phone Number', validators=[DataRequired(), Length(min=8, max=15)])
-    recaptcha = RecaptchaField() 
     submit = SubmitField('Sign Up')
 
 class LoginForm(FlaskForm):
     username = StringField('Name', validators=[DataRequired(), Length(min=2, max=50)])
     password = PasswordField('Password', validators=[DataRequired(), Length(min=6, max=50)])
-    recaptcha = RecaptchaField()
-
     submit = SubmitField('Login')
 
 class FriendRequestForm(FlaskForm):
@@ -86,7 +82,6 @@ class ReportForm(FlaskForm):
             Length(min=20, max=1000, message='Description must be between 20 and 1000 characters.')
         ]
     )
-    recaptcha = RecaptchaField()
     submit = SubmitField('Submit Report')
 
     # Custom validator to find the reported user and prevent self-reporting
@@ -181,7 +176,6 @@ class EventForm(FlaskForm):
     event_description = TextAreaField('Description', validators=[DataRequired(), Length(min=10, max=1000)])
     event_location = StringField('Location', validators=[DataRequired(), Length(min=5, max=200)])
     event_start_time = DateTimeLocalField('Start Time', validators=[DataRequired()], format='%Y-%m-%dT%H:%M')
-    recaptcha = RecaptchaField()
     submit = SubmitField('Create Event')
 
 class ChangePasswordForm(FlaskForm):
@@ -221,7 +215,6 @@ class ChangePasswordForm(FlaskForm):
     # Hidden field to track authentication method used
     auth_method = HiddenField()
     
-    recaptcha = RecaptchaField()
     submit = SubmitField('Change Password', render_kw={"class": "btn btn-primary"})
 
     def validate_current_password(self, field):

@@ -410,16 +410,6 @@
             <input type="hidden" id="latitude" name="latitude" value="">
             <input type="hidden" id="longitude" name="longitude" value="">
             
-            <!-- reCAPTCHA -->
-            <div class="google-form-group">
-                {{ form.recaptcha }}
-                {% if form.recaptcha.errors %}
-                    {% for error in form.recaptcha.errors %}
-                        <div class="google-error">{{ error }}</div>
-                    {% endfor %}
-                {% endif %}
-            </div>
-            
             {{ form.submit(class="google-btn google-btn-primary") }}
         </form>
         

@@ -1043,6 +1043,80 @@ def quick_polyglot_check(file_data: bytes, filename: str) -> Tuple[bool, str]:
         return True, "; ".join(polyglot_result['threats'])
     return False, "File appears to be a valid single-format file"
 
+
+def validate_image_with_ocr(file_path: str, output_dir: str = None, check_sensitive: bool = True) -> Dict:
+    """
+    Validate an image file using OCR to extract and analyze text content
+    
+    Args:
+        file_path: Path to the image file
+        output_dir: Directory to save OCR results (default: static/clean/ocr_output)
+        check_sensitive: Whether to check extracted text for sensitive content
+        
+    Returns:
+        Dict with OCR validation results:
+        - success: bool (whether OCR scan succeeded)
+        - has_text: bool (whether text was detected)
+        - extracted_text: list of text strings
+        - full_text: combined text
+        - ocr_json_path: path to JSON results
+        - has_sensitive_content: bool (if check_sensitive=True)
+        - sensitive_matches: list (if check_sensitive=True and sensitive content found)
+        - error: error message if failed
+    """
+    try:
+        # Import OCR validator
+        try:
+            from .ocr_validate import validate_image_content, scan_and_check_sensitive_content
+        except ImportError:
+            try:
+                from ocr_validate import validate_image_content, scan_and_check_sensitive_content
+            except ImportError:
+                return {
+                    'success': False,
+                    'error': 'OCR validation module not available (PaddleOCR not installed)',
+                    'has_text': False,
+                    'extracted_text': [],
+                    'full_text': ''
+                }
+        
+        # Perform OCR scan with optional sensitive content check
+        if check_sensitive:
+            result = scan_and_check_sensitive_content(file_path, output_dir)
+        else:
+            result = validate_image_content(file_path, output_dir)
+        
+        return result
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f'OCR validation error: {str(e)}',
+            'has_text': False,
+            'extracted_text': [],
+            'full_text': ''
+        }
+
+
+def scan_image_for_text(file_path: str, output_dir: str = None) -> Tuple[bool, str, Dict]:
+    """
+    Simplified function to scan image for text using OCR
+    
+    Args:
+        file_path: Path to image file
+        output_dir: Output directory for OCR results
+        
+    Returns:
+        Tuple of (has_text: bool, full_text: str, ocr_data: dict)
+    """
+    result = validate_image_with_ocr(file_path, output_dir, check_sensitive=False)
+    
+    if result['success']:
+        return result.get('has_text', False), result.get('full_text', ''), result
+    else:
+        return False, '', result
+
+
 def scan_upload(file_data: bytes, filename: str, max_size: int = 10*1024*1024) -> Tuple[bool, List[str]]:
     """Scan uploaded file - returns (is_safe, issues_list)"""
     result = validate_file_security(file_data=file_data, filename=filename, max_size=max_size)

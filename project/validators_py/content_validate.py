@@ -1,7 +1,9 @@
 import re
+import math
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime
-#y2gx: check for sensitive content via regex, this is temp but will have to suffice
+
+# y2gx: Enhanced sensitive content checker with validation, false positive reduction, and context awareness
 class SensitiveContentChecker:
     """
     A comprehensive content checker that uses regex patterns to detect sensitive information
@@ -11,10 +13,30 @@ class SensitiveContentChecker:
     def __init__(self):
         self.patterns = self._initialize_patterns()
         self.severity_levels = {
-            'HIGH': ['nric', 'credit_card', 'ssn', 'passport'],
-            'MEDIUM': ['phone', 'bank_account', 'driving_license'],
+            'HIGH': ['nric', 'credit_card', 'ssn', 'passport', 'api_key'],
+            'MEDIUM': ['phone', 'bank_account', 'driving_license', 'mac_address', 'bitcoin_address'],
             'LOW': ['email', 'postal_code', 'ip_address']
         }
+        
+        # Pre-compile regex patterns for performance
+        self._compiled_patterns = {}
+        self._compile_patterns()
+        
+        # False positive patterns to exclude
+        self.false_positive_patterns = [
+            r'\b0{4}[-\s]?0{4}[-\s]?0{4}[-\s]?0{4}\b',  # Test card 0000-0000-0000-0000
+            r'\b1{4}[-\s]?1{4}[-\s]?1{4}[-\s]?1{4}\b',  # Sequential 1111-1111-1111-1111
+            r'\b1234[-\s]?5678[-\s]?9012[-\s]?3456\b',  # Example card
+            r'\b4111[-\s]?1111[-\s]?1111[-\s]?1111\b',  # Visa test card
+            r'\b5555[-\s]?5555[-\s]?5555[-\s]?4444\b',  # MC test card
+        ]
+        
+        # Compile false positive patterns
+        self._compiled_fp_patterns = [re.compile(p, re.IGNORECASE) for p in self.false_positive_patterns]
+        
+        # Context indicators for test/code detection
+        self.test_context_keywords = {'test', 'example', 'sample', 'demo', 'placeholder', 'dummy', 'fake'}
+        self.code_context_keywords = {'const', 'var', 'let', 'function', 'def', 'class', '//', '/*', '*/'}
     
     def _initialize_patterns(self) -> Dict[str, Dict]:
         """Initialize all regex patterns for sensitive content detection"""
@@ -96,15 +118,43 @@ class SensitiveContentChecker:
                 'description': 'Bitcoin Addresses',
                 'examples': ['1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa'],
                 'severity': 'MEDIUM'
+            },
+            # Composite patterns for cloud provider tokens
+            'aws_access_key': {
+                'pattern': r'\bAKIA[0-9A-Z]{16}\b',
+                'description': 'AWS Access Key ID',
+                'examples': ['AKIAIOSFODNN7EXAMPLE'],
+                'severity': 'HIGH'
+            },
+            'github_token': {
+                'pattern': r'\bghp_[a-zA-Z0-9]{36}\b',
+                'description': 'GitHub Personal Access Token',
+                'examples': ['ghp_abcdefghijklmnopqrstuvwxyz123456'],
+                'severity': 'HIGH'
+            },
+            'slack_token': {
+                'pattern': r'\bxox[baprs]-[0-9]{10,12}-[0-9]{10,12}-[a-zA-Z0-9]{24,32}\b',
+                'description': 'Slack Token',
+                'examples': ['xoxb-123456789012-123456789012-abc123def456ghi789'],
+                'severity': 'HIGH'
             }
         }
     
-    def check_content(self, text: str) -> Dict:
+    def _compile_patterns(self):
+        """Pre-compile all regex patterns for better performance"""
+        for name, info in self.patterns.items():
+            self._compiled_patterns[name] = re.compile(
+                info['pattern'],
+                re.IGNORECASE | re.MULTILINE
+            )
+    
+    def check_content(self, text: str, strict_mode: bool = False) -> Dict:
         """
         Check text for sensitive content and return detailed results
         
         Args:
             text (str): Text content to check
+            strict_mode (bool): If True, apply stricter validation and context checks
             
         Returns:
             Dict: Results containing matches, severity, and recommendations
@@ -122,12 +172,29 @@ class SensitiveContentChecker:
         highest_severity = 'NONE'
         risk_score = 0
         
-        # Check each pattern
+        # Check each pattern using pre-compiled regexes
         for pattern_name, pattern_info in self.patterns.items():
-            regex = re.compile(pattern_info['pattern'], re.IGNORECASE | re.MULTILINE)
+            regex = self._compiled_patterns[pattern_name]
             found_matches = regex.finditer(text)
             
             for match in found_matches:
+                matched_text = match.group()
+                
+                # Skip false positives
+                if self._is_false_positive(matched_text, pattern_name):
+                    continue
+                
+                # Validate specific patterns
+                if not self._validate_pattern(matched_text, pattern_name):
+                    continue
+                
+                # Check context in strict mode
+                context_info = None
+                if strict_mode:
+                    context_info = self._analyze_context(text, match.start(), match.end())
+                    if context_info['type'] in ['test', 'code'] and context_info['confidence'] == 'high':
+                        continue  # Skip likely false positives
+                
                 match_info = {
                     'type': pattern_name,
                     'description': pattern_info['description'],
@@ -138,7 +205,9 @@ class SensitiveContentChecker:
                         'end': match.end()
                     },
                     'severity': pattern_info['severity'],
-                    'context': self._extract_context(text, match.start(), match.end())
+                    'context': self._extract_context(text, match.start(), match.end()),
+                    'validated': True,  # Passed validation checks
+                    'context_analysis': context_info if strict_mode else None
                 }
                 matches.append(match_info)
                 
@@ -255,6 +324,147 @@ class SensitiveContentChecker:
             return checksum % 10
         
         return luhn_checksum(card_number.replace(' ', '').replace('-', '')) == 0
+    
+    def _validate_nric_checksum(self, nric: str) -> bool:
+        """Validate Singapore NRIC/FIN using checksum algorithm"""
+        if len(nric) != 9:
+            return False
+        
+        try:
+            weights = [2, 7, 6, 5, 4, 3, 2]
+            prefix = nric[0].upper()
+            digits = [int(d) for d in nric[1:8]]
+            checksum = nric[8].upper()
+            
+            # ST checksums (for Singapore Citizens/PRs born before 2000)
+            st_checks = ['J', 'Z', 'I', 'H', 'G', 'F', 'E', 'D', 'C', 'B', 'A']
+            # FG checksums (for Foreigners and new format)
+            fg_checks = ['X', 'W', 'U', 'T', 'R', 'Q', 'P', 'N', 'M', 'L', 'K']
+            # M checksums (for 21st century births)
+            m_checks = ['K', 'L', 'J', 'N', 'P', 'Q', 'R', 'T', 'U', 'W', 'X']
+            
+            total = sum(w * d for w, d in zip(weights, digits))
+            
+            if prefix in ['S', 'T']:
+                return checksum == st_checks[total % 11]
+            elif prefix in ['F', 'G']:
+                total += 4
+                return checksum == fg_checks[total % 11]
+            elif prefix == 'M':
+                total += 3
+                return checksum == m_checks[total % 11]
+            
+            return False
+        except (ValueError, IndexError):
+            return False
+    
+    def _calculate_entropy(self, text: str) -> float:
+        """Calculate Shannon entropy to detect high-entropy strings (API keys, tokens)"""
+        if not text:
+            return 0
+        
+        # Count character frequencies
+        frequencies = {}
+        for char in text:
+            frequencies[char] = frequencies.get(char, 0) + 1
+        
+        # Calculate entropy
+        entropy = 0
+        length = len(text)
+        for count in frequencies.values():
+            p = count / length
+            if p > 0:
+                entropy -= p * math.log2(p)
+        
+        return entropy
+    
+    def _is_false_positive(self, text: str, pattern_type: str) -> bool:
+        """Check if match is likely a false positive"""
+        # Check against known false positive patterns
+        for fp_pattern in self._compiled_fp_patterns:
+            if fp_pattern.search(text):
+                return True
+        
+        # Pattern-specific checks
+        if pattern_type == 'credit_card':
+            # Exclude cards with all same digits
+            clean_num = text.replace(' ', '').replace('-', '')
+            if len(set(clean_num)) == 1:
+                return True
+            
+            # Exclude sequential patterns (123456789, 987654321)
+            sequential_count = 0
+            for i in range(len(clean_num) - 1):
+                if clean_num[i].isdigit() and clean_num[i+1].isdigit():
+                    if abs(int(clean_num[i+1]) - int(clean_num[i])) == 1:
+                        sequential_count += 1
+            if sequential_count > len(clean_num) * 0.6:  # >60% sequential
+                return True
+        
+        if pattern_type == 'ssn':
+            # Exclude obviously fake SSNs
+            parts = text.split('-')
+            if parts[0] == '000' or parts[0] == '666' or int(parts[0]) >= 900:
+                return True
+            if parts[1] == '00' or parts[2] == '0000':
+                return True
+        
+        if pattern_type == 'ip_address':
+            # Validate IP address ranges
+            try:
+                octets = [int(x) for x in text.split('.')]
+                if any(octet > 255 for octet in octets):
+                    return True
+            except ValueError:
+                return True
+        
+        return False
+    
+    def _validate_pattern(self, text: str, pattern_type: str) -> bool:
+        """Validate matched pattern using algorithm-specific checks"""
+        if pattern_type == 'credit_card':
+            # Use Luhn algorithm
+            return self.validate_luhn(text)
+        
+        if pattern_type == 'nric':
+            # Use NRIC checksum validation
+            return self._validate_nric_checksum(text)
+        
+        if pattern_type in ['api_key', 'aws_access_key', 'github_token']:
+            # Check entropy for high-randomness tokens
+            entropy = self._calculate_entropy(text)
+            return entropy > 4.0  # High entropy indicates real token
+        
+        # Default: accept the match
+        return True
+    
+    def _analyze_context(self, text: str, start: int, end: int) -> Dict:
+        """Analyze surrounding context to reduce false positives"""
+        # Get words before and after the match
+        context_window = 100
+        context_start = max(0, start - context_window)
+        context_end = min(len(text), end + context_window)
+        
+        words_before = text[context_start:start].lower().split()[-10:]
+        words_after = text[end:context_end].lower().split()[:10]
+        
+        all_context = words_before + words_after
+        
+        # Check for test/example context
+        test_indicators = sum(1 for word in all_context if word in self.test_context_keywords)
+        if test_indicators >= 2:
+            return {'type': 'test', 'confidence': 'high'}
+        elif test_indicators == 1:
+            return {'type': 'test', 'confidence': 'medium'}
+        
+        # Check for code context
+        code_indicators = sum(1 for word in all_context if word in self.code_context_keywords)
+        if code_indicators >= 2:
+            return {'type': 'code', 'confidence': 'high'}
+        elif code_indicators == 1:
+            return {'type': 'code', 'confidence': 'medium'}
+        
+        return {'type': 'real', 'confidence': 'high'}
 
 def create_content_scanning_middleware():
     """Create middleware function for automatic content scanning"""

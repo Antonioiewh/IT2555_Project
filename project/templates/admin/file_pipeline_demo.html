@@ -102,6 +102,22 @@
             color: #6c757d;
             font-style: italic;
         }
+        
+        /* Image comparison styles */
+        .img-comparison-card {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .img-comparison-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+        }
+        .img-comparison-card img {
+            transition: transform 0.3s ease;
+            cursor: zoom-in;
+        }
+        .img-comparison-card img:hover {
+            transform: scale(1.02);
+        }
     </style>
 {% endblock %}
 
@@ -145,7 +161,7 @@
                     </div>
                     <div class="card-body">
                         <div class="row">
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <h6>Step 1: Security Validation</h6>
                                 <ul class="list-unstyled">
                                     <li><i class="bi bi-check2 text-success"></i> File size validation</li>
@@ -154,7 +170,7 @@
                                     <li><i class="bi bi-check2 text-success"></i> File signature analysis</li>
                                 </ul>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <h6>Step 2: Metadata Removal</h6>
                                 <ul class="list-unstyled">
                                     <li><i class="bi bi-check2 text-success"></i> EXIF data removal (images)</li>
@@ -163,12 +179,21 @@
                                     <li><i class="bi bi-check2 text-success"></i> ZIP archive processing</li>
                                 </ul>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <h6>Step 3: Watermarking</h6>
                                 <ul class="list-unstyled">
                                     <li><i class="bi bi-check2 text-success"></i> Red validation watermark</li>
                                     <li><i class="bi bi-check2 text-success"></i> Bottom-right placement</li>
                                     <li><i class="bi bi-check2 text-success"></i> Enhanced font size</li>
+                                    <li><i class="bi bi-check2 text-success"></i> Image files only</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-3">
+                                <h6>Step 4: OCR Text Extraction</h6>
+                                <ul class="list-unstyled">
+                                    <li><i class="bi bi-check2 text-success"></i> PaddleOCR engine</li>
+                                    <li><i class="bi bi-check2 text-success"></i> Multi-language support</li>
+                                    <li><i class="bi bi-check2 text-success"></i> Confidence scoring</li>
                                     <li><i class="bi bi-check2 text-success"></i> Image files only</li>
                                 </ul>
                             </div>
@@ -336,6 +361,162 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Step 4: OCR Text Extraction -->
+                        {% if result.validation_result.pipeline_info and result.validation_result.pipeline_info.ocr_available %}
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <div class="pipeline-step {% if result.validation_result.ocr_performed and result.validation_result.ocr_text %}step-completed{% elif result.validation_result.ocr_error %}step-failed{% else %}step-warning{% endif %}">
+                                    <h6>
+                                        <i class="bi bi-4-circle{% if result.validation_result.ocr_performed and result.validation_result.ocr_text %}-fill text-success{% elif result.validation_result.ocr_error %} text-danger{% else %} text-warning{% endif %}"></i>
+                                        OCR Text Extraction
+                                    </h6>
+                                    <p class="mb-2">
+                                        <span class="badge bg-{% if result.validation_result.ocr_performed and result.validation_result.ocr_text %}success{% elif result.validation_result.ocr_error %}danger{% else %}warning{% endif %}">
+                                            {% if result.validation_result.ocr_performed %}
+                                                {% if result.validation_result.ocr_text %}
+                                                    TEXT FOUND
+                                                {% else %}
+                                                    NO TEXT DETECTED
+                                                {% endif %}
+                                            {% elif result.validation_result.ocr_error %}
+                                                FAILED
+                                            {% else %}
+                                                SKIPPED
+                                            {% endif %}
+                                        </span>
+                                    </p>
+                                    
+                                    {% if result.validation_result.ocr_performed %}
+                                        {% if result.validation_result.ocr_text %}
+                                            <div class="success-item mb-3">
+                                                <i class="bi bi-check-circle text-success"></i> 
+                                                <strong>Extracted Text ({{ result.validation_result.ocr_details.total_detections }} block(s), {{ result.validation_result.ocr_details.high_confidence_count }} high confidence):</strong>
+                                            </div>
+                                            
+                                            <!-- Extracted Text Display -->
+                                            <div class="card bg-light">
+                                                <div class="card-body">
+                                                    <div class="mb-3">
+                                                        <label class="fw-bold mb-2"><i class="bi bi-text-paragraph"></i> Full Text:</label>
+                                                        <div class="p-3 bg-white border rounded" style="font-family: 'Segoe UI', sans-serif; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">{{ result.validation_result.ocr_text }}</div>
+                                                    </div>
+                                                    
+                                                    {% if result.validation_result.ocr_details and result.validation_result.ocr_details.text_blocks %}
+                                                    <div>
+                                                        <label class="fw-bold mb-2"><i class="bi bi-list-ol"></i> Text Blocks with Confidence:</label>
+                                                        <div class="list-group">
+                                                            {% for block in result.validation_result.ocr_details.text_blocks %}
+                                                            <div class="list-group-item">
+                                                                <div class="d-flex justify-content-between align-items-center">
+                                                                    <span>{{ block.text }}</span>
+                                                                    <span class="badge {% if block.confidence >= 0.7 %}bg-success{% elif block.confidence >= 0.5 %}bg-warning{% else %}bg-secondary{% endif %}">
+                                                                        {{ (block.confidence * 100)|round(1) }}%
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                            {% endfor %}
+                                                        </div>
+                                                    </div>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        {% else %}
+                                            <div class="warning-item">
+                                                <i class="bi bi-info-circle text-info"></i> No text detected in image
+                                            </div>
+                                        {% endif %}
+                                    {% endif %}
+                                    
+                                    {% if result.validation_result.ocr_error %}
+                                        <div class="threat-item">
+                                            <i class="bi bi-x-circle text-danger"></i> {{ result.validation_result.ocr_error }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Image Before/After Comparison -->
+                        {% if result.is_image and result.original_image_url and result.cleaned_image_url and result.validation_result.is_safe %}
+                        <div class="mt-4">
+                            <h5><i class="bi bi-image"></i> Image Before/After Comparison</h5>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="card h-100 img-comparison-card">
+                                        <div class="card-header bg-info text-white">
+                                            <h6 class="mb-0"><i class="bi bi-image"></i> Original Image</h6>
+                                        </div>
+                                        <div class="card-body text-center">
+                                            <p class="text-muted mb-3">Image with original metadata and no watermark</p>
+                                            <img src="{{ result.original_image_url }}" alt="Original Image" class="img-fluid rounded shadow" style="max-height: 400px; object-fit: contain;">
+                                            <div class="mt-3">
+                                                <span class="badge bg-secondary">Original</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="card h-100 img-comparison-card">
+                                        <div class="card-header bg-success text-white">
+                                            <h6 class="mb-0"><i class="bi bi-shield-check"></i> Cleaned Image</h6>
+                                        </div>
+                                        <div class="card-body text-center">
+                                            <p class="text-muted mb-3">Image after metadata removal and watermarking</p>
+                                            <img src="{{ result.cleaned_image_url }}" alt="Cleaned Image" class="img-fluid rounded shadow" style="max-height: 400px; object-fit: contain;">
+                                            <div class="mt-3">
+                                                {% if result.validation_result.metadata_removed %}
+                                                <span class="badge bg-success"><i class="bi bi-check-circle"></i> Metadata Removed</span>
+                                                {% endif %}
+                                                {% if result.validation_result.watermark_added %}
+                                                <span class="badge bg-primary"><i class="bi bi-droplet"></i> Watermarked</span>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Comparison Summary -->
+                            <div class="card mt-3">
+                                <div class="card-body">
+                                    <h6 class="mb-3"><i class="bi bi-info-circle"></i> Processing Summary</h6>
+                                    <div class="row text-center">
+                                        <div class="col-md-3">
+                                            <div class="mb-2">
+                                                <i class="bi bi-file-image text-primary" style="font-size: 2rem;"></i>
+                                            </div>
+                                            <small class="text-muted">Image Type</small>
+                                            <div><strong>{{ result.filename.rsplit('.', 1)[-1].upper() }}</strong></div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="mb-2">
+                                                <i class="bi bi-arrows-angle-expand text-info" style="font-size: 2rem;"></i>
+                                            </div>
+                                            <small class="text-muted">File Size</small>
+                                            <div><strong>{{ result.file_size_mb }} MB</strong></div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="mb-2">
+                                                <i class="bi bi-shield-check text-success" style="font-size: 2rem;"></i>
+                                            </div>
+                                            <small class="text-muted">Security Status</small>
+                                            <div><strong class="text-success">SAFE</strong></div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="mb-2">
+                                                <i class="bi bi-droplet-fill text-danger" style="font-size: 2rem;"></i>
+                                            </div>
+                                            <small class="text-muted">Watermark</small>
+                                            <div><strong>{{ current_user.username }}</strong></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
 
                         {% if result.metadata_demo %}
                         <!-- Metadata Before/After Comparison -->
@@ -539,6 +720,9 @@
                         <h5 class="mb-0"><i class="bi bi-lightbulb"></i> Testing Suggestions</h5>
                     </div>
                     <div class="card-body">
+                        <div class="alert alert-info mb-3">
+                            <i class="bi bi-info-circle"></i> <strong>Tip:</strong> Upload images with text (like screenshots, memes, or photos with signs) to see the OCR text extraction in action! You'll also see before/after image comparison for images.
+                        </div>
                         <div class="row">
                             <div class="col-md-4">
                                 <h6 class="text-success">Safe Files (should pass):</h6>
@@ -550,12 +734,12 @@
                                 </ul>
                             </div>
                             <div class="col-md-4">
-                                <h6 class="text-warning">Metadata-rich Files:</h6>
+                                <h6 class="text-warning">Recommended for Testing:</h6>
                                 <ul class="list-unstyled">
                                     <li><i class="bi bi-camera"></i> Photos with EXIF data</li>
-                                    <li><i class="bi bi-file-music"></i> MP3 files with ID3 tags</li>
+                                    <li><i class="bi bi-card-text"></i> Screenshots with text (OCR demo)</li>
                                     <li><i class="bi bi-file-pdf"></i> PDFs with author info</li>
-                                    <li><i class="bi bi-file-word"></i> Documents with tracked changes</li>
+                                    <li><i class="bi bi-file-music"></i> MP3 files with ID3 tags</li>
                                 </ul>
                             </div>
                             <div class="col-md-4">

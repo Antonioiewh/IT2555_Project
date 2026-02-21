@@ -1,11 +1,26 @@
 FROM python:3.12.3-slim
 WORKDIR /code
-RUN apt-get update && apt-get install -y libmagic1
-#ENV FLASK_APP=__init__.py
-#ENV FLASK_RUN_HOST=0.0.0.0
-COPY requirements.txt requirements.txt
-RUN pip install -r requirements.txt
-COPY . . 
-#use 127.0.0.1
 
-CMD gunicorn --certfile=/code/certs/cert.pem --keyfile=/code/certs/key.pem --reload --reload-extra-file /code/templates --reload-extra-file /code/static -b 0.0.0.0:5000 app:app
+# Install system dependencies for PaddleOCR/OpenCV
+RUN apt-get update && apt-get install -y \
+    libmagic1 \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better layer caching
+COPY requirements.txt requirements.txt
+
+# Install Python packages with pip cache for faster rebuilds
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip && \
+    pip install -r requirements.txt
+
+# Copy application code
+COPY . .
+
+CMD gunicorn --certfile=/code/certs/cert.pem --keyfile=/code/certs/key.pem --timeout 90 --reload --reload-extra-file /code/templates --reload-extra-file /code/static -b 0.0.0.0:5000 app:app

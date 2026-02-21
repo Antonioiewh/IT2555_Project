@@ -164,6 +164,81 @@ except ImportError:
             
             METADATA_REMOVAL_AVAILABLE = True
 
+# Import OCR functionality
+OCR_AVAILABLE = False
+try:
+    # Try relative import first (when imported as a package)
+    from .ocr_validate import extract_text_from_image, validate_image_with_ocr
+    OCR_AVAILABLE = True
+except ImportError:
+    try:
+        # Try direct import (when run directly or in same directory)
+        from ocr_validate import extract_text_from_image, validate_image_with_ocr
+        OCR_AVAILABLE = True
+    except ImportError:
+        # Create fallback functions
+        def extract_text_from_image(*args, **kwargs):
+            return {
+                'success': False, 
+                'error': 'OCR module not available',
+                'text_found': False,
+                'extracted_text': ''
+            }
+        
+        def validate_image_with_ocr(*args, **kwargs):
+            return {
+                'success': False,
+                'error': 'OCR module not available',
+                'ocr_performed': False
+            }
+        
+        OCR_AVAILABLE = False
+
+# =============================================================================
+# NEW: NATIVE CLAMAV INTEGRATION
+# =============================================================================
+CLAMAV_AVAILABLE = False
+try:
+    import clamd
+    CLAMAV_AVAILABLE = True
+    
+    class LocalVirusScanner:
+        def __init__(self, host='clamav', port=3310):
+            self.host = host
+            self.port = port
+            self.cd = None
+
+        def _connect(self):
+            try:
+                self.cd = clamd.ClamdNetworkSocket(host=self.host, port=self.port)
+                return True
+            except Exception as e:
+                print(f"⚠️ Virus Scanner Error: Could not connect to ClamAV at {self.host}:{self.port}. {e}")
+                return False
+
+        def scan_stream(self, file_obj):
+            if not self.cd:
+                if not self._connect():
+                    return False, "Scanner unavailable"
+            try:
+                result = self.cd.instream(file_obj)
+                if result and 'stream' in result:
+                    status, virus_name = result['stream']
+                    if status == 'FOUND':
+                        return False, f"Malware Detected: {virus_name}"
+                    return True, "Clean"
+                return True, "Clean"
+            except Exception as e:
+                error_msg = str(e).lower()
+                if 'size limit' in error_msg or 'maxlength' in error_msg:
+                    return False, "File exceeds ClamAV size limit"
+                self.cd = None 
+                return False, f"Scan Error: {str(e)}"
+                
+    local_av_scanner = LocalVirusScanner()
+except ImportError:
+    CLAMAV_AVAILABLE = False
+
 def validate_file_security(file_path: str = None, file_data: bytes = None, filename: str = None, 
                           max_size: int = 10*1024*1024) -> Dict:
     """
@@ -243,6 +318,17 @@ def validate_file_security(file_path: str = None, file_data: bytes = None, filen
             result['threats'].extend(critical_threats)
             result['is_safe'] = False
             result['risk_level'] = 'critical'
+
+        # 6. INTEGRATED CLAMAV VIRUS SCAN
+        if CLAMAV_AVAILABLE:
+            scan_obj = io.BytesIO(file_data) # Wrap bytes safely for ClamAV
+            is_safe_av, threat_msg = local_av_scanner.scan_stream(scan_obj)
+            if not is_safe_av:
+                result['threats'].append(f"ClamAV: {threat_msg}")
+                result['is_safe'] = False
+                result['risk_level'] = 'critical'
+        else:
+            result['warnings'].append("ClamAV module not available, skipping malware scan")
         
         # Add detection info
         result['detection_info'] = {
@@ -454,7 +540,8 @@ def _check_critical_patterns(file_data: bytes) -> List[str]:
 
 def validate_and_clean_file(file_path: str = None, file_data: bytes = None, filename: str = None, 
                             max_size: int = 10*1024*1024, remove_metadata_flag: bool = True, 
-                            add_watermark: bool = True, watermark_text: str = "VALIDATED") -> Dict:
+                            add_watermark: bool = True, watermark_text: str = "VALIDATED",
+                            enable_ocr: bool = False) -> Dict:
     """
     Global file validation and metadata removal pipeline.
     
@@ -469,6 +556,9 @@ def validate_and_clean_file(file_path: str = None, file_data: bytes = None, file
         filename: Original filename for validation context
         max_size: Maximum allowed file size in bytes
         remove_metadata_flag: Whether to remove metadata (default: True)
+        add_watermark: Whether to add watermark to images (default: True)
+        watermark_text: Text to use for watermark (default: "VALIDATED")
+        enable_ocr: Whether to perform OCR text extraction (default: False)
     
     Returns:
         Dict with validation and cleaning results:
@@ -611,18 +701,89 @@ def validate_and_clean_file(file_path: str = None, file_data: bytes = None, file
         elif not validation_result['is_safe']:
             result['warnings'].append('Watermarking skipped: file failed security validation')
 
-        # Add pipeline info and processed data
+        # Step 4: OCR text extraction (only if enabled, file passed security validation, and is an image)
+        result['ocr_performed'] = False
+        result['ocr_text'] = ''
+        result['ocr_error'] = None
+        result['ocr_details'] = None
+        
+        if enable_ocr and validation_result['is_safe'] and OCR_AVAILABLE:
+            try:
+                # Check if this is an image file
+                is_image = False
+                if file_data is not None:
+                    # Use watermark module's is_image_file if available
+                    if WATERMARK_AVAILABLE:
+                        is_image = is_image_file(file_data)
+                    else:
+                        # Fallback check using file extension
+                        if filename:
+                            ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+                            is_image = ext in ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp']
+                elif file_path is not None:
+                    if WATERMARK_AVAILABLE:
+                        is_image = is_image_file(file_path)
+                    else:
+                        ext = file_path.rsplit('.', 1)[-1].lower() if '.' in file_path else ''
+                        is_image = ext in ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp']
+                
+                if is_image:
+                    # Perform OCR text extraction
+                    ocr_input = file_data if file_data is not None else file_path
+                    
+                    # Run OCR directly without timeout
+                    try:
+                        ocr_result = extract_text_from_image(ocr_input)
+                    except Exception as e:
+                        ocr_result = {'success': False, 'error': str(e)}
+                    
+                    if ocr_result and ocr_result.get('success'):
+                        result['ocr_performed'] = True
+                        result['ocr_text'] = ocr_result['extracted_text']
+                        result['ocr_details'] = {
+                            'text_found': ocr_result['text_found'],
+                            'total_detections': ocr_result['total_detections'],
+                            'high_confidence_count': ocr_result['high_confidence_count'],
+                            'text_blocks': ocr_result['text_blocks']
+                        }
+                        
+                        # Add info message
+                        if ocr_result['text_found']:
+                            result['warnings'].append(
+                                f"OCR: Extracted {ocr_result['total_detections']} text block(s) from image"
+                            )
+                        else:
+                            result['warnings'].append("OCR: No text detected in image")
+                    elif ocr_result and not ocr_result.get('success'):
+                        result['ocr_error'] = ocr_result.get('error', 'Unknown OCR error')
+                        result['warnings'].append(f'OCR failed: {result["ocr_error"]}')
+                else:
+                    result['warnings'].append('OCR skipped: not an image file')
+                    
+            except Exception as e:
+                result['ocr_error'] = f'OCR error: {str(e)}'
+                result['warnings'].append(f'OCR failed: {str(e)}')
+        elif not enable_ocr:
+            result['warnings'].append('OCR skipped: disabled')
+        elif not OCR_AVAILABLE:
+            result['warnings'].append('OCR skipped: module not available')
+        elif not validation_result['is_safe']:
+            result['warnings'].append('OCR skipped: file failed security validation')
+
+        # Add pipeline info
         result['pipeline_info'] = {
             'validation_completed': True,
             'metadata_removal_enabled': remove_metadata_flag,
             'metadata_removal_available': METADATA_REMOVAL_AVAILABLE,
             'watermarking_enabled': add_watermark,
-            'watermarking_available': WATERMARK_AVAILABLE
+            'watermarking_available': WATERMARK_AVAILABLE,
+            'ocr_enabled': enable_ocr,
+            'ocr_available': OCR_AVAILABLE
         }
         
-        # Return the processed file data (with watermark and metadata removed)
-        if file_data is not None:
-            result['processed_data'] = file_data
+        # Include processed file data (watermarked/cleaned bytes) if we have it
+        # Note: This is NOT JSON serializable - handle separately before JSON conversion
+        result['processed_data'] = file_data
         
     except Exception as e:
         result['threats'].append(f'Pipeline error: {str(e)}')
@@ -937,6 +1098,80 @@ def quick_polyglot_check(file_data: bytes, filename: str) -> Tuple[bool, str]:
     if polyglot_result['is_polyglot']:
         return True, "; ".join(polyglot_result['threats'])
     return False, "File appears to be a valid single-format file"
+
+
+def validate_image_with_ocr(file_path: str, output_dir: str = None, check_sensitive: bool = True) -> Dict:
+    """
+    Validate an image file using OCR to extract and analyze text content
+    
+    Args:
+        file_path: Path to the image file
+        output_dir: Directory to save OCR results (default: static/clean/ocr_output)
+        check_sensitive: Whether to check extracted text for sensitive content
+        
+    Returns:
+        Dict with OCR validation results:
+        - success: bool (whether OCR scan succeeded)
+        - has_text: bool (whether text was detected)
+        - extracted_text: list of text strings
+        - full_text: combined text
+        - ocr_json_path: path to JSON results
+        - has_sensitive_content: bool (if check_sensitive=True)
+        - sensitive_matches: list (if check_sensitive=True and sensitive content found)
+        - error: error message if failed
+    """
+    try:
+        # Import OCR validator
+        try:
+            from .ocr_validate import validate_image_content, scan_and_check_sensitive_content
+        except ImportError:
+            try:
+                from ocr_validate import validate_image_content, scan_and_check_sensitive_content
+            except ImportError:
+                return {
+                    'success': False,
+                    'error': 'OCR validation module not available (PaddleOCR not installed)',
+                    'has_text': False,
+                    'extracted_text': [],
+                    'full_text': ''
+                }
+        
+        # Perform OCR scan with optional sensitive content check
+        if check_sensitive:
+            result = scan_and_check_sensitive_content(file_path, output_dir)
+        else:
+            result = validate_image_content(file_path, output_dir)
+        
+        return result
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f'OCR validation error: {str(e)}',
+            'has_text': False,
+            'extracted_text': [],
+            'full_text': ''
+        }
+
+
+def scan_image_for_text(file_path: str, output_dir: str = None) -> Tuple[bool, str, Dict]:
+    """
+    Simplified function to scan image for text using OCR
+    
+    Args:
+        file_path: Path to image file
+        output_dir: Output directory for OCR results
+        
+    Returns:
+        Tuple of (has_text: bool, full_text: str, ocr_data: dict)
+    """
+    result = validate_image_with_ocr(file_path, output_dir, check_sensitive=False)
+    
+    if result['success']:
+        return result.get('has_text', False), result.get('full_text', ''), result
+    else:
+        return False, '', result
+
 
 def scan_upload(file_data: bytes, filename: str, max_size: int = 10*1024*1024) -> Tuple[bool, List[str]]:
     """Scan uploaded file - returns (is_safe, issues_list)"""

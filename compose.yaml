@@ -144,7 +144,7 @@ services:
         condition: service_healthy
     networks:
       - flask-sql
-    command: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 --reload app:app 
+    command: gunicorn --timeout 90 --workers 2 --worker-class gthread --threads 2 --bind 0.0.0.0:5000 --reload app:app
     env_file:
       - ./project/.env
 
@@ -162,7 +162,7 @@ services:
         condition: service_healthy
     networks:
       - flask-sql
-    command: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 --reload app:app
+    command: gunicorn --timeout 90 --workers 2 --worker-class gthread --threads 2 --bind 0.0.0.0:5000 --reload app:app
     env_file:
       - ./project/.env
 
@@ -180,7 +180,7 @@ services:
         condition: service_healthy
     networks:
       - flask-sql
-    command: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 --reload app:app
+    command: gunicorn --timeout 90 --workers 2 --worker-class gthread --threads 2 --bind 0.0.0.0:5000 --reload app:app
     env_file:
       - ./project/.env
 
@@ -229,6 +229,7 @@ services:
       - "8089:8089"
     volumes:
       - splunk-data:/opt/splunk/var
+      - splunk-etc:/opt/splunk/etc
     networks:
       - flask-sql
     restart: unless-stopped
@@ -277,6 +278,10 @@ services:
       - flask-sql
     ports:
       - "3310:3310"
+    environment:
+      - CLAMD_CONF_StreamMaxLength=50M
+      - CLAMD_CONF_MaxFileSize=50M
+      - CLAMD_CONF_MaxScanSize=150M
     volumes:
       - clamav_db:/var/lib/clamav
     healthcheck:
@@ -294,7 +299,9 @@ volumes:
   orchestrator-logs:
   two-tier:
   splunk-data:
+    external: true
   splunk-etc:
+    external: true
   vault_data:
   clamav_db:
 

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-6">
+        {% if product.image_filename %}
+        <img src="{{ url_for('static', filename='uploads/' + product.image_filename) }}" 
+             class="img-fluid rounded" alt="{{ product.title }}">
+        {% else %}
+        <div class="bg-secondary d-flex align-items-center justify-content-center rounded" style="height: 400px;">
+            <i class="fas fa-image fa-5x text-white"></i>
+        </div>
+        {% endif %}
+    </div>
+    <div class="col-md-6">
+        <h1>{{ product.title }}</h1>
+        <p class="lead">{{ product.description }}</p>
+        <h2 class="text-success">${{ "%.2f"|format(product.price) }}</h2>
+        <p class="text-muted">Seller: {{ product.seller.username }}</p>
+        <p class="text-muted">In Stock: {{ product.quantity }} units</p>
+        <p class="text-muted">Listed: {{ product.created_at.strftime('%Y-%m-%d') }}</p>
+        
+        {% if current_user.is_authenticated %}
+            {% if current_user.id != product.seller_id %}
+            <form method="POST" action="{{ url_for('add_to_cart', product_id=product.id) }}" class="mb-3">
+                <div class="input-group mb-3">
+                    <label class="input-group-text">Quantity:</label>
+                    <input type="number" name="quantity" value="1" min="1" max="{{ product.quantity }}" 
+                           class="form-control" style="max-width: 100px;">
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-shopping-cart"></i> Add to Cart
+                    </button>
+                </div>
+            </form>
+            
+            <button class="btn btn-outline-danger w-100 mb-3" onclick="toggleFavorite('{{ product.id|int }}', this)">
+                {% if is_favorited %}
+                <i class="fas fa-heart"></i> Remove from Favorites
+                {% else %}
+                <i class="far fa-heart"></i> Add to Favorites
+                {% endif %}
+            </button>
+            
+            <button class="btn btn-outline-primary w-100" onclick="alert('Chat integration coming soon!')">
+                <i class="fas fa-comments"></i> Contact Seller
+            </button>
+            {% else %}
+            <div class="alert alert-info">This is your own product listing</div>
+            {% endif %}
+        {% else %}
+        <div class="alert alert-warning">
+            <a href="{{ url_for('login') }}">Login</a> to purchase this item
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function toggleFavorite(productId, button) {
+    fetch(`/favorite/toggle/${productId}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'added') {
+            button.innerHTML = '<i class="fas fa-heart"></i> Remove from Favorites';
+            button.classList.add('active');
+        } else {
+            button.innerHTML = '<i class="far fa-heart"></i> Add to Favorites';
+            button.classList.remove('active');
+        }
+    });
+}
+</script>
+{% endblock %}

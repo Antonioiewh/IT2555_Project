@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h2>❤️ My Favorites</h2>
+    </div>
+</div>
+
+{% if favorites %}
+<div class="row">
+    {% for favorite in favorites %}
+    <div class="col-md-4 mb-4">
+        <div class="card product-card h-100">
+            {% if favorite.product.image_filename %}
+            <img src="{{ url_for('static', filename='uploads/' + favorite.product.image_filename) }}" 
+                 class="card-img-top" alt="{{ favorite.product.title }}" style="height: 200px; object-fit: cover;">
+            {% else %}
+            <div class="card-img-top bg-secondary d-flex align-items-center justify-content-center" style="height: 200px;">
+                <i class="fas fa-image fa-3x text-white"></i>
+            </div>
+            {% endif %}
+            <div class="card-body">
+                <h5 class="card-title">{{ favorite.product.title }}</h5>
+                <p class="card-text">{{ favorite.product.description[:100] }}...</p>
+                <p class="h4 text-success">${{ "%.2f"|format(favorite.product.price) }}</p>
+                <small class="text-muted">Sold by: {{ favorite.product.seller.username }}</small>
+            </div>
+            <div class="card-footer">
+                <a href="{{ url_for('product_detail', product_id=favorite.product.id) }}" 
+                   class="btn btn-primary w-100">View Details</a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-info text-center">
+    <i class="fas fa-heart fa-3x mb-3"></i>
+    <h4>No favorites yet</h4>
+    <p>Start adding products to your favorites!</p>
+    <a href="{{ url_for('index') }}" class="btn btn-primary">Browse Products</a>
+</div>
+{% endif %}
+{% endblock %}

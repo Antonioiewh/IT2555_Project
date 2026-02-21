@@ -102,6 +102,9 @@ from validators_py.file_validate import validate_file_security, scan_upload, val
 # Metadata removal
 from validators_py.metadata_remover import remove_metadata
 
+# Content validation for PII detection
+from validators_py.content_validate import SensitiveContentChecker, check_sensitive_content
+
 # Message validators
 from validators_py.message_validate import validate_attachment, save_attachment
 
@@ -1503,6 +1506,28 @@ def signup():
             username = form.username.data
             phone_no = form.phone_no.data
             password = form.password.data
+            
+            # Check username for PII/sensitive information during signup
+            username_pii_check = check_sensitive_content(username)
+            
+            if username_pii_check['match_count'] > 0:
+                # Log PII detection to Splunk
+                splunk_logger.log_security_event(
+                    event_type='pii_detected_signup',
+                    data={
+                        'attempted_username': '[REDACTED]',
+                        'content_type': 'username',
+                        'severity': username_pii_check['severity'],
+                        'risk_score': username_pii_check['risk_score'],
+                        'match_count': username_pii_check['match_count'],
+                        'pii_types': [m['type'] for m in username_pii_check['matches']]
+                    },
+                    severity='HIGH' if username_pii_check['severity'] == 'HIGH' else 'WARNING'
+                )
+                
+                if username_pii_check['severity'] in ['HIGH', 'MEDIUM']:
+                    flash(f"Username contains sensitive information ({', '.join(set(m['type'] for m in username_pii_check['matches']))}). Please choose a different username.", 'error')
+                    return render_template('UserSignup.html', form=form)
 
             # Get keys from hidden fields (You must add these to SignupForm or request.form)
             pub_key = request.form.get('public_key')
@@ -4129,6 +4154,34 @@ def create_post():
         
         if form.validate_on_submit():
             try:
+                # Check post content for PII/sensitive information
+                post_content = form.post_content.data
+                pii_check = check_sensitive_content(post_content)
+                
+                if pii_check['match_count'] > 0:
+                    # Log PII detection to Splunk
+                    splunk_logger.log_security_event(
+                        event_type='pii_detected_post',
+                        data={
+                            'user_id': current_user.user_id,
+                            'username': current_user.username,
+                            'content_type': 'post',
+                            'severity': pii_check['severity'],
+                            'risk_score': pii_check['risk_score'],
+                            'match_count': pii_check['match_count'],
+                            'pii_types': [m['type'] for m in pii_check['matches']],
+                            'safe_for_storage': pii_check['safe_for_storage']
+                        },
+                        severity='HIGH' if pii_check['severity'] == 'HIGH' else 'WARNING'
+                    )
+                    
+                    # Block or warn based on severity
+                    if pii_check['severity'] == 'HIGH':
+                        flash(f"Post creation blocked: {pii_check['match_count']} highly sensitive items detected (NRIC, Credit Cards, etc.). Please remove sensitive information.", 'error')
+                        return render_template('create_post.html', form=form)
+                    elif pii_check['severity'] == 'MEDIUM':
+                        flash(f"Warning: {pii_check['match_count']} moderately sensitive items detected. Consider reviewing your content.", 'warning')
+                
                 # Create new post with updated visibility system
                 new_post = Post(
                     user_id=current_user.user_id,
@@ -4587,6 +4640,32 @@ def edit_profile():
     
     if form.validate_on_submit():
         try:
+            # Check username for PII/sensitive information
+            new_username = form.username.data
+            if new_username != current_user.username:
+                username_pii_check = check_sensitive_content(new_username)
+                
+                if username_pii_check['match_count'] > 0:
+                    # Log PII detection to Splunk
+                    splunk_logger.log_security_event(
+                        event_type='pii_detected_username',
+                        data={
+                            'user_id': current_user.user_id,
+                            'current_username': current_user.username,
+                            'attempted_username': '[REDACTED]',  # Don't log the actual PII
+                            'content_type': 'username',
+                            'severity': username_pii_check['severity'],
+                            'risk_score': username_pii_check['risk_score'],
+                            'match_count': username_pii_check['match_count'],
+                            'pii_types': [m['type'] for m in username_pii_check['matches']]
+                        },
+                        severity='HIGH' if username_pii_check['severity'] == 'HIGH' else 'WARNING'
+                    )
+                    
+                    if username_pii_check['severity'] in ['HIGH', 'MEDIUM']:
+                        flash(f"Username change blocked: Contains sensitive information ({', '.join(set(m['type'] for m in username_pii_check['matches']))}). Please choose a different username.", 'error')
+                        return render_template('EditProfile.html', form=form)
+            
             # Check username changes
             if form.username.data != current_user.username:
                 existing_user = User.query.filter_by(username=form.username.data).first()

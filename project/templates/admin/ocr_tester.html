@@ -1,0 +1,397 @@
+{% extends "UserBase.html" %}
+{% block title %}OCR Image Scanner - Admin{% endblock %}
+
+{% block head %}
+    <style>
+        .ocr-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        
+        .upload-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .upload-zone {
+            border: 3px dashed #dee2e6;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            background: white;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        
+        .upload-zone:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+        
+        .upload-zone.dragover {
+            border-color: #667eea;
+            background: #e7f3ff;
+        }
+        
+        .upload-icon {
+            font-size: 4rem;
+            color: #dee2e6;
+            margin-bottom: 20px;
+        }
+        
+        .results-card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .text-segment {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 12px 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        
+        .confidence-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-left: 10px;
+        }
+        
+        .confidence-high {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .confidence-medium {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .confidence-low {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .sensitive-alert {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+            color: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 8px rgba(238,90,111,0.3);
+        }
+        
+        .sensitive-match {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 5px;
+            padding: 10px 15px;
+            margin-bottom: 10px;
+        }
+        
+        .image-preview {
+            max-width: 100%;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .stats-row {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+        }
+        
+        .stat-box {
+            text-align: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            flex: 1;
+            margin: 0 10px;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+        
+        .info-banner {
+            background: #e7f3ff;
+            border: 1px solid #0066cc;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <!-- Header -->
+            <div class="ocr-header">
+                <h1><i class="fas fa-text-height"></i> OCR Image Scanner</h1>
+                <p class="mb-0">Extract and analyze text from images using PaddleOCR</p>
+            </div>
+            
+            <!-- Info Banner -->
+            <div class="info-banner">
+                <i class="fas fa-info-circle"></i>
+                <strong>About OCR Scanning:</strong> This tool uses PaddleOCR to extract text from images. 
+                It can detect sensitive information like credit cards, NRICs, API keys, and more in image-embedded text.
+            </div>
+            
+            <!-- Upload Section -->
+            <div class="upload-section">
+                <h3 class="mb-4"><i class="fas fa-upload"></i> Upload Image for OCR Scan</h3>
+                
+                <form method="POST" enctype="multipart/form-data" id="ocrForm">
+                    <div class="upload-zone" id="uploadZone">
+                        <div class="upload-icon">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                        </div>
+                        <h5>Drop image here or click to browse</h5>
+                        <p class="text-muted">Supported: PNG, JPG, JPEG, GIF, BMP, TIFF, WEBP</p>
+                        <input type="file" name="ocr_image" id="ocrImage" accept="image/*" 
+                               class="d-none" required>
+                        <div id="fileInfo" class="mt-3" style="display: none;">
+                            <i class="fas fa-file-image"></i>
+                            <span id="fileName"></span>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="checkSensitive" 
+                                   name="check_sensitive" value="true" checked>
+                            <label class="form-check-label" for="checkSensitive">
+                                <strong>Check for sensitive content</strong>
+                                <small class="d-block text-muted">
+                                    Scan extracted text for PII, credit cards, API keys, etc.
+                                </small>
+                            </label>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="fas fa-magic"></i> Scan Image with OCR
+                        </button>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- Results Section -->
+            {% if show_results %}
+            <div class="results-section">
+                <!-- Statistics -->
+                <div class="results-card">
+                    <h3><i class="fas fa-chart-bar"></i> Scan Statistics</h3>
+                    <div class="stats-row">
+                        <div class="stat-box">
+                            <div class="stat-value">{{ ocr_result.total_detections or 0 }}</div>
+                            <div class="stat-label">Text Segments</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value">{{ "%.1f"|format(ocr_result.average_confidence * 100) }}%</div>
+                            <div class="stat-label">Avg Confidence</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value">{{ ocr_result.full_text|length }}</div>
+                            <div class="stat-label">Total Characters</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Sensitive Content Alert -->
+                {% if ocr_result.has_sensitive_content %}
+                <div class="sensitive-alert">
+                    <h4><i class="fas fa-exclamation-triangle"></i> Sensitive Content Detected!</h4>
+                    <p class="mb-2">
+                        <strong>Severity:</strong> 
+                        <span class="badge bg-{{ 'danger' if ocr_result.severity == 'HIGH' else ('warning' if ocr_result.severity == 'MEDIUM' else 'info') }}">
+                            {{ ocr_result.severity }}
+                        </span>
+                    </p>
+                    
+                    {% if ocr_result.sensitive_content_check and ocr_result.sensitive_content_check.matches %}
+                    <h5 class="mt-3">Detected Patterns:</h5>
+                    {% for match in ocr_result.sensitive_content_check.matches %}
+                    <div class="sensitive-match">
+                        <strong>{{ match.pattern_type }}:</strong> {{ match.masked_text }}
+                        <span class="badge bg-{{ 'danger' if match.severity == 'HIGH' else ('warning' if match.severity == 'MEDIUM' else 'info') }} float-end">
+                            {{ match.severity }}
+                        </span>
+                    </div>
+                    {% endfor %}
+                    {% endif %}
+                </div>
+                {% endif %}
+                
+                <!-- Image Preview -->
+                <div class="results-card">
+                    <h3><i class="fas fa-image"></i> OCR Results Visualization</h3>
+                    {% if ocr_result.annotated_image_path %}
+                    <p class="text-muted mb-3">
+                        <i class="fas fa-info-circle"></i> 
+                        Image with detected text bounding boxes and confidence scores
+                    </p>
+                    <img src="{{ url_for('static', filename=ocr_result.annotated_image_path.replace('static/', '').replace('\\', '/')) }}" 
+                         alt="OCR Annotated Image" class="image-preview">
+                    <div class="mt-2">
+                        <small class="text-muted">
+                            <a href="{{ uploaded_image }}" target="_blank">
+                                <i class="fas fa-external-link-alt"></i> View original image
+                            </a>
+                        </small>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-3">Original scanned image (no text detected)</p>
+                    <img src="{{ uploaded_image }}" alt="Scanned Image" class="image-preview">
+                    {% endif %}
+                </div>
+                
+                <!-- Extracted Text -->
+                <div class="results-card">
+                    <h3><i class="fas fa-text-height"></i> Extracted Text Segments</h3>
+                    
+                    {% if ocr_result.extracted_text %}
+                    <p class="text-muted mb-3">
+                        Found {{ ocr_result.extracted_text|length }} text segment(s) with confidence scores:
+                    </p>
+                    
+                    {% for text in ocr_result.extracted_text %}
+                    <div class="text-segment">
+                        <span>{{ text }}</span>
+                        {% if ocr_result.confidence_scores and loop.index0 < ocr_result.confidence_scores|length %}
+                        {% set confidence = ocr_result.confidence_scores[loop.index0] %}
+                        <span class="confidence-badge confidence-{{ 'high' if confidence > 0.8 else ('medium' if confidence > 0.6 else 'low') }}">
+                            {{ "%.1f"|format(confidence * 100) }}% confident
+                        </span>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                    
+                    <hr class="my-4">
+                    
+                    <h5><i class="fas fa-align-left"></i> Combined Text</h5>
+                    <div class="alert alert-secondary">
+                        <pre class="mb-0" style="white-space: pre-wrap; font-family: 'Courier New', monospace;">{{ ocr_result.full_text }}</pre>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        No text was detected in this image.
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Technical Details -->
+                <div class="results-card">
+                    <h3><i class="fas fa-cog"></i> Technical Details</h3>
+                    <table class="table table-sm">
+                        <tbody>
+                            <tr>
+                                <th width="30%">Scan Timestamp</th>
+                                <td>{{ ocr_result.scan_timestamp }}</td>
+                            </tr>
+                            <tr>
+                                <th>JSON Output</th>
+                                <td><code>{{ ocr_result.json_path }}</code></td>
+                            </tr>
+                            <tr>
+                                <th>OCR Engine</th>
+                                <td>PaddleOCR (English Model)</td>
+                            </tr>
+                            <tr>
+                                <th>Minimum Confidence</th>
+                                <td>50% (0.5)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Action Buttons -->
+                <div class="text-center mt-4">
+                    <a href="{{ url_for('admin.ocr_tester') }}" class="btn btn-primary btn-lg">
+                        <i class="fas fa-redo"></i> Scan Another Image
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+    // File upload zone interactions
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('ocrImage');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileName = document.getElementById('fileName');
+    
+    // Click to upload
+    uploadZone.addEventListener('click', () => {
+        fileInput.click();
+    });
+    
+    // File selected
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            const file = e.target.files[0];
+            fileName.textContent = file.name;
+            fileInfo.style.display = 'block';
+        }
+    });
+    
+    // Drag and drop
+    uploadZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadZone.classList.add('dragover');
+    });
+    
+    uploadZone.addEventListener('dragleave', () => {
+        uploadZone.classList.remove('dragover');
+    });
+    
+    uploadZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadZone.classList.remove('dragover');
+        
+        if (e.dataTransfer.files.length > 0) {
+            fileInput.files = e.dataTransfer.files;
+            const file = e.dataTransfer.files[0];
+            fileName.textContent = file.name;
+            fileInfo.style.display = 'block';
+        }
+    });
+    
+    // Form submission indicator
+    document.getElementById('ocrForm').addEventListener('submit', function() {
+        const submitBtn = this.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scanning...';
+    });
+</script>
+{% endblock %}

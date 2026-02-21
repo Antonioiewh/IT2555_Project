@@ -566,3 +566,368 @@ def api_content_check():
         from flask import current_app
         current_app.logger.error(f"Error in content check API: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
+
+
+# ===================================
+# AWS S3 File Management Routes
+# ===================================
+
+@admin_bp.route('/s3_management')
+@admin_required
+def s3_management():
+    """S3 file management dashboard"""
+    try:
+        from s3_service import s3_service
+        
+        # Get filter parameters
+        prefix = request.args.get('prefix', '').strip()
+        folder_filter = request.args.get('folder', '').strip()
+        search_query = request.args.get('search', '').strip()
+        
+        # Combine filters
+        final_prefix = folder_filter if folder_filter else prefix
+        
+        # Get bucket statistics
+        stats_success, stats, stats_error = s3_service.get_bucket_stats()
+        if not stats_success:
+            flash(f'Error loading bucket statistics: {stats_error}', 'error')
+            stats = {'total_files': 0, 'total_size_formatted': '0 B', 'folders': [], 'folder_count': 0}
+        
+        # Get files with metadata
+        success, files, error = s3_service.list_files_with_metadata(prefix=final_prefix)
+        
+        if not success:
+            flash(f'Error loading S3 files: {error}', 'error')
+            files = []
+        else:
+            # Apply search filter if provided
+            if search_query:
+                files = [f for f in files if search_query.lower() in f['FileName'].lower() or search_query.lower() in f['Key'].lower()]
+        
+        # Group files by folder for better organization
+        files_by_folder = {}
+        for file in files:
+            folder = file['Folder'] or 'root'
+            if folder not in files_by_folder:
+                files_by_folder[folder] = []
+            files_by_folder[folder].append(file)
+        
+        return render_template(
+            'admin/s3_management.html',
+            files=files,
+            files_by_folder=files_by_folder,
+            stats=stats,
+            prefix=final_prefix,
+            search_query=search_query,
+            folder_filter=folder_filter,
+            s3_enabled=s3_service.enabled,
+            bucket_name=s3_service.bucket_name if s3_service.enabled else None
+        )
+        
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Error in S3 management: {str(e)}")
+        flash(f'Error loading S3 management page: {str(e)}', 'error')
+        return redirect(url_for('admin.manage_users'))
+
+
+@admin_bp.route('/s3_delete_file', methods=['POST'])
+@admin_required
+def s3_delete_file():
+    """Delete a single file from S3"""
+    try:
+        from s3_service import s3_service
+        from splunk_logger import splunk_logger
+        
+        file_key = request.form.get('file_key')
+        if not file_key:
+            flash('No file specified for deletion.', 'error')
+            return redirect(url_for('admin.s3_management'))
+        
+        # Delete from S3
+        success, error = s3_service.delete_file_from_s3(file_key)
+        
+        if success:
+            # Log to Splunk
+            splunk_logger.log_event(
+                event_type='s3_file_deleted',
+                details={
+                    'file_key': file_key,
+                    'deleted_by': current_user.username,
+                    'user_id': current_user.user_id,
+                    'timestamp': datetime.utcnow().isoformat()
+                },
+                severity='INFO'
+            )
+            
+            flash(f'Successfully deleted: {file_key}', 'success')
+        else:
+            flash(f'Error deleting file: {error}', 'error')
+        
+        return redirect(url_for('admin.s3_management'))
+        
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Error deleting S3 file: {str(e)}")
+        flash(f'Error deleting file: {str(e)}', 'error')
+        return redirect(url_for('admin.s3_management'))
+
+
+@admin_bp.route('/s3_delete_multiple', methods=['POST'])
+@admin_required
+def s3_delete_multiple():
+    """Delete multiple files from S3"""
+    try:
+        from s3_service import s3_service
+        from splunk_logger import splunk_logger
+        
+        # Get file keys from form (comma-separated or JSON array)
+        file_keys_raw = request.form.get('file_keys', '')
+        
+        # Try to parse as JSON first, fall back to comma-separated
+        try:
+            import json
+            file_keys = json.loads(file_keys_raw)
+        except:
+            file_keys = [key.strip() for key in file_keys_raw.split(',') if key.strip()]
+        
+        if not file_keys:
+            flash('No files specified for deletion.', 'error')
+            return redirect(url_for('admin.s3_management'))
+        
+        # Delete files in batch
+        success, results, error = s3_service.delete_multiple_files(file_keys)
+        
+        if success:
+            deleted_count = len(results['deleted'])
+            error_count = len(results['errors'])
+            
+            # Log to Splunk
+            splunk_logger.log_event(
+                event_type='s3_bulk_delete',
+                details={
+                    'files_deleted': deleted_count,
+                    'files_failed': error_count,
+                    'deleted_by': current_user.username,
+                    'user_id': current_user.user_id,
+                    'file_keys': results['deleted'],
+                    'timestamp': datetime.utcnow().isoformat()
+                },
+                severity='INFO'
+            )
+            
+            if deleted_count > 0:
+                flash(f'Successfully deleted {deleted_count} file(s).', 'success')
+            
+            if error_count > 0:
+                flash(f'Failed to delete {error_count} file(s).', 'warning')
+                for err in results['errors']:
+                    flash(f"Error deleting {err['Key']}: {err['Message']}", 'error')
+        else:
+            flash(f'Error deleting files: {error}', 'error')
+        
+        return redirect(url_for('admin.s3_management'))
+        
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Error deleting multiple S3 files: {str(e)}")
+        flash(f'Error deleting files: {str(e)}', 'error')
+        return redirect(url_for('admin.s3_management'))
+
+
+@admin_bp.route('/api/s3_file_info/<path:file_key>')
+@admin_required
+def api_s3_file_info(file_key):
+    """Get detailed information about a specific S3 file"""
+    try:
+        from s3_service import s3_service
+        
+        if not s3_service.enabled:
+            return jsonify({'error': 'S3 service not enabled'}), 503
+        
+        # Get object metadata
+        response = s3_service.s3_client.head_object(
+            Bucket=s3_service.bucket_name,
+            Key=file_key
+        )
+        
+        file_info = {
+            'Key': file_key,
+            'Size': response['ContentLength'],
+            'SizeFormatted': s3_service._format_file_size(response['ContentLength']),
+            'LastModified': response['LastModified'].isoformat(),
+            'ContentType': response.get('ContentType', 'unknown'),
+            'ETag': response['ETag'].strip('"'),
+            'Metadata': response.get('Metadata', {}),
+            'StorageClass': response.get('StorageClass', 'STANDARD'),
+            'URL': s3_service.get_s3_url(file_key)
+        }
+        
+        return jsonify(file_info)
+        
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Error getting S3 file info: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_bp.route('/api/s3_generate_presigned_url', methods=['POST'])
+@admin_required
+def api_s3_generate_presigned_url():
+    """Generate a presigned URL for temporary file access"""
+    try:
+        from s3_service import s3_service
+        
+        data = request.get_json()
+        file_key = data.get('file_key')
+        expiration = data.get('expiration', 3600)  # Default 1 hour
+        
+        if not file_key:
+            return jsonify({'error': 'No file key provided'}), 400
+        
+        success, url, error = s3_service.get_presigned_url(file_key, expiration)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'url': url,
+                'expires_in': expiration
+            })
+        else:
+            return jsonify({'error': error}), 500
+        
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Error generating presigned URL: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ===================================
+# OCR Testing & Validation Routes
+# ===================================
+
+@admin_bp.route('/ocr_tester', methods=['GET', 'POST'])
+@admin_required
+def ocr_tester():
+    """OCR testing dashboard for admins"""
+    if request.method == 'POST':
+        try:
+            from validators_py.file_validate import validate_image_with_ocr
+            from werkzeug.utils import secure_filename
+            
+            # Check if file was uploaded
+            if 'ocr_image' not in request.files:
+                flash('No file uploaded', 'error')
+                return redirect(url_for('admin.ocr_tester'))
+            
+            file = request.files['ocr_image']
+            
+            if file.filename == '':
+                flash('No file selected', 'error')
+                return redirect(url_for('admin.ocr_tester'))
+            
+            # Validate file type
+            allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'webp'}
+            file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+            
+            if file_ext not in allowed_extensions:
+                flash(f'Invalid file type. Allowed: {", ".join(allowed_extensions)}', 'error')
+                return redirect(url_for('admin.ocr_tester'))
+            
+            # Save uploaded file temporarily
+            filename = secure_filename(file.filename)
+            timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+            temp_filename = f"ocr_test_{timestamp}_{filename}"
+            
+            # Create temp directory
+            temp_dir = os.path.join('static', 'clean', 'temp')
+            os.makedirs(temp_dir, exist_ok=True)
+            
+            temp_path = os.path.join(temp_dir, temp_filename)
+            file.save(temp_path)
+            
+            # Get OCR options from form
+            check_sensitive = request.form.get('check_sensitive', 'true') == 'true'
+            
+            # Set output directory
+            output_dir = os.path.join('static', 'clean', 'ocr_output')
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Perform OCR scan
+            ocr_result = validate_image_with_ocr(temp_path, output_dir, check_sensitive)
+            
+            # Prepare results for display
+            if ocr_result['success']:
+                flash(f'OCR scan completed! Found {ocr_result.get("total_detections", 0)} text segments.', 'success')
+                
+                if ocr_result.get('has_sensitive_content'):
+                    flash(f'⚠️ Sensitive content detected! Severity: {ocr_result.get("severity", "UNKNOWN")}', 'warning')
+                
+                return render_template(
+                    'admin/ocr_tester.html',
+                    ocr_result=ocr_result,
+                    uploaded_image=f'/static/clean/temp/{temp_filename}',
+                    show_results=True
+                )
+            else:
+                flash(f'OCR scan failed: {ocr_result.get("error", "Unknown error")}', 'error')
+                return redirect(url_for('admin.ocr_tester'))
+            
+        except Exception as e:
+            from flask import current_app
+            current_app.logger.error(f"Error in OCR tester: {str(e)}")
+            flash(f'Error processing image: {str(e)}', 'error')
+            return redirect(url_for('admin.ocr_tester'))
+    
+    # GET request - show upload form
+    return render_template('admin/ocr_tester.html', show_results=False)
+
+
+@admin_bp.route('/api/ocr_scan_image', methods=['POST'])
+@admin_required
+def api_ocr_scan_image():
+    """API endpoint for OCR scanning"""
+    try:
+        from validators_py.ocr_validate import scan_image_with_ocr
+        
+        data = request.get_json()
+        image_path = data.get('image_path')
+        check_sensitive = data.get('check_sensitive', False)
+        
+        if not image_path:
+            return jsonify({'error': 'No image path provided'}), 400
+        
+        if not os.path.exists(image_path):
+            return jsonify({'error': 'Image not found'}), 404
+        
+        # Set output directory
+        output_dir = os.path.join('static', 'clean', 'ocr_output')
+        
+        # Perform OCR scan
+        success, results, error = scan_image_with_ocr(image_path, output_dir)
+        
+        if success:
+            response_data = {
+                'success': True,
+                'extracted_text': results.get('extracted_text', []),
+                'full_text': results.get('full_text', ''),
+                'total_detections': results.get('total_detections', 0),
+                'average_confidence': results.get('average_confidence', 0),
+                'json_path': results.get('json_path')
+            }
+            
+            # Add sensitive content check if requested
+            if check_sensitive and results.get('full_text'):
+                from validators_py.content_validate import check_sensitive_content
+                sensitive_check = check_sensitive_content(results['full_text'])
+                response_data['sensitive_content'] = sensitive_check
+            
+            return jsonify(response_data)
+        else:
+            return jsonify({'error': error}), 500
+        
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Error in OCR API: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+

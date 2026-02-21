@@ -223,6 +223,161 @@ class S3Service:
             error_msg = f"Error listing S3 files: {str(e)}"
             logger.error(error_msg)
             return False, [], error_msg
+    
+    def list_files_with_metadata(self, prefix: str = '', max_keys: int = 1000) -> Tuple[bool, list, Optional[str]]:
+        """
+        List files in S3 with detailed metadata
+        
+        Args:
+            prefix: Prefix to filter files (e.g., 'users/', 'posts/')
+            max_keys: Maximum number of files to return
+            
+        Returns:
+            Tuple of (success: bool, files_metadata: list[dict], error: Optional[str])
+            Each dict contains: Key, Size, LastModified, StorageClass, ETag, URL
+        """
+        if not self.enabled:
+            return False, [], "S3 service is not enabled"
+        
+        try:
+            all_files = []
+            continuation_token = None
+            
+            while True:
+                # Build request parameters
+                params = {
+                    'Bucket': self.bucket_name,
+                    'Prefix': prefix,
+                    'MaxKeys': min(max_keys - len(all_files), 1000)
+                }
+                
+                if continuation_token:
+                    params['ContinuationToken'] = continuation_token
+                
+                response = self.s3_client.list_objects_v2(**params)
+                
+                # Process each object
+                for obj in response.get('Contents', []):
+                    file_info = {
+                        'Key': obj['Key'],
+                        'Size': obj['Size'],
+                        'SizeFormatted': self._format_file_size(obj['Size']),
+                        'LastModified': obj['LastModified'].isoformat(),
+                        'StorageClass': obj.get('StorageClass', 'STANDARD'),
+                        'ETag': obj['ETag'].strip('"'),
+                        'URL': self.get_s3_url(obj['Key']),
+                        'FileName': obj['Key'].split('/')[-1],
+                        'Folder': '/'.join(obj['Key'].split('/')[:-1]) if '/' in obj['Key'] else ''
+                    }
+                    all_files.append(file_info)
+                
+                # Check if there are more files
+                if not response.get('IsTruncated', False) or len(all_files) >= max_keys:
+                    break
+                
+                continuation_token = response.get('NextContinuationToken')
+            
+            logger.info(f"Listed {len(all_files)} files from S3 with prefix '{prefix}'")
+            return True, all_files, None
+            
+        except Exception as e:
+            error_msg = f"Error listing S3 files with metadata: {str(e)}"
+            logger.error(error_msg)
+            return False, [], error_msg
+    
+    def _format_file_size(self, size_bytes: int) -> str:
+        """Format file size in human-readable format"""
+        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+            if size_bytes < 1024.0:
+                return f"{size_bytes:.2f} {unit}"
+            size_bytes /= 1024.0
+        return f"{size_bytes:.2f} PB"
+    
+    def delete_multiple_files(self, file_paths: list) -> Tuple[bool, Dict, Optional[str]]:
+        """
+        Delete multiple files from S3 in a batch operation
+        
+        Args:
+            file_paths: List of file paths to delete
+            
+        Returns:
+            Tuple of (success: bool, results: dict, error: Optional[str])
+            results contains: deleted (list), errors (list)
+        """
+        if not self.enabled:
+            return False, {'deleted': [], 'errors': []}, "S3 service is not enabled"
+        
+        if not file_paths:
+            return True, {'deleted': [], 'errors': []}, None
+        
+        try:
+            # Prepare objects for deletion
+            objects_to_delete = [{'Key': path.lstrip('/')} for path in file_paths]
+            
+            response = self.s3_client.delete_objects(
+                Bucket=self.bucket_name,
+                Delete={'Objects': objects_to_delete}
+            )
+            
+            deleted = [obj['Key'] for obj in response.get('Deleted', [])]
+            errors = [
+                {'Key': obj['Key'], 'Message': obj.get('Message', 'Unknown error')}
+                for obj in response.get('Errors', [])
+            ]
+            
+            logger.info(f"Deleted {len(deleted)} files from S3. {len(errors)} errors.")
+            
+            return True, {'deleted': deleted, 'errors': errors}, None
+            
+        except Exception as e:
+            error_msg = f"Error deleting multiple files from S3: {str(e)}"
+            logger.error(error_msg)
+            return False, {'deleted': [], 'errors': []}, error_msg
+    
+    def get_bucket_stats(self) -> Tuple[bool, Dict, Optional[str]]:
+        """
+        Get statistics about the S3 bucket
+        
+        Returns:
+            Tuple of (success: bool, stats: dict, error: Optional[str])
+            stats contains: total_files, total_size, folders
+        """
+        if not self.enabled:
+            return False, {}, "S3 service is not enabled"
+        
+        try:
+            total_files = 0
+            total_size = 0
+            folders = set()
+            
+            paginator = self.s3_client.get_paginator('list_objects_v2')
+            pages = paginator.paginate(Bucket=self.bucket_name)
+            
+            for page in pages:
+                for obj in page.get('Contents', []):
+                    total_files += 1
+                    total_size += obj['Size']
+                    
+                    # Extract folder from key
+                    if '/' in obj['Key']:
+                        folder = obj['Key'].split('/')[0]
+                        folders.add(folder)
+            
+            stats = {
+                'total_files': total_files,
+                'total_size': total_size,
+                'total_size_formatted': self._format_file_size(total_size),
+                'folders': sorted(list(folders)),
+                'folder_count': len(folders)
+            }
+            
+            logger.info(f"Bucket stats: {total_files} files, {stats['total_size_formatted']}")
+            return True, stats, None
+            
+        except Exception as e:
+            error_msg = f"Error getting bucket stats: {str(e)}"
+            logger.error(error_msg)
+            return False, {}, error_msg
 
 
 # Initialize S3 service

@@ -42,3 +42,5 @@ hvac==1.2.1
 #tesseract==5.5.0 #i will figure out OCR later
 boto3>=1.28.0
 python-dotenv>=1.0.0
+paddlepaddle==3.2.0
+paddleocr[all]

@@ -144,7 +144,7 @@ services:
         condition: service_healthy
     networks:
       - flask-sql
-    command: gunicorn --timeout 90 --workers 2 --worker-class gthread --threads 2 --bind 0.0.0.0:5000 --reload app:app
+    command: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 --reload app:app
     env_file:
       - ./project/.env
 
@@ -162,7 +162,7 @@ services:
         condition: service_healthy
     networks:
       - flask-sql
-    command: gunicorn --timeout 90 --workers 2 --worker-class gthread --threads 2 --bind 0.0.0.0:5000 --reload app:app
+    command: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 --reload app:app
     env_file:
       - ./project/.env
 
@@ -180,7 +180,7 @@ services:
         condition: service_healthy
     networks:
       - flask-sql
-    command: gunicorn --timeout 90 --workers 2 --worker-class gthread --threads 2 --bind 0.0.0.0:5000 --reload app:app
+    command: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:5000 --reload app:app
     env_file:
       - ./project/.env
 
@@ -191,7 +191,7 @@ services:
     networks:
       - flask-sql
     environment:
-      - REDIS_URL=redis://redis:6666/0
+      - REDIS_URL=redis://redis:6379/0
   nginx:
     build: ./nginxproxy
     ports:
@@ -279,9 +279,9 @@ services:
     ports:
       - "3310:3310"
     environment:
-      - CLAMD_CONF_StreamMaxLength=50M
-      - CLAMD_CONF_MaxFileSize=50M
-      - CLAMD_CONF_MaxScanSize=150M
+      - CLAMD_CONF_StreamMaxLength=150M
+      - CLAMD_CONF_MaxFileSize=150M
+      - CLAMD_CONF_MaxScanSize=300M
     volumes:
       - clamav_db:/var/lib/clamav
     healthcheck:

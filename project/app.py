@@ -1,5 +1,7 @@
 # app.py - Consolidated Flask Application
-
+import eventlet
+eventlet.monkey_patch()
+from eventlet import tpool
 # --- Standard Library Imports ---
 import os
 import re
@@ -12,15 +14,12 @@ import cbor2
 import pyotp
 import qrcode
 import bleach
-
 from io import BytesIO
 from datetime import datetime, timedelta
 from functools import wraps
 
 # --- Third Party Library Imports ---
 from PIL import Image, ImageDraw, ImageFont
-
-
 
 # --- Flask Core Imports ---
 from flask import Flask, render_template, redirect, url_for, flash, request, current_app, abort, jsonify, session, make_response, send_file 
@@ -62,7 +61,7 @@ from wtforms import StringField, PasswordField, SubmitField, TextAreaField, Sele
 from vault import vault_bp
 
 # --- virus Scanner Imports ---
-from scanner import scanner_bp, av_scanner
+#from scanner import scanner_bp, av_scanner
 
 # --- Custom Module Imports ---
 
@@ -105,15 +104,8 @@ from validators_py.file_validate import validate_file_security, scan_upload, val
 # Metadata removal
 from validators_py.metadata_remover import remove_metadata
 
-# Content validation for PII detection
-from validators_py.content_validate import SensitiveContentChecker, check_sensitive_content
-
 # Message validators
 from validators_py.message_validate import validate_attachment, save_attachment
-
-# S3 Storage
-from s3_service import s3_service
-from file_upload_handler import create_upload_handler
 
 # Helper functions
 from functions import get_relative_time, b64encode_all, get_fido2_server, send_user_event_reminders
@@ -137,6 +129,8 @@ class Config:
     SEND_FILE_MAX_AGE_DEFAULT = 0  # Disable static file caching for live reloading
     
     # External APIs
+    RECAPTCHA_PUBLIC_KEY = os.getenv('RECAPTCHA_PUBLIC_KEY')
+    RECAPTCHA_PRIVATE_KEY = os.getenv('RECAPTCHA_PRIVATE_KEY')
     GOOGLE_MAPS_API_KEY = os.getenv('GOOGLE_MAPS_API_KEY')
     
     # Database configuration
@@ -204,7 +198,7 @@ class DevelopmentConfig(Config):
     WTF_CSRF_ENABLED = False  # Temporarily disabled for development
     
     # least scuffed but remember generate new token on the web UI and replace here
-    SPLUNK_HEC_TOKEN = '5c6ddb02-e1aa-4dee-baf5-f09d51ca1870'  # Replace with actual token
+    SPLUNK_HEC_TOKEN = 'f1be25f6-d14f-46fe-b324-c69a82676ec1'  # Replace with actual token
     SPLUNK_HOST = 'splunk'
     SPLUNK_PORT = '8088'
     SPLUNK_INDEX = 'main'
@@ -259,7 +253,7 @@ def create_app(config_name=None):
     app.register_blueprint(vault_bp)
 
     # Register Scanner
-    app.register_blueprint(scanner_bp)
+    #app.register_blueprint(scanner_bp)
     
     # Enable template auto-reload for development
     if config_name in ['development', 'testing'] or app.config.get('DEBUG'):
@@ -268,10 +262,6 @@ def create_app(config_name=None):
     
     # Initialize extensions
     initialize_extensions(app)
-
-    # Initialize upload handler
-    app.upload_handler = create_upload_handler(app)
-    app.logger.info(f"Upload handler initialized. S3 enabled: {app.upload_handler.use_s3}")
 
      # Initialize database manager
     initialize_database_manager(app)  # Add this line
@@ -624,7 +614,7 @@ def apply_bottom_right_overlay_bytes(input_image_path, watermark_text):
             # Try to load a nice font, fallback to default if unavailable
             try:
                 # Try common system fonts
-                font_size = max(int(height * 0.10), 36)  # 10% of image height, minimum 24px
+                font_size = max(int(height * 0.06), 24)  # 6% of image height, minimum 24px
                 font = ImageFont.truetype("arial.ttf", font_size)
             except:
                 try:
@@ -635,7 +625,7 @@ def apply_bottom_right_overlay_bytes(input_image_path, watermark_text):
                     except:
                         # Fallback to default font
                         font = ImageFont.load_default()
-                        font_size = 36  # Approx size for default font
+                        font_size = 12
             
             # Get text bounding box to know its size
             bbox = draw.textbbox((0, 0), watermark_text, font=font)
@@ -726,11 +716,11 @@ def add_watermark_overlay(input_image_path, output_image_path, watermark_text):
 # --- Cleanup Functions ---
 def cleanup_old_downloads():
     """
-    Clean up old downloaded files from the clean/posts directory
+    Clean up old downloaded files from the downloads directory
     This function should be called periodically to prevent disk space issues
     """
     try:
-        downloads_dir = os.path.join(os.path.dirname(__file__), 'static', 'clean', 'posts')
+        downloads_dir = os.path.join(os.path.dirname(__file__), 'static', 'downloads')
         if not os.path.exists(downloads_dir):
             return
         
@@ -1021,7 +1011,8 @@ def upload_banner():
         file.seek(0)
         
         # Run comprehensive validation pipeline with username watermarking
-        validation_result = validate_and_clean_file(
+        validation_result = tpool.execute(
+            validate_and_clean_file,
             file_data=file_data,
             filename=file.filename,
             max_size=10*1024*1024,  # 10MB for banners
@@ -1035,42 +1026,21 @@ def upload_banner():
             app.logger.warning(f"Banner upload failed security validation for user {current_user.user_id}: {threats_msg}")
             return jsonify({'success': False, 'error': f'File security validation failed: {threats_msg}'})
 
-        # Generate secure filename
+        # Generate secure filename and save processed file
+        clean_banner_dir = os.path.join(app.static_folder, 'clean', 'banner')
+        os.makedirs(clean_banner_dir, exist_ok=True)
+        
         filename = secure_filename(file.filename)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         name_part, ext_part = os.path.splitext(filename)
         safe_filename = f"clean_banner_{current_user.user_id}_{timestamp}_{name_part[:50]}{ext_part}"
         
-        # Save processed file to local storage (clean/banner directory)
-        clean_banner_dir = os.path.join(app.static_folder, 'clean', 'banner')
-        os.makedirs(clean_banner_dir, exist_ok=True)
         upload_path = os.path.join(clean_banner_dir, safe_filename)
         
+        # Save the processed (validated, cleaned, watermarked) file
         processed_data = validation_result.get('processed_data', file_data)
         with open(upload_path, 'wb') as f:
             f.write(processed_data)
-        
-        # Upload cleaned image to S3 as backup
-        try:
-            # Create BytesIO from cleaned/watermarked data
-            processed_file = BytesIO(processed_data)
-            processed_file.filename = safe_filename
-            processed_file.seek(0)
-            
-            file_ext = ext_part.lstrip('.') or 'jpg'
-            s3_path = f"banners/user_{current_user.user_id}/{safe_filename}"
-            s3_result = app.upload_handler.save_file(
-                processed_file,
-                s3_path,
-                content_type=f'image/{file_ext}',
-                save_local=False
-            )
-            if s3_result['success']:
-                app.logger.info(f"Banner backed up to S3: {s3_result['s3_key']}")
-            else:
-                app.logger.warning(f"S3 backup failed for banner: {s3_result.get('error')}")
-        except Exception as s3_error:
-            app.logger.warning(f"Failed to backup banner to S3: {str(s3_error)}")
         
         # Remove old banner (check both old uploads dir and new clean/banner dir)
         if current_user.banner_url:
@@ -1078,12 +1048,15 @@ def upload_banner():
             clean_old_file(old_upload_dir, current_user.banner_url)
             clean_old_file(clean_banner_dir, current_user.banner_url)
         
-        # Update database with new path structure 
+        # Update database with new path structure
         current_user.banner_url = f"clean/banner/{safe_filename}"
         db.session.commit()
         
-        # Log pipeline results
-        app.logger.info(f"Banner upload processed: user_id={current_user.user_id}, watermark={validation_result['watermark_added']}, metadata_removed={validation_result['metadata_removed']}")
+        app.logger.info(f"User {current_user.user_id} successfully uploaded banner through full pipeline: {safe_filename}")
+        if validation_result['metadata_removed']:
+            app.logger.info(f"Metadata removed from banner for user {current_user.user_id}")
+        if validation_result['watermark_added']:
+            app.logger.info(f"Username watermark added to banner for user {current_user.user_id}")
         
         return jsonify({
             'success': True,
@@ -1238,7 +1211,7 @@ def home():
         import traceback
         traceback.print_exc()
         flash('Error loading feed. Please try again.', 'error')
-        return render_template('users/UserHome.html', 
+        return render_template('UserHome.html', 
                              posts=[], 
                              pagination=None, 
                              has_more=False,
@@ -1424,7 +1397,7 @@ def login():
                     # User exists but wrong password
                     user.failed_login_attempts += 1
                     
-                    if user.failed_login_attempts >= 9999:
+                    if user.failed_login_attempts >= 3:
                         # Account will be locked
                         user.lockout_until = datetime.utcnow() + timedelta(minutes=10)
                         
@@ -1511,28 +1484,6 @@ def signup():
             username = form.username.data
             phone_no = form.phone_no.data
             password = form.password.data
-            
-            # Check username for PII/sensitive information during signup
-            username_pii_check = check_sensitive_content(username)
-            
-            if username_pii_check['match_count'] > 0:
-                # Log PII detection to Splunk
-                splunk_logger.log_security_event(
-                    event_type='pii_detected_signup',
-                    data={
-                        'attempted_username': '[REDACTED]',
-                        'content_type': 'username',
-                        'severity': username_pii_check['severity'],
-                        'risk_score': username_pii_check['risk_score'],
-                        'match_count': username_pii_check['match_count'],
-                        'pii_types': [m['type'] for m in username_pii_check['matches']]
-                    },
-                    severity='HIGH' if username_pii_check['severity'] == 'HIGH' else 'WARNING'
-                )
-                
-                if username_pii_check['severity'] in ['HIGH', 'MEDIUM']:
-                    flash(f"Username contains sensitive information ({', '.join(set(m['type'] for m in username_pii_check['matches']))}). Please choose a different username.", 'error')
-                    return render_template('UserSignup.html', form=form)
 
             # Get keys from hidden fields (You must add these to SignupForm or request.form)
             pub_key = request.form.get('public_key')
@@ -3771,12 +3722,14 @@ def upload_message_attachment():
         return jsonify(ok=False, error='No file provided'), 400
     
     try:
-        file.seek(0) # Reset pointer after scan
+        
+        # --- 2. ORIGINAL: DEEP VALIDATION & PROCESSING ---
         file_data = file.read()
         file.seek(0)
         
         # Run comprehensive validation pipeline with username watermarking
-        validation_result = validate_and_clean_file(
+        validation_result = tpool.execute(
+            validate_and_clean_file,
             file_data=file_data,
             filename=file.filename,
             max_size=25*1024*1024,  # 25MB for attachments
@@ -3807,27 +3760,6 @@ def upload_message_attachment():
         with open(upload_path, 'wb') as f:
             f.write(processed_data)
         
-        # Upload cleaned file to S3 as backup (for all file types)
-        try:
-            # Create BytesIO from cleaned data
-            processed_file = BytesIO(processed_data)
-            processed_file.filename = safe_filename
-            processed_file.seek(0)
-            
-            s3_path = f"chat_attachments/user_{current_user.user_id}/{safe_filename}"
-            s3_result = app.upload_handler.save_file(
-                processed_file,
-                s3_path,
-                content_type=file.content_type or 'application/octet-stream',
-                save_local=False
-            )
-            if s3_result['success']:
-                app.logger.info(f"Chat attachment backed up to S3: {s3_result['s3_key']}")
-            else:
-                app.logger.warning(f"S3 backup failed for attachment: {s3_result.get('error')}")
-        except Exception as s3_error:
-            app.logger.warning(f"Failed to backup attachment to S3: {str(s3_error)}")
-        
         # Determine file type and size
         file_size = len(processed_data)
         mime_type = file.content_type or 'application/octet-stream'
@@ -3848,8 +3780,11 @@ def upload_message_attachment():
         
         rel_path = f"clean/chat/{safe_filename}"
         
-        # Log pipeline results (no verbose messages - not demo mode)
-        app.logger.info(f"Message attachment processed: user_id={current_user.user_id}, watermark={validation_result['watermark_added']}, metadata_removed={validation_result['metadata_removed']}")
+        app.logger.info(f"Message attachment processed through full pipeline for user {current_user.user_id}: {safe_filename}")
+        if validation_result['metadata_removed']:
+            app.logger.info(f"Metadata removed from message attachment for user {current_user.user_id}")
+        if validation_result['watermark_added']:
+            app.logger.info(f"Username watermark added to message attachment for user {current_user.user_id}")
         
         return jsonify(
             ok=True,
@@ -4095,34 +4030,6 @@ def create_post():
         
         if form.validate_on_submit():
             try:
-                # Check post content for PII/sensitive information
-                post_content = form.post_content.data
-                pii_check = check_sensitive_content(post_content)
-                
-                if pii_check['match_count'] > 0:
-                    # Log PII detection to Splunk
-                    splunk_logger.log_security_event(
-                        event_type='pii_detected_post',
-                        data={
-                            'user_id': current_user.user_id,
-                            'username': current_user.username,
-                            'content_type': 'post',
-                            'severity': pii_check['severity'],
-                            'risk_score': pii_check['risk_score'],
-                            'match_count': pii_check['match_count'],
-                            'pii_types': [m['type'] for m in pii_check['matches']],
-                            'safe_for_storage': pii_check['safe_for_storage']
-                        },
-                        severity='HIGH' if pii_check['severity'] == 'HIGH' else 'WARNING'
-                    )
-                    
-                    # Block or warn based on severity
-                    if pii_check['severity'] == 'HIGH':
-                        flash(f"Post creation blocked: {pii_check['match_count']} highly sensitive items detected (NRIC, Credit Cards, etc.). Please remove sensitive information.", 'error')
-                        return render_template('create_post.html', form=form)
-                    elif pii_check['severity'] == 'MEDIUM':
-                        flash(f"Warning: {pii_check['match_count']} moderately sensitive items detected. Consider reviewing your content.", 'warning')
-                
                 # Create new post with updated visibility system
                 new_post = Post(
                     user_id=current_user.user_id,
@@ -4163,7 +4070,8 @@ def create_post():
                         image_file.seek(0)
                         
                         # Run comprehensive validation pipeline with username watermarking
-                        validation_result = validate_and_clean_file(
+                        validation_result = tpool.execute(
+                            validate_and_clean_file,
                             file_data=image_data,
                             filename=image_file.filename,
                             max_size=5*1024*1024,  # 5MB for post images
@@ -4173,13 +4081,14 @@ def create_post():
                         )
                         
                         if validation_result['is_safe']:
-                            # Generate secure filename for processed file
-                            clean_posts_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'posts')
+                            # Generate secure filename and save processed file
+                            clean_posts_dir = os.path.join(current_app.root_path, 'static', 'clean', 'posts')
                             os.makedirs(clean_posts_dir, exist_ok=True)
                             
+                            filename = secure_filename(image_file.filename)
                             timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-                            file_ext = os.path.splitext(image_file.filename)[1].lower() or '.jpg'
-                            safe_filename = f"post_{new_post.post_id}_{current_user.user_id}_{timestamp}{file_ext}"
+                            name_part, ext_part = os.path.splitext(filename)
+                            safe_filename = f"clean_post_{new_post.post_id}_{current_user.user_id}_{timestamp}_{name_part[:30]}{ext_part}"
                             
                             upload_path = os.path.join(clean_posts_dir, safe_filename)
                             
@@ -4191,41 +4100,22 @@ def create_post():
                             # Create PostImage record
                             post_image = PostImage(
                                 post_id=new_post.post_id,
-                                image_url=f"uploads/posts/{safe_filename}",
+                                image_url=f"clean/posts/{safe_filename}",  # Store path relative to static folder
                                 order_index=1
                             )
                             db.session.add(post_image)
                             
-                            # Upload cleaned image to S3 as backup
-                            try:
-                                # Create BytesIO from cleaned/watermarked data
-                                processed_file = BytesIO(processed_data)
-                                processed_file.filename = safe_filename
-                                processed_file.seek(0)
-                                
-                                s3_path = f"posts/post_{new_post.post_id}/{safe_filename}"
-                                s3_result = app.upload_handler.save_file(
-                                    processed_file,
-                                    s3_path,
-                                    content_type=f'image/{file_ext.lstrip(".")}',
-                                    save_local=False
-                                )
-                                if s3_result['success']:
-                                    app.logger.info(f"Post image backed up to S3: {s3_result['s3_key']}")
-                                else:
-                                    app.logger.warning(f"S3 backup failed: {s3_result.get('error')}")
-                                    
-                            except Exception as s3_error:
-                                app.logger.warning(f"Failed to backup post image to S3: {str(s3_error)}")
-                            
-                            # Log pipeline results (no flash messages - not demo mode)
-                            app.logger.info(f"Post image processed: post_id={new_post.post_id}, watermark={validation_result['watermark_added']}, metadata_removed={validation_result['metadata_removed']}")
+                            app.logger.info(f"Post image processed through full pipeline for post {new_post.post_id}: {safe_filename}")
+                            if validation_result['metadata_removed']:
+                                app.logger.info(f"Metadata removed from post image for post {new_post.post_id}")
+                            if validation_result['watermark_added']:
+                                app.logger.info(f"Username watermark added to post image for post {new_post.post_id}")
                             
                         else:
                             # Security validation failed - log errors but continue with post creation
                             threats_msg = '; '.join(validation_result['threats'][:2])
                             app.logger.warning(f"Post image failed validation for post {new_post.post_id}: {threats_msg}")
-                            flash('Post created but image upload failed security validation.', 'warning')
+                            flash('Post created but image upload failed security validation: ' + threats_msg, 'warning')
                         
                     except Exception as img_error:
                         app.logger.error(f"Error processing post image for post {new_post.post_id}: {str(img_error)}")
@@ -4581,32 +4471,6 @@ def edit_profile():
     
     if form.validate_on_submit():
         try:
-            # Check username for PII/sensitive information
-            new_username = form.username.data
-            if new_username != current_user.username:
-                username_pii_check = check_sensitive_content(new_username)
-                
-                if username_pii_check['match_count'] > 0:
-                    # Log PII detection to Splunk
-                    splunk_logger.log_security_event(
-                        event_type='pii_detected_username',
-                        data={
-                            'user_id': current_user.user_id,
-                            'current_username': current_user.username,
-                            'attempted_username': '[REDACTED]',  # Don't log the actual PII
-                            'content_type': 'username',
-                            'severity': username_pii_check['severity'],
-                            'risk_score': username_pii_check['risk_score'],
-                            'match_count': username_pii_check['match_count'],
-                            'pii_types': [m['type'] for m in username_pii_check['matches']]
-                        },
-                        severity='HIGH' if username_pii_check['severity'] == 'HIGH' else 'WARNING'
-                    )
-                    
-                    if username_pii_check['severity'] in ['HIGH', 'MEDIUM']:
-                        flash(f"Username change blocked: Contains sensitive information ({', '.join(set(m['type'] for m in username_pii_check['matches']))}). Please choose a different username.", 'error')
-                        return render_template('EditProfile.html', form=form)
-            
             # Check username changes
             if form.username.data != current_user.username:
                 existing_user = User.query.filter_by(username=form.username.data).first()
@@ -4654,27 +4518,6 @@ def edit_profile():
                     with open(upload_path, 'wb') as f:
                         f.write(processed_data)
                     
-                    # Upload cleaned image to S3 as backup
-                    try:
-                        # Create BytesIO from cleaned/watermarked data
-                        processed_file = BytesIO(processed_data)
-                        processed_file.filename = safe_filename
-                        processed_file.seek(0)
-                        
-                        s3_path = f"profile_pictures/user_{current_user.user_id}/{safe_filename}"
-                        s3_result = app.upload_handler.save_file(
-                            processed_file,
-                            s3_path,
-                            content_type='image/png',
-                            save_local=False
-                        )
-                        if s3_result['success']:
-                            app.logger.info(f"Profile picture backed up to S3: {s3_result['s3_key']}")
-                        else:
-                            app.logger.warning(f"S3 backup failed for profile pic: {s3_result.get('error')}")
-                    except Exception as s3_error:
-                        app.logger.warning(f"Failed to backup profile picture to S3: {str(s3_error)}")
-                    
                     # Clean old files from both old and new directories
                     if current_user.profile_pic_url:
                         old_upload_dir = os.path.join(app.static_folder, 'uploads')
@@ -4683,8 +4526,11 @@ def edit_profile():
                     
                     current_user.profile_pic_url = f"clean/profile_pictures/{safe_filename}"
                     
-                    # Log pipeline results (no verbose messages - not demo mode)
-                    app.logger.info(f"Profile picture processed: user_id={current_user.user_id}, watermark={validation_result['watermark_added']}, metadata_removed={validation_result['metadata_removed']}")
+                    app.logger.info(f"User {current_user.user_id} updated profile picture through full pipeline: {safe_filename}")
+                    if validation_result['metadata_removed']:
+                        app.logger.info(f"Metadata removed from profile picture for user {current_user.user_id}")
+                    if validation_result['watermark_added']:
+                        app.logger.info(f"Username watermark added to profile picture for user {current_user.user_id}")
                         
                 except Exception as img_error:
                     app.logger.error(f"Error processing profile image for user {current_user.user_id}: {str(img_error)}")
@@ -5157,8 +5003,8 @@ def file_pipeline_demo():
             import os
             import uuid
             
-            # Create clean/posts directory if it doesn't exist (following file structure)
-            downloads_dir = os.path.join(app.root_path, 'static', 'clean', 'posts')
+            # Create downloads directory if it doesn't exist
+            downloads_dir = os.path.join(app.root_path, 'static', 'downloads')
             os.makedirs(downloads_dir, exist_ok=True)
             
             # Save file temporarily for metadata extraction demo
@@ -5173,72 +5019,27 @@ def file_pipeline_demo():
                 file_data = file.read()
                 file.seek(0)
                 
-                # Check if this is an image file for before/after display
-                is_image = False
-                file_ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
-                if file_ext in ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp']:
-                    is_image = True
-                
-                # Save original image for before/after comparison (if it's an image)
-                original_image_id = None
-                original_image_url = None
-                if is_image:
-                    original_image_id = str(uuid.uuid4())
-                    original_filename = f"original_{original_image_id}_{secure_filename(file.filename)}"
-                    original_path = os.path.join(downloads_dir, original_filename)
-                    
-                    # Save original file
-                    with open(original_path, 'wb') as f:
-                        f.write(file_data)
-                    
-                    original_image_url = url_for('serve_pipeline_image', filename=original_filename)
-                    
-                    # Store in session for cleanup
-                    session[f'original_image_{original_image_id}'] = {
-                        'filepath': original_path,
-                        'created_at': datetime.now().timestamp()
-                    }
-                
-                # Run the pipeline (enable OCR for demo)
+                # Run the pipeline
                 pipeline_result = validate_and_clean_file(
                     file_data=file_data,
                     filename=file.filename,
                     max_size=16*1024*1024,  # 16MB max for demo
                     remove_metadata_flag=True,
                     add_watermark=True,  # Enable watermarking step
-                    watermark_text=current_user.username,  # Use current user's username
-                    enable_ocr=True  # Enable OCR for demo showcase
+                    watermark_text=current_user.username  # Use current user's username
                 )
-                
-                # Keep processed_data for S3 upload before removing it
-                processed_data = pipeline_result.get('processed_data')
-                
-                # Remove processed_data from result (bytes aren't JSON serializable for template)
-                # We've already used it if needed, so safe to remove for display
-                pipeline_result.pop('processed_data', None)
                 
                 # Run metadata demo (before/after comparison) and create cleaned file
                 metadata_demo = None
-                cleaned_image_url = None
                 
                 try:
-                    # Call the updated demo function with downloads directory and original filename
-                    metadata_demo = demo_metadata_before_after(
-                        temp_path, 
-                        downloads_dir, 
-                        current_user.username,
-                        original_filename=file.filename
-                    )
+                    # Call the updated demo function with downloads directory
+                    metadata_demo = demo_metadata_before_after(temp_path, downloads_dir, current_user.username)
                     
                     # If file is safe and metadata demo was successful and produced a download
                     if (pipeline_result['is_safe'] and 
                         metadata_demo.get('success', False) and 
                         metadata_demo.get('download_id')):
-                        
-                        # Get cleaned image URL for display
-                        if is_image and metadata_demo.get('cleaned_file_path'):
-                            cleaned_filename = os.path.basename(metadata_demo['cleaned_file_path'])
-                            cleaned_image_url = url_for('serve_pipeline_image', filename=cleaned_filename)
                         
                         # Store download info in session for security
                         session[f'download_{metadata_demo["download_id"]}'] = {
@@ -5257,47 +5058,6 @@ def file_pipeline_demo():
                         'details': f'Demo error: {str(e)}'
                     }
                 
-                # S3 Backup - Final step after all validation checks
-                if pipeline_result['is_safe'] and processed_data:
-                    try:
-                        # Create BytesIO object from processed data
-                        processed_file = BytesIO(processed_data)
-                        processed_file.filename = secure_filename(file.filename)
-                        processed_file.seek(0)
-                        
-                        # Generate S3 path with timestamp
-                        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                        s3_path = f"demo/{timestamp}/{secure_filename(file.filename)}"
-                        
-                        # Determine content type
-                        content_type = 'application/octet-stream'
-                        if is_image:
-                            if file_ext in ['jpg', 'jpeg']:
-                                content_type = 'image/jpeg'
-                            elif file_ext == 'png':
-                                content_type = 'image/png'
-                            elif file_ext == 'gif':
-                                content_type = 'image/gif'
-                            elif file_ext == 'webp':
-                                content_type = 'image/webp'
-                        
-                        # Upload to S3
-                        s3_result = app.upload_handler.save_file(
-                            processed_file,
-                            s3_path,
-                            content_type=content_type,
-                            save_local=False
-                        )
-                        
-                        if s3_result['success']:
-                            app.logger.info(f"Demo file backed up to S3: {s3_result['s3_key']}")
-                        else:
-                            app.logger.warning(f"Demo S3 backup failed: {s3_result.get('error', 'Unknown error')}")
-                    
-                    except Exception as e:
-                        # Don't fail the demo if S3 backup fails, just log it
-                        app.logger.warning(f'Demo S3 backup error: {str(e)}')
-                
                 # Create result summary
                 result = {
                     'filename': file.filename,
@@ -5306,10 +5066,7 @@ def file_pipeline_demo():
                     'validation_result': pipeline_result,
                     'metadata_demo': metadata_demo,
                     'md5_hash': pipeline_result.get('file_info', {}).get('md5_hash', 'N/A'),
-                    'file_type': pipeline_result.get('file_info', {}).get('expected_type', 'Unknown'),
-                    'is_image': is_image,
-                    'original_image_url': original_image_url,
-                    'cleaned_image_url': cleaned_image_url
+                    'file_type': pipeline_result.get('file_info', {}).get('expected_type', 'Unknown')
                 }
                 
                 # Add human-readable status
@@ -5408,33 +5165,6 @@ def download_cleaned_file(download_id):
         app.logger.error(f'Download error: {str(e)}')
         flash('Error downloading file', 'error')
         return redirect(url_for('admin.file_pipeline_demo'))
-
-@app.route('/admin/pipeline_image/<path:filename>')
-@admin_required
-def serve_pipeline_image(filename):
-    """
-    Serve pipeline demo images with proper authorization
-    """
-    try:
-        # Build the full path
-        image_dir = os.path.join(app.root_path, 'static', 'clean', 'posts')
-        file_path = os.path.join(image_dir, filename)
-        
-        # Security: Ensure the file is within the allowed directory
-        if not os.path.abspath(file_path).startswith(os.path.abspath(image_dir)):
-            abort(403)
-        
-        # Check if file exists
-        if not os.path.exists(file_path):
-            app.logger.error(f'Pipeline image not found: {file_path}')
-            abort(404)
-        
-        # Serve the file
-        return send_file(file_path, mimetype='image/jpeg')
-        
-    except Exception as e:
-        app.logger.error(f'Error serving pipeline image: {str(e)}')
-        abort(500)
 
 @app.route('/admin/create_support_agent', methods=['GET', 'POST'])
 @admin_required  

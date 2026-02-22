@@ -688,7 +688,10 @@ def validate_and_clean_file(file_path: str = None, file_data: bytes = None, file
                             'text_found': ocr_result['text_found'],
                             'total_detections': ocr_result['total_detections'],
                             'high_confidence_count': ocr_result['high_confidence_count'],
-                            'text_blocks': ocr_result['text_blocks']
+                            'text_blocks': ocr_result['text_blocks'],
+                            'annotated_image_path': ocr_result.get('annotated_image_path'),  # For visualization
+                            'json_path': ocr_result.get('json_path'),  # For reference
+                            'average_confidence': ocr_result.get('average_confidence', 0)
                         }
                         
                         # Add info message

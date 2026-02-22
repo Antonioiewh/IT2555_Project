@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<style>
+    #card-element { 
+        border: 1px solid #ced4da; 
+        padding: 10px; 
+        border-radius: 4px; 
+        background-color: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <h2 class="mb-4">💳 Payment</h2>
+        
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Order Total</h5>
+                <hr>
+                <div class="d-flex justify-content-between">
+                    <strong>Amount to Pay:</strong>
+                    <strong class="text-success h4">${{ "%.2f"|format(total) }}</strong>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Payment Information</h5>
+                <div class="alert alert-info">
+                    <i class="fas fa-lock"></i> <strong>Secured with Stripe</strong> - Card details never stored
+                </div>
+                
+                <form id="payment-form">
+                    <div class="mb-3">
+                        <label for="card-element" class="form-label">Credit or Debit Card</label>
+                        <div id="card-element"></div>
+                        <div id="card-errors" class="text-danger mt-2"></div>
+                    </div>
+                    
+                    <button id="submit-button" class="btn btn-success btn-lg w-100" type="submit">
+                        <i class="fas fa-lock"></i> Pay ${{ "%.2f"|format(total) }}
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="mt-3 text-center">
+            <small class="text-muted">
+                <i class="fas fa-shield-alt"></i> Test card: 4242 4242 4242 4242 | Exp: 12/25 | CVC: 123
+            </small>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://js.stripe.com/v3/"></script>
+<script>
+    console.log('=== STRIPE PAYMENT DEBUG ===');
+    console.log('Stripe Public Key:', '{{ stripe_public_key }}');
+    
+    const stripe = Stripe('{{ stripe_public_key }}');
+    const elements = stripe.elements();
+    const cardElement = elements.create('card');
+    cardElement.mount('#card-element');
+
+    const form = document.getElementById('payment-form');
+    const submitButton = document.getElementById('submit-button');
+    const cardErrors = document.getElementById('card-errors');
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        
+        console.log('Payment form submitted');
+        
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processing...';
+        cardErrors.textContent = '';
+
+        try {
+            console.log('Creating payment intent...');
+            
+            const response = await fetch('/create-payment-intent', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'}
+            });
+
+            console.log('Response status:', response.status);
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Server error:', errorText);
+                throw new Error(`Server error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log('Payment intent response:', data);
+
+            if (data.error) {
+                throw new Error(data.error);
+            }
+
+            if (!data.clientSecret) {
+                console.error('No client secret in response:', data);
+                throw new Error('No client secret received from server');
+            }
+
+            const {clientSecret, order_id} = data;
+            console.log('Client secret received, confirming payment...');
+
+            const result = await stripe.confirmCardPayment(clientSecret, {
+                payment_method: {card: cardElement}
+            });
+
+            console.log('Stripe confirmation result:', result);
+
+            if (result.error) {
+                console.error('Payment error:', result.error);
+                cardErrors.textContent = result.error.message;
+                submitButton.disabled = false;
+                submitButton.innerHTML = '<i class="fas fa-lock"></i> Pay ${{ "%.2f"|format(total) }}';
+            } else {
+                console.log('Payment successful! Redirecting to 2FA...');
+                window.location.href = `/verify-payment-2fa/${order_id}`;
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            cardErrors.textContent = 'Payment failed: ' + error.message;
+            submitButton.disabled = false;
+            submitButton.innerHTML = '<i class="fas fa-lock"></i> Pay ${{ "%.2f"|format(total) }}';
+        }
+    });
+</script>
+{% endblock %}

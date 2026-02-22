@@ -362,97 +362,128 @@
                             </div>
                         </div>
 
-                        <!-- Step 4: OCR Text Extraction -->
-                        {% if result.validation_result.pipeline_info and result.validation_result.pipeline_info.ocr_available %}
-                        <div class="row mt-3">
-                            <div class="col-12">
-                                <div class="pipeline-step {% if result.validation_result.ocr_performed and result.validation_result.ocr_text %}step-completed{% elif result.validation_result.ocr_error %}step-failed{% else %}step-warning{% endif %}">
-                                    <h6>
-                                        <i class="bi bi-4-circle{% if result.validation_result.ocr_performed and result.validation_result.ocr_text %}-fill text-success{% elif result.validation_result.ocr_error %} text-danger{% else %} text-warning{% endif %}"></i>
-                                        OCR Text Extraction
-                                    </h6>
-                                    <p class="mb-2">
-                                        <span class="badge bg-{% if result.validation_result.ocr_performed and result.validation_result.ocr_text %}success{% elif result.validation_result.ocr_error %}danger{% else %}warning{% endif %}">
-                                            {% if result.validation_result.ocr_performed %}
-                                                {% if result.validation_result.ocr_text %}
-                                                    TEXT FOUND
-                                                {% else %}
-                                                    NO TEXT DETECTED
-                                                {% endif %}
-                                            {% elif result.validation_result.ocr_error %}
-                                                FAILED
-                                            {% else %}
-                                                SKIPPED
-                                            {% endif %}
-                                        </span>
-                                    </p>
-                                    
-                                    {% if result.validation_result.ocr_performed %}
-                                        {% if result.validation_result.ocr_text %}
-                                            <div class="success-item mb-3">
-                                                <i class="bi bi-check-circle text-success"></i> 
-                                                <strong>Extracted Text ({{ result.validation_result.ocr_details.total_detections }} block(s), {{ result.validation_result.ocr_details.high_confidence_count }} high confidence):</strong>
-                                            </div>
-                                            
-                                            <!-- Extracted Text Display -->
-                                            <div class="card bg-light">
-                                                <div class="card-body">
-                                                    <div class="mb-3">
-                                                        <label class="fw-bold mb-2"><i class="bi bi-text-paragraph"></i> Full Text:</label>
-                                                        <div class="p-3 bg-white border rounded" style="font-family: 'Segoe UI', sans-serif; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">{{ result.validation_result.ocr_text }}</div>
-                                                    </div>
-                                                    
-                                                    {% if result.validation_result.ocr_details and result.validation_result.ocr_details.text_blocks %}
-                                                    <div>
-                                                        <label class="fw-bold mb-2"><i class="bi bi-list-ol"></i> Text Blocks with Confidence:</label>
-                                                        <div class="list-group">
-                                                            {% for block in result.validation_result.ocr_details.text_blocks %}
-                                                            <div class="list-group-item">
-                                                                <div class="d-flex justify-content-between align-items-center">
-                                                                    <span>{{ block.text }}</span>
-                                                                    <span class="badge {% if block.confidence >= 0.7 %}bg-success{% elif block.confidence >= 0.5 %}bg-warning{% else %}bg-secondary{% endif %}">
-                                                                        {{ (block.confidence * 100)|round(1) }}%
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-                                                            {% endfor %}
-                                                        </div>
-                                                    </div>
-                                                    {% endif %}
-                                                </div>
-                                            </div>
-                                        {% else %}
-                                            <div class="warning-item">
-                                                <i class="bi bi-info-circle text-info"></i> No text detected in image
-                                            </div>
-                                        {% endif %}
-                                    {% endif %}
-                                    
-                                    {% if result.validation_result.ocr_error %}
-                                        <div class="threat-item">
-                                            <i class="bi bi-x-circle text-danger"></i> {{ result.validation_result.ocr_error }}
+                        {% if result.metadata_demo %}
+                        <!-- Metadata Before/After Comparison -->
+                        <div class="mt-4">
+                            <h5><i class="bi bi-arrow-left-right"></i> Metadata Before/After Comparison</h5>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="card h-100">
+                                        <div class="card-header bg-info text-white">
+                                            <h6 class="mb-0"><i class="bi bi-info-circle"></i> Before: Original Metadata</h6>
                                         </div>
-                                    {% endif %}
+                                        <div class="card-body">
+                                            {% if result.metadata_demo.before %}
+                                            <div class="metadata-container">
+                                                {% if result.metadata_demo.before is mapping and result.metadata_demo.before|length > 0 %}
+                                                    <table class="table table-sm">
+                                                        <tbody>
+                                                        {% for key, value in result.metadata_demo.before.items() %}
+                                                            <tr>
+                                                                <td width="40%"><strong>{{ key }}</strong></td>
+                                                                <td>
+                                                                    <span class="metadata-value-code">{{ value if value != '' else '(empty)' }}</span>
+                                                                </td>
+                                                            </tr>
+                                                        {% endfor %}
+                                                        </tbody>
+                                                    </table>
+                                                {% else %}
+                                                    <div class="p-3 text-center text-muted">
+                                                        <i class="bi bi-info-circle"></i> No metadata found in original file
+                                                    </div>
+                                                {% endif %}
+                                            </div>
+                                            {% else %}
+                                            <div class="alert alert-info mb-0">
+                                                <i class="bi bi-info-circle"></i> Metadata extraction not available for this file type
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="card h-100">
+                                        <div class="card-header bg-{% if result.metadata_demo.success %}success{% else %}warning{% endif %} text-white">
+                                            <h6 class="mb-0"><i class="bi bi-{% if result.metadata_demo.success %}check-circle{% else %}exclamation-triangle{% endif %}"></i> After: Cleaned Metadata</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            {% if result.metadata_demo.success %}
+                                                {% if result.metadata_demo.after is mapping and result.metadata_demo.after|length > 0 %}
+                                                    <div class="metadata-container">
+                                                        <table class="table table-sm">
+                                                            <tbody>
+                                                            {% for key, value in result.metadata_demo.after.items() %}
+                                                                <tr>
+                                                                    <td width="40%"><strong>{{ key }}</strong></td>
+                                                                    <td>
+                                                                        <span class="metadata-value-code">{{ value if value != '' else '(empty)' }}</span>
+                                                                    </td>
+                                                                </tr>
+                                                            {% endfor %}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                {% else %}
+                                                    <div class="alert alert-success mb-0">
+                                                        <i class="bi bi-check-circle"></i> <strong>All metadata successfully removed!</strong>
+                                                        <p class="mb-0 mt-2 small">The cleaned file contains no extractable metadata.</p>
+                                                    </div>
+                                                {% endif %}
+                                            {% else %}
+                                                <div class="alert alert-warning mb-0">
+                                                    <i class="bi bi-exclamation-triangle"></i> {{ result.metadata_demo.details or 'Metadata removal not available for this file type' }}
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Summary Stats -->
+                            <div class="card mt-3">
+                                <div class="card-body">
+                                    <div class="row text-center">
+                                        <div class="col-md-3">
+                                            <h4 class="text-primary">{{ result.metadata_demo.before|length if result.metadata_demo.before is mapping else 0 }}</h4>
+                                            <small class="text-muted">Original Fields</small>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <h4 class="text-success">{{ result.metadata_demo.after|length if result.metadata_demo.after is mapping else 0 }}</h4>
+                                            <small class="text-muted">Remaining Fields</small>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <h4 class="text-danger">{{ result.metadata_demo.removed_count or 0 }}</h4>
+                                            <small class="text-muted">Fields Removed</small>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <h4 class="{% if result.metadata_demo.success %}text-success{% else %}text-warning{% endif %}">
+                                                {{ "100%" if result.metadata_demo.success and (result.metadata_demo.after|length == 0 if result.metadata_demo.after is mapping else True) else "Partial" }}
+                                            </h4>
+                                            <small class="text-muted">Removal Success</small>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                         {% endif %}
 
-                        <!-- Image Before/After Comparison -->
+                        <!-- Image Before/After Comparison (Watermarking) -->
                         {% if result.is_image and result.original_image_url and result.cleaned_image_url and result.validation_result.is_safe %}
                         <div class="mt-4">
-                            <h5><i class="bi bi-image"></i> Image Before/After Comparison</h5>
+                            <h5><i class="bi bi-image"></i> Watermarking: Before/After Comparison</h5>
                             <div class="row">
                                 <div class="col-md-6">
                                     <div class="card h-100 img-comparison-card">
                                         <div class="card-header bg-info text-white">
-                                            <h6 class="mb-0"><i class="bi bi-image"></i> Original Image</h6>
+                                            <h6 class="mb-0"><i class="bi bi-image"></i> Before: Original Upload</h6>
                                         </div>
                                         <div class="card-body text-center">
-                                            <p class="text-muted mb-3">Image with original metadata and no watermark</p>
-                                            <img src="{{ result.original_image_url }}" alt="Original Image" class="img-fluid rounded shadow" style="max-height: 400px; object-fit: contain;">
+                                            <p class="text-muted mb-3">Original uploaded image (no watermark)</p>
+                                            <img src="{{ result.original_image_url }}" alt="Original Uploaded Image" class="img-fluid rounded shadow" style="max-height: 400px; object-fit: contain;">
                                             <div class="mt-3">
-                                                <span class="badge bg-secondary">Original</span>
+                                                <span class="badge bg-secondary">Original Upload</span>
                                             </div>
                                         </div>
                                     </div>
@@ -461,11 +492,11 @@
                                 <div class="col-md-6">
                                     <div class="card h-100 img-comparison-card">
                                         <div class="card-header bg-success text-white">
-                                            <h6 class="mb-0"><i class="bi bi-shield-check"></i> Cleaned Image</h6>
+                                            <h6 class="mb-0"><i class="bi bi-shield-check"></i> After: Processed & Watermarked</h6>
                                         </div>
                                         <div class="card-body text-center">
-                                            <p class="text-muted mb-3">Image after metadata removal and watermarking</p>
-                                            <img src="{{ result.cleaned_image_url }}" alt="Cleaned Image" class="img-fluid rounded shadow" style="max-height: 400px; object-fit: contain;">
+                                            <p class="text-muted mb-3">After metadata removal and watermarking</p>
+                                            <img src="{{ result.cleaned_image_url }}" alt="Watermarked Image" class="img-fluid rounded shadow" style="max-height: 400px; object-fit: contain;">
                                             <div class="mt-3">
                                                 {% if result.validation_result.metadata_removed %}
                                                 <span class="badge bg-success"><i class="bi bi-check-circle"></i> Metadata Removed</span>
@@ -518,141 +549,123 @@
                         </div>
                         {% endif %}
 
-                        {% if result.metadata_demo %}
-                        <!-- Metadata Before/After Comparison -->
+                        <!-- Step 4: OCR Text Extraction -->
+                        {% if result.validation_result.pipeline_info and result.validation_result.pipeline_info.ocr_available %}
                         <div class="mt-4">
-                            <h5><i class="bi bi-arrow-left-right"></i> Metadata Before/After Comparison</h5>
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="card h-100">
-                                        <div class="card-header bg-info text-white">
-                                            <h6 class="mb-0"><i class="bi bi-file-earmark-text"></i> Before Metadata Removal</h6>
-                                        </div>
-                                        <div class="card-body">
-                                            {% if result.metadata_demo.before %}
-                                                <div class="metadata-container" style="max-height: 400px; overflow-y: auto;">
-                                                    <div class="table-responsive">
-                                                        <table class="table table-sm table-hover">
-                                                            <thead class="table-light">
-                                                                <tr>
-                                                                    <th style="width: 30%;">Field</th>
-                                                                    <th style="width: 70%;">Value</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                {% for key, value in result.metadata_demo.before.items() %}
-                                                                    {% if value %}
-                                                                    <tr>
-                                                                        <td class="text-muted fw-semibold">
-                                                                            <small>{{ key | replace('_', ' ') | title }}</small>
-                                                                        </td>
-                                                                        <td>
-                                                                            <code class="metadata-value-code">{{ value }}</code>
-                                                                        </td>
-                                                                    </tr>
-                                                                    {% endif %}
-                                                                {% endfor %}
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                </div>
-                                                <div class="mt-3">
-                                                    <span class="badge bg-info">{{ result.metadata_demo.before|length }} metadata fields found</span>
-                                                </div>
+                            <h5><i class="bi bi-text-height"></i> OCR Text Extraction Results</h5>
+                            <div class="card">
+                                <div class="card-header bg-{% if result.validation_result.ocr_performed and result.validation_result.ocr_text %}success{% elif result.validation_result.ocr_error %}danger{% else %}warning{% endif %} text-white">
+                                    <h6 class="mb-0">
+                                        <i class="bi bi-{% if result.validation_result.ocr_performed and result.validation_result.ocr_text %}check-circle{% elif result.validation_result.ocr_error %}x-circle{% else %}exclamation-triangle{% endif %}"></i>
+                                        OCR Status: 
+                                        {% if result.validation_result.ocr_performed %}
+                                            {% if result.validation_result.ocr_text %}
+                                                TEXT FOUND
                                             {% else %}
-                                                <div class="text-center text-muted py-4">
-                                                    <i class="bi bi-file-earmark-text fs-1 opacity-50"></i>
-                                                    <p class="mt-2">No metadata found in original file</p>
-                                                </div>
+                                                NO TEXT DETECTED
                                             {% endif %}
-                                        </div>
-                                    </div>
+                                        {% elif result.validation_result.ocr_error %}
+                                            FAILED
+                                        {% else %}
+                                            SKIPPED
+                                        {% endif %}
+                                    </h6>
                                 </div>
-                                
-                                <div class="col-md-6">
-                                    <div class="card h-100">
-                                        <div class="card-header bg-{% if result.metadata_demo.success %}success{% else %}warning{% endif %} text-white">
-                                            <h6 class="mb-0"><i class="bi bi-file-earmark-check"></i> After Metadata Removal</h6>
-                                        </div>
-                                        <div class="card-body">
-                                            {% if result.metadata_demo.after %}
-                                                <div class="metadata-container" style="max-height: 400px; overflow-y: auto;">
-                                                    <div class="table-responsive">
-                                                        <table class="table table-sm table-hover">
-                                                            <thead class="table-light">
-                                                                <tr>
-                                                                    <th style="width: 30%;">Field</th>
-                                                                    <th style="width: 70%;">Value</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                {% for key, value in result.metadata_demo.after.items() %}
-                                                                    {% if value %}
-                                                                    <tr>
-                                                                        <td class="text-muted fw-semibold">
-                                                                            <small>{{ key | replace('_', ' ') | title }}</small>
-                                                                        </td>
-                                                                        <td>
-                                                                            <code class="metadata-value-code">{{ value }}</code>
-                                                                        </td>
-                                                                    </tr>
-                                                                    {% endif %}
-                                                                {% endfor %}
-                                                            </tbody>
-                                                        </table>
+                                <div class="card-body">
+                                    {% if result.validation_result.ocr_performed %}
+                                        {% if result.validation_result.ocr_text %}
+                                            <!-- OCR Statistics Cards -->
+                                            <div class="row mb-4">
+                                                <div class="col-md-4">
+                                                    <div class="card bg-light text-center">
+                                                        <div class="card-body py-3">
+                                                            <h4 class="mb-1 text-primary">{{ result.validation_result.ocr_details.total_detections or 0 }}</h4>
+                                                            <small class="text-muted">Text Segments</small>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                                <div class="mt-3">
-                                                    <span class="badge bg-secondary">{{ result.metadata_demo.after|length }} metadata fields remaining</span>
+                                                <div class="col-md-4">
+                                                    <div class="card bg-light text-center">
+                                                        <div class="card-body py-3">
+                                                            {% set avg_conf = namespace(sum=0, count=0) %}
+                                                            {% for block in result.validation_result.ocr_details.text_blocks %}
+                                                                {% set avg_conf.sum = avg_conf.sum + block.confidence %}
+                                                                {% set avg_conf.count = avg_conf.count + 1 %}
+                                                            {% endfor %}
+                                                            <h4 class="mb-1 text-success">{{ "%.1f"|format((avg_conf.sum / avg_conf.count if avg_conf.count > 0 else 0) * 100) }}%</h4>
+                                                            <small class="text-muted">Avg Confidence</small>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            {% else %}
-                                                <div class="text-center text-success py-4">
-                                                    <i class="bi bi-check-circle-fill fs-1 text-success opacity-75"></i>
-                                                    <p class="mt-2 fw-semibold">All metadata successfully removed!</p>
+                                                <div class="col-md-4">
+                                                    <div class="card bg-light text-center">
+                                                        <div class="card-body py-3">
+                                                            <h4 class="mb-1 text-info">{{ result.validation_result.ocr_text|length }}</h4>
+                                                            <small class="text-muted">Total Characters</small>
+                                                        </div>
+                                                    </div>
                                                 </div>
+                                            </div>
+                                            
+                                            <!-- Extracted Text Segments with Confidence -->
+                                            <div class="mb-4">
+                                                <h6 class="mb-2"><i class="bi bi-text-paragraph"></i> Extracted Text Segments</h6>
+                                                <p class="text-muted small mb-2">
+                                                    Found {{ result.validation_result.ocr_details.text_blocks|length }} text segment(s) with confidence scores:
+                                                </p>
+                                                
+                                                {% for block in result.validation_result.ocr_details.text_blocks %}
+                                                <div class="d-flex justify-content-between align-items-center p-2 mb-2 border-start border-4 {% if block.confidence > 0.8 %}border-success bg-light{% elif block.confidence > 0.6 %}border-warning bg-light{% else %}border-secondary bg-light{% endif %}" style="border-radius: 5px;">
+                                                    <span class="flex-grow-1">{{ block.text }}</span>
+                                                    <span class="badge ms-2 {% if block.confidence > 0.8 %}bg-success{% elif block.confidence > 0.6 %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                                                        {{ "%.1f"|format(block.confidence * 100) }}% confident
+                                                    </span>
+                                                </div>
+                                                {% endfor %}
+                                            </div>
+                                            
+                                            <!-- Annotated OCR Image Visualization -->
+                                            {% if result.validation_result.ocr_details.annotated_image_path %}
+                                            <div class="mb-4">
+                                                <h6 class="mb-2"><i class="bi bi-image"></i> OCR Results Visualization</h6>
+                                                <p class="text-muted small mb-3">
+                                                    <i class="bi bi-info-circle"></i> 
+                                                    Image showing detected text with bounding boxes and confidence scores
+                                                </p>
+                                                <div class="card">
+                                                    <div class="card-body text-center p-0">
+                                                        <img src="{{ url_for('static', filename=result.validation_result.ocr_details.annotated_image_path.replace('static/', '').replace('\\', '/')) }}" 
+                                                             alt="OCR Annotated Image" 
+                                                             class="img-fluid"
+                                                             style="max-height: 500px; width: auto; border-radius: 5px;">
+                                                    </div>
+                                                </div>
+                                            </div>
                                             {% endif %}
                                             
-                                            {% if result.metadata_demo.removed_count > 0 %}
-                                                <div class="mt-3">
-                                                    <div class="alert alert-success">
-                                                        <i class="bi bi-trash"></i> <strong>{{ result.metadata_demo.removed_count }}</strong> metadata fields removed
-                                                    </div>
+                                            <!-- Combined Full Text -->
+                                            <div class="mb-0">
+                                                <h6 class="mb-2"><i class="bi bi-align-left"></i> Combined Full Text</h6>
+                                                <div class="alert alert-secondary mb-0">
+                                                    <pre class="mb-0" style="white-space: pre-wrap; font-family: 'Courier New', monospace;">{{ result.validation_result.ocr_text }}</pre>
                                                 </div>
-                                            {% elif result.metadata_demo.removed_count == 0 and result.metadata_demo.before %}
-                                                <div class="mt-3">
-                                                    <div class="alert alert-warning">
-                                                        <i class="bi bi-exclamation-triangle"></i> No metadata was removed
-                                                    </div>
-                                                </div>
-                                            {% endif %}
+                                            </div>
+                                        {% else %}
+                                            <div class="alert alert-info mb-0">
+                                                <i class="bi bi-info-circle text-info"></i> No text detected in image
+                                            </div>
+                                        {% endif %}
+                                    {% else %}
+                                        <div class="alert alert-warning mb-0">
+                                            <i class="bi bi-exclamation-triangle"></i> OCR extraction was skipped or not performed on this file
                                         </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Summary Stats -->
-                            <div class="card mt-3">
-                                <div class="card-body">
-                                    <div class="row text-center">
-                                        <div class="col-md-3">
-                                            <h5 class="text-primary">{{ result.metadata_demo.before|length }}</h5>
-                                            <small class="text-muted">Original Fields</small>
+                                    {% endif %}
+                                    
+                                    {% if result.validation_result.ocr_error %}
+                                        <div class="alert alert-danger mb-0">
+                                            <i class="bi bi-x-circle text-danger"></i> <strong>OCR Error:</strong> {{ result.validation_result.ocr_error }}
                                         </div>
-                                        <div class="col-md-3">
-                                            <h5 class="text-success">{{ result.metadata_demo.removed_count }}</h5>
-                                            <small class="text-muted">Fields Removed</small>
-                                        </div>
-                                        <div class="col-md-3">
-                                            <h5 class="text-secondary">{{ result.metadata_demo.after|length }}</h5>
-                                            <small class="text-muted">Fields Remaining</small>
-                                        </div>
-                                        <div class="col-md-3">
-                                            <h5 class="text-{% if result.metadata_demo.success %}success{% else %}danger{% endif %}">
-                                                {% if result.metadata_demo.success %}✓{% else %}✗{% endif %}
-                                            </h5>
-                                            <small class="text-muted">Operation Status</small>
-                                        </div>
-                                    </div>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>

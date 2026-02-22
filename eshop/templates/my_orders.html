@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>📦 My Orders</h2>
+
+{% if orders %}
+<div class="row">
+    {% for order in orders %}
+    <div class="col-md-12 mb-3">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <strong>Order #{{ order.order_number }}</strong>
+                    <br><small class="text-muted">{{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                </div>
+                <div>
+                    {% if order.status == 'paid' %}
+                    <span class="badge bg-success">✓ Paid</span>
+                    {% elif order.status == 'verified_2fa' %}
+                    <span class="badge bg-info">2FA Verified</span>
+                    {% else %}
+                    <span class="badge bg-warning">{{ order.status }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <h6>Items:</h6>
+                        <ul class="list-unstyled">
+                            {% for item in order.items %}
+                            <li>• {{ item.product.title }} × {{ item.quantity }} - ${{ "%.2f"|format(item.price_at_purchase * item.quantity) }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <h6>Shipping Address:</h6>
+                        <p class="mb-1"><strong>{{ order.shipping_name }}</strong></p>
+                        <p class="mb-1">{{ order.shipping_address }}</p>
+                        <p class="mb-1">Singapore {{ order.shipping_postal_code }}</p>
+                        <p class="mb-0">{{ order.shipping_phone }}</p>
+                        <hr>
+                        <h5 class="text-success">Total: ${{ "%.2f"|format(order.total_amount) }}</h5>
+                        {% if order.confirmation_sent %}
+                        <small class="text-muted">✉️ Confirmation email sent</small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-info text-center">
+    <i class="fas fa-shopping-bag fa-3x mb-3"></i>
+    <h4>No orders yet</h4>
+    <p>Start shopping to see your orders here!</p>
+    <a href="{{ url_for('index') }}" class="btn btn-primary">Browse Products</a>
+</div>
+{% endif %}
+{% endblock %}

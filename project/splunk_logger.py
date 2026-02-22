@@ -49,6 +49,13 @@ class SplunkLogger:
             return False
         
         try:
+            # Get username from current_user or fallback to data
+            username = None
+            if current_user and current_user.is_authenticated:
+                username = current_user.username
+            elif data and 'username' in data:
+                username = data['username']
+            
             event_data = {
                 "time": int(time.time()),
                 "event": {
@@ -59,7 +66,7 @@ class SplunkLogger:
                     "user_agent": request.headers.get('User-Agent') if request else None,
                     "session_id": session.get('session_id') if session else None,
                     "user_id": current_user.user_id if current_user and current_user.is_authenticated else None,
-                    "username": current_user.username if current_user and current_user.is_authenticated else None,
+                    "username": username,
                     "data": data or {}
                 },
                 "sourcetype": "app_security_event",

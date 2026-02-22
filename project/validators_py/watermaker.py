@@ -77,9 +77,18 @@ def apply_red_watermark(image_data_or_path, watermark_text="VALIDATED", save_to_
         overlay = Image.new('RGBA', img.size, (255, 255, 255, 0))  # Transparent overlay
         draw = ImageDraw.Draw(overlay)
         
-        # Calculate enhanced font size (larger than original)
-        # Using 10.5% of height for better clarity without being too large
-        base_font_size = max(int(height * 0.105), 28)  # 10.5% of image height, minimum 28px
+        # Calculate font size based on both width and height for better scaling
+        # Use the smaller dimension to ensure watermark fits well
+        min_dimension = min(width, height)
+        max_dimension = max(width, height)
+        
+        # Scale font size: Very large but clean-looking
+        # Simpler calculation for maximum readability
+        base_font_size = max(
+            int(height * 0.15),  # 15% of image height
+            int(width * 0.12),   # 12% of image width
+            150  # Minimum 150px for strong visibility
+        )
         
         # Try to load a nice font, fallback to default if unavailable
         font = _get_best_font(base_font_size)
@@ -90,21 +99,15 @@ def apply_red_watermark(image_data_or_path, watermark_text="VALIDATED", save_to_
         text_height = bbox[3] - bbox[1]
         
         # Calculate position (bottom-right with padding)
+        # Padding scales with image size for consistency
         padding = max(int(width * 0.03), 15)  # 3% of image width, minimum 15px
         x = width - text_width - padding
         y = height - text_height - padding
         
-        # Draw watermark with RED color and good opacity for clarity
-        # Red color with full opacity for crisp text
-        watermark_color = (220, 20, 20, 255)  # Bright red, full opacity for sharpness
+        # Draw clean, large red watermark - no effects, just bold text
+        watermark_color = (220, 20, 20, 255)  # Bright red, full opacity
         
-        # Add very subtle shadow for contrast without blurriness
-        shadow_offset = 1
-        shadow_color = (0, 0, 0, 80)  # Much lighter shadow
-        draw.text((x + shadow_offset, y + shadow_offset), watermark_text, 
-                 font=font, fill=shadow_color)
-        
-        # Draw main watermark text with full opacity for crisp rendering
+        # Draw the watermark - simple and clean
         draw.text((x, y), watermark_text, font=font, fill=watermark_color)
         
         # Composite the overlay onto the image
@@ -158,14 +161,17 @@ def apply_red_watermark(image_data_or_path, watermark_text="VALIDATED", save_to_
 
 def _get_best_font(font_size):
     """
-    Try to get the best available font for watermarking
+    Try to get the best available font for watermarking - prioritizes bold fonts
     """
     font_paths = [
-        # Windows fonts
+        # Windows fonts - BOLD versions first for maximum impact
+        "C:\\Windows\\Fonts\\arialbd.ttf",  # Arial Bold
+        "C:\\Windows\\Fonts\\calibrib.ttf",  # Calibri Bold
+        "C:\\Windows\\Fonts\\segoeuib.ttf",  # Segoe UI Bold
         "C:\\Windows\\Fonts\\arial.ttf",
         "C:\\Windows\\Fonts\\calibri.ttf", 
         "C:\\Windows\\Fonts\\segoeui.ttf",
-        # Linux fonts
+        # Linux fonts - Bold versions first
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",

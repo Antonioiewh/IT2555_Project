@@ -359,6 +359,16 @@ def register_blueprints(app):
     except Exception as e:
         app.logger.error(f"Failed to register ticketing blueprint: {e}")
     
+    try:
+        # Register eshop placeholder blueprint (nginx proxies to eshop container)
+        from eshop_bp import eshop_bp
+        app.register_blueprint(eshop_bp)
+        app.config['ESHOP_AVAILABLE'] = True
+        app.logger.info("E-Shop blueprint registered (proxied via nginx)")
+    except Exception as e:
+        app.config['ESHOP_AVAILABLE'] = False
+        app.logger.error(f"Failed to register eshop blueprint: {e}")
+    
     return app
 
 def register_template_functions(app):
@@ -377,7 +387,10 @@ def register_template_functions(app):
     @app.context_processor
     def inject_user():
         """Inject current user into templates"""
-        return dict(current_user=current_user)
+        return dict(
+            current_user=current_user,
+            eshop_available=app.config.get('ESHOP_AVAILABLE', False)
+        )
     
     @app.context_processor
     def inject_config():
@@ -1015,20 +1028,42 @@ def upload_banner():
         file_data = file.read()
         file.seek(0)
         
-        # Run comprehensive validation pipeline with username watermarking
+        # Run comprehensive validation pipeline with username watermarking and OCR
         validation_result = validate_and_clean_file(
             file_data=file_data,
             filename=file.filename,
             max_size=10*1024*1024,  # 10MB for banners
             remove_metadata_flag=True,
             add_watermark=True,
-            watermark_text=current_user.username
+            watermark_text=current_user.username,
+            enable_ocr=True  # Enable OCR text extraction
         )
 
         if not validation_result['is_safe']:
             threats_msg = '; '.join(validation_result['threats'][:3])
             app.logger.warning(f"Banner upload failed security validation for user {current_user.user_id}: {threats_msg}")
             return jsonify({'success': False, 'error': f'File security validation failed: {threats_msg}'})
+        
+        # Log OCR results if text was detected
+        if validation_result.get('ocr_performed') and validation_result.get('ocr_details', {}).get('text_found'):
+            try:
+                ocr_details = validation_result['ocr_details']
+                splunk_logger.log_security_event(
+                    event_type='ocr_text_detected',
+                    data={
+                        'upload_type': 'banner',
+                        'user_id': current_user.user_id,
+                        'username': current_user.username,
+                        'filename': file.filename,
+                        'total_detections': ocr_details.get('total_detections', 0),
+                        'high_confidence_count': ocr_details.get('high_confidence_count', 0),
+                        'average_confidence': ocr_details.get('average_confidence', 0),
+                        'extracted_text_preview': validation_result.get('ocr_text', '')[:200]  # First 200 chars
+                    },
+                    severity='INFO'
+                )
+            except Exception as log_e:
+                app.logger.error(f"Failed to log OCR results: {log_e}")
 
         # Generate secure filename
         filename = secure_filename(file.filename)
@@ -3833,20 +3868,42 @@ def upload_message_attachment():
         file_data = file.read()
         file.seek(0)
         
-        # Run comprehensive validation pipeline with username watermarking
+        # Run comprehensive validation pipeline with username watermarking and OCR
         validation_result = validate_and_clean_file(
             file_data=file_data,
             filename=file.filename,
             max_size=16*1024*1024,  # 16MB for attachments
             remove_metadata_flag=True,
             add_watermark=True,  # Will only watermark images
-            watermark_text=current_user.username
+            watermark_text=current_user.username,
+            enable_ocr=True  # Enable OCR text extraction
         )
         
         if not validation_result['is_safe']:
             threats_msg = '; '.join(validation_result['threats'][:3])
             app.logger.warning(f"Message attachment failed validation for user {current_user.user_id}: {threats_msg}")
             return jsonify(ok=False, error=f'File security validation failed: {threats_msg}'), 400
+        
+        # Log OCR results if text was detected in image attachment
+        if validation_result.get('ocr_performed') and validation_result.get('ocr_details', {}).get('text_found'):
+            try:
+                ocr_details = validation_result['ocr_details']
+                splunk_logger.log_security_event(
+                    event_type='ocr_text_detected',
+                    data={
+                        'upload_type': 'message_attachment',
+                        'user_id': current_user.user_id,
+                        'username': current_user.username,
+                        'filename': file.filename,
+                        'total_detections': ocr_details.get('total_detections', 0),
+                        'high_confidence_count': ocr_details.get('high_confidence_count', 0),
+                        'average_confidence': ocr_details.get('average_confidence', 0),
+                        'extracted_text_preview': validation_result.get('ocr_text', '')[:200]
+                    },
+                    severity='INFO'
+                )
+            except Exception as log_e:
+                app.logger.error(f"Failed to log OCR results: {log_e}")
         
         # Generate secure filename and save processed file
         clean_chat_dir = os.path.join(app.static_folder, 'clean', 'chat')
@@ -4221,17 +4278,40 @@ def create_post():
                         image_data = image_file.read()
                         image_file.seek(0)
                         
-                        # Run comprehensive validation pipeline with username watermarking
+                        # Run comprehensive validation pipeline with username watermarking and OCR
                         validation_result = validate_and_clean_file(
                             file_data=image_data,
                             filename=image_file.filename,
                             max_size=5*1024*1024,  # 5MB for post images
                             remove_metadata_flag=True,
                             add_watermark=True,
-                            watermark_text=current_user.username
+                            watermark_text=current_user.username,
+                            enable_ocr=True  # Enable OCR text extraction
                         )
                         
                         if validation_result['is_safe']:
+                            # Log OCR results if text was detected
+                            if validation_result.get('ocr_performed') and validation_result.get('ocr_details', {}).get('text_found'):
+                                try:
+                                    ocr_details = validation_result['ocr_details']
+                                    splunk_logger.log_security_event(
+                                        event_type='ocr_text_detected',
+                                        data={
+                                            'upload_type': 'post_image',
+                                            'user_id': current_user.user_id,
+                                            'username': current_user.username,
+                                            'post_id': new_post.post_id,
+                                            'filename': image_file.filename,
+                                            'total_detections': ocr_details.get('total_detections', 0),
+                                            'high_confidence_count': ocr_details.get('high_confidence_count', 0),
+                                            'average_confidence': ocr_details.get('average_confidence', 0),
+                                            'extracted_text_preview': validation_result.get('ocr_text', '')[:200]
+                                        },
+                                        severity='INFO'
+                                    )
+                                except Exception as log_e:
+                                    app.logger.error(f"Failed to log OCR results: {log_e}")
+                            
                             # Generate secure filename for processed file
                             clean_posts_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'posts')
                             os.makedirs(clean_posts_dir, exist_ok=True)
@@ -4461,25 +4541,48 @@ def download_post_image(post_id, filename):
     if not post_image:
         abort(404)
 
-    # Construct the full file path - check both clean/posts and uploads (legacy)
-    clean_file_path = os.path.join(app.static_folder, 'clean', 'posts', filename)
-    legacy_file_path = os.path.join(app.static_folder, 'uploads', filename)
+    # Construct the full file path - check multiple possible locations
+    uploads_posts_path = os.path.join(app.static_folder, 'uploads', 'posts', filename)
+    clean_posts_path = os.path.join(app.static_folder, 'clean', 'posts', filename)
+    legacy_uploads_path = os.path.join(app.static_folder, 'uploads', filename)
     
     file_path = None
-    if os.path.exists(clean_file_path):
-        file_path = clean_file_path
-    elif os.path.exists(legacy_file_path):
-        file_path = legacy_file_path
+    if os.path.exists(uploads_posts_path):
+        file_path = uploads_posts_path
+    elif os.path.exists(clean_posts_path):
+        file_path = clean_posts_path
+    elif os.path.exists(legacy_uploads_path):
+        file_path = legacy_uploads_path
     else:
         abort(404)
 
-    # Apply username overlay and return
-    buf = apply_bottom_right_overlay_bytes(file_path, post.user.username)
+    # Log post download for security monitoring
+    try:
+        file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+        splunk_logger.log_security_event(
+            event_type='post_download',
+            data={
+                'post_id': post_id,
+                'post_owner_id': post.user_id,
+                'post_owner_username': post.user.username,
+                'downloader_id': current_user.user_id,
+                'downloader_username': current_user.username,
+                'filename': filename,
+                'file_size_bytes': file_size,
+                'download_time': datetime.utcnow().isoformat(),
+                'is_own_post': post.user_id == current_user.user_id
+            },
+            severity='INFO'
+        )
+    except Exception as log_e:
+        app.logger.error(f"Failed to log post download: {log_e}")
+    
+    # Serve the already-watermarked file directly (watermark applied during upload)
     return send_file(
-        buf,
+        file_path,
         mimetype='image/jpeg',
         as_attachment=True,
-        download_name=f"watermarked_{filename}"
+        download_name=filename
     )
 @app.route('/delete_post/<int:post_id>', methods=['POST'])
 @login_required
@@ -4684,14 +4787,15 @@ def edit_profile():
                     header, encoded = cropped_image_data.split(',', 1)
                     image_data = base64.b64decode(encoded)
                     
-                    # Run comprehensive validation pipeline with username watermarking
+                    # Run comprehensive validation pipeline with username watermarking and OCR
                     validation_result = validate_and_clean_file(
                         file_data=image_data,
                         filename="profile_picture.png",
                         max_size=5*1024*1024,  # 5MB for profile pics
                         remove_metadata_flag=True,
                         add_watermark=True,
-                        watermark_text=current_user.username
+                        watermark_text=current_user.username,
+                        enable_ocr=True  # Enable OCR text extraction
                     )
                     
                     if not validation_result['is_safe']:
@@ -4699,6 +4803,27 @@ def edit_profile():
                         app.logger.warning(f"Profile image upload failed security validation for user {current_user.user_id}: {threats_msg}")
                         flash(f'Profile picture security validation failed: {threats_msg}', 'error')
                         return render_template('EditProfile.html', form=form)
+                    
+                    # Log OCR results if text was detected
+                    if validation_result.get('ocr_performed') and validation_result.get('ocr_details', {}).get('text_found'):
+                        try:
+                            ocr_details = validation_result['ocr_details']
+                            splunk_logger.log_security_event(
+                                event_type='ocr_text_detected',
+                                data={
+                                    'upload_type': 'profile_picture',
+                                    'user_id': current_user.user_id,
+                                    'username': current_user.username,
+                                    'filename': 'profile_picture.png',
+                                    'total_detections': ocr_details.get('total_detections', 0),
+                                    'high_confidence_count': ocr_details.get('high_confidence_count', 0),
+                                    'average_confidence': ocr_details.get('average_confidence', 0),
+                                    'extracted_text_preview': validation_result.get('ocr_text', '')[:200]
+                                },
+                                severity='INFO'
+                            )
+                        except Exception as log_e:
+                            app.logger.error(f"Failed to log OCR results: {log_e}")
                     
                     # Generate secure filename and save processed file
                     clean_profile_dir = os.path.join(app.static_folder, 'clean', 'profile_pictures')

@@ -359,6 +359,16 @@ def register_blueprints(app):
     except Exception as e:
         app.logger.error(f"Failed to register ticketing blueprint: {e}")
     
+    try:
+        # Register eshop placeholder blueprint (nginx proxies to eshop container)
+        from eshop_bp import eshop_bp
+        app.register_blueprint(eshop_bp)
+        app.config['ESHOP_AVAILABLE'] = True
+        app.logger.info("E-Shop blueprint registered (proxied via nginx)")
+    except Exception as e:
+        app.config['ESHOP_AVAILABLE'] = False
+        app.logger.error(f"Failed to register eshop blueprint: {e}")
+    
     return app
 
 def register_template_functions(app):
@@ -377,7 +387,10 @@ def register_template_functions(app):
     @app.context_processor
     def inject_user():
         """Inject current user into templates"""
-        return dict(current_user=current_user)
+        return dict(
+            current_user=current_user,
+            eshop_available=app.config.get('ESHOP_AVAILABLE', False)
+        )
     
     @app.context_processor
     def inject_config():

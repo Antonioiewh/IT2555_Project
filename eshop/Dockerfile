@@ -2,7 +2,7 @@
 FROM python:3.11-slim
 
 # Set working directory
-WORKDIR /app
+WORKDIR /code
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -19,14 +19,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Create necessary directories
-RUN mkdir -p static/uploads templates
+RUN mkdir -p static/uploads templates instance
 
 # Expose port
 EXPOSE 5000
 
 # Set environment variables
 ENV FLASK_APP=app.py
-ENV FLASK_ENV=development
+ENV PYTHONUNBUFFERED=1
 
 # Run the application
 CMD ["python", "app.py"]

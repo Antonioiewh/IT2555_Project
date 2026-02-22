@@ -184,6 +184,19 @@ services:
     env_file:
       - ./project/.env
 
+  eshop:
+    build:
+      context: eshop
+    expose:
+      - "5000"
+    volumes:
+      - ./eshop:/code
+    networks:
+      - flask-sql
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+
   redis:
     image: "redis:alpine"
     ports:

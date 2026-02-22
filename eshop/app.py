@@ -3,6 +3,7 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from flask_mail import Mail, Message
 from models import db, User, Product, Order, OrderItem, CartItem, Favorite, AuditLog, PIIViolation
 from werkzeug.utils import secure_filename
+from werkzeug.middleware.proxy_fix import ProxyFix
 import stripe
 import os
 import sys
@@ -16,6 +17,18 @@ sys.stderr.reconfigure(line_buffering=True)
 
 load_dotenv()
 
+# Middleware to handle /eshop prefix
+class PrefixMiddleware:
+    def __init__(self, app, prefix='/eshop'):
+        self.app = app
+        self.prefix = prefix
+
+    def __call__(self, environ, start_response):
+        # Set SCRIPT_NAME so Flask knows to prefix all URLs
+        if environ.get('HTTP_X_FORWARDED_PREFIX'):
+            environ['SCRIPT_NAME'] = environ['HTTP_X_FORWARDED_PREFIX']
+        return self.app(environ, start_response)
+
 app = Flask(__name__)
 
 # Flask Configuration
@@ -25,6 +38,10 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 app.config['WTF_CSRF_ENABLED'] = False
+
+# Apply middleware stack
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+app.wsgi_app = PrefixMiddleware(app.wsgi_app)
 
 # Email configuration - load from environment variables
 app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com')

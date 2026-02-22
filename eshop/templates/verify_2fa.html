@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body text-center">
+                <i class="fas fa-shield-alt text-primary" style="font-size: 4rem;"></i>
+                <h2 class="mt-3">🔒 Two-Factor Authentication</h2>
+                <p class="lead">Security verification required</p>
+                
+                <div class="alert alert-info">
+                    <i class="fas fa-envelope"></i> A 6-digit verification code has been sent to your email: <strong>{{ current_user.email }}</strong>
+                </div>
+
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="code" class="form-label">Enter Verification Code</label>
+                        <input type="text" class="form-control form-control-lg text-center" 
+                               id="code" name="code" maxlength="6" placeholder="000000" 
+                               pattern="\d{6}" required autofocus 
+                               style="font-size: 24px; letter-spacing: 10px;">
+                        <small class="text-muted">Code expires in 10 minutes</small>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-lg w-100">
+                        <i class="fas fa-check"></i> Verify & Complete Payment
+                    </button>
+                </form>
+
+                <div class="mt-3">
+                    <small class="text-muted">
+                        Order Number: <strong>{{ order.order_number }}</strong>
+                    </small>
+                </div>
+                
+                <div class="mt-3">
+                    <p class="text-muted">
+                        <i class="fas fa-info-circle"></i> This is a security measure to protect your purchase
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

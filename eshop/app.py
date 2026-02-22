@@ -34,9 +34,8 @@ app.config['MAIL_USERNAME'] = 'demo@securebook.com'
 app.config['MAIL_PASSWORD'] = 'demo-password'
 app.config['MAIL_DEFAULT_SENDER'] = 'SecureBook E-Shop <noreply@securebook.com>'
 
-# Stripe configuration - HARDCODED FOR DEMO
-stripe.api_key = 'sk_test_51SyT5lRjEzi4tDfDqAEljekgZUPSKI0zOr5jORA6Dfu5soJz0sHEmQ54wh1myjj0pMmawrF8xui5s3BFUt0akwOb00vmKt1Dn7'
-STRIPE_PUBLIC_KEY = 'pk_test_51SyT5lRjEzi4tDfDpZHps6iM0tqCklKJmz732duqeGzpkOzbmrhTadbeM7EilofA3qaJpweMnWBxfLRPXWls7ZPi00FUgs0wL0'
+stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
+STRIPE_PUBLIC_KEY = os.getenv('STRIPE_PUBLIC_KEY')
 
 print(f"\n{'='*60}", flush=True)
 print("CONFIGURATION CHECK:", flush=True)

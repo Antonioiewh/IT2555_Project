@@ -194,51 +194,6 @@ except ImportError:
         
         OCR_AVAILABLE = False
 
-# =============================================================================
-# NEW: NATIVE CLAMAV INTEGRATION
-# =============================================================================
-CLAMAV_AVAILABLE = False
-try:
-    import clamd
-    CLAMAV_AVAILABLE = True
-    
-    class LocalVirusScanner:
-        def __init__(self, host='clamav', port=3310):
-            self.host = host
-            self.port = port
-            self.cd = None
-
-        def _connect(self):
-            try:
-                self.cd = clamd.ClamdNetworkSocket(host=self.host, port=self.port)
-                return True
-            except Exception as e:
-                print(f"⚠️ Virus Scanner Error: Could not connect to ClamAV at {self.host}:{self.port}. {e}")
-                return False
-
-        def scan_stream(self, file_obj):
-            if not self.cd:
-                if not self._connect():
-                    return False, "Scanner unavailable"
-            try:
-                result = self.cd.instream(file_obj)
-                if result and 'stream' in result:
-                    status, virus_name = result['stream']
-                    if status == 'FOUND':
-                        return False, f"Malware Detected: {virus_name}"
-                    return True, "Clean"
-                return True, "Clean"
-            except Exception as e:
-                error_msg = str(e).lower()
-                if 'size limit' in error_msg or 'maxlength' in error_msg:
-                    return False, "File exceeds ClamAV size limit"
-                self.cd = None 
-                return False, f"Scan Error: {str(e)}"
-                
-    local_av_scanner = LocalVirusScanner()
-except ImportError:
-    CLAMAV_AVAILABLE = False
-
 def validate_file_security(file_path: str = None, file_data: bytes = None, filename: str = None, 
                           max_size: int = 10*1024*1024) -> Dict:
     """
@@ -318,17 +273,6 @@ def validate_file_security(file_path: str = None, file_data: bytes = None, filen
             result['threats'].extend(critical_threats)
             result['is_safe'] = False
             result['risk_level'] = 'critical'
-
-        # 6. INTEGRATED CLAMAV VIRUS SCAN
-        if CLAMAV_AVAILABLE:
-            scan_obj = io.BytesIO(file_data) # Wrap bytes safely for ClamAV
-            is_safe_av, threat_msg = local_av_scanner.scan_stream(scan_obj)
-            if not is_safe_av:
-                result['threats'].append(f"ClamAV: {threat_msg}")
-                result['is_safe'] = False
-                result['risk_level'] = 'critical'
-        else:
-            result['warnings'].append("ClamAV module not available, skipping malware scan")
         
         # Add detection info
         result['detection_info'] = {

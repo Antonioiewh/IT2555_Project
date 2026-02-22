@@ -26,16 +26,21 @@ app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 app.config['WTF_CSRF_ENABLED'] = False
 
-# Email configuration
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = 'demo@securebook.com'
-app.config['MAIL_PASSWORD'] = 'demo-password'
-app.config['MAIL_DEFAULT_SENDER'] = 'SecureBook E-Shop <noreply@securebook.com>'
+# Email configuration - load from environment variables
+app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
+app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT', 587))
+app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'True') == 'True'
+app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', 'demo@securebook.com')
+app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'demo-password')
+app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', 'SecureBook E-Shop <noreply@securebook.com>')
 
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 STRIPE_PUBLIC_KEY = os.getenv('STRIPE_PUBLIC_KEY')
+
+# Verify keys are loaded
+if not stripe.api_key or not STRIPE_PUBLIC_KEY:
+    print("⚠️  WARNING: Stripe keys not found in environment variables!", flush=True)
+    print("⚠️  Please copy .env.example to .env and add your keys", flush=True)
 
 print(f"\n{'='*60}", flush=True)
 print("CONFIGURATION CHECK:", flush=True)

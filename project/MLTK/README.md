@@ -67,6 +67,44 @@ python mltk_data_content_security.py --no-anomalies
 
 ---
 
+### 3. Download Security Monitoring
+**File:** `mltk_data_download_security.py`
+
+**Purpose:** Detect data exfiltration and unauthorized content access
+
+**Anomalies Detected:**
+- Mass download spikes (25 downloads in 15 min)
+- Automated scraping (consistent 3-second intervals)
+- Off-hours downloads (2-5 AM)
+- Geographic anomalies (multiple countries)
+- High bandwidth usage (large files)
+- Multiple unique sources (15+ different post owners)
+
+**Usage:**
+```bash
+# Preview data
+python mltk_data_download_security.py --dry-run
+
+# Generate training data
+python mltk_data_download_security.py
+
+# Skip anomalies (baseline only)
+python mltk_data_download_security.py --no-anomalies
+```
+
+**MLTK Queries:**
+- Detect unusual download frequency
+- Detect automated scraping patterns
+- Time-based download anomalies
+- Geographic location anomalies
+- Mass data collection patterns
+
+**Note:** Real download events are automatically logged when users download post images in the application.
+
+**See:** `DOWNLOAD_SECURITY_MLTK_GUIDE.md` for detailed implementation
+
+---
+
 ## Quick Start
 
 ### 1. Ensure Splunk is Running
@@ -81,6 +119,9 @@ python mltk_data_login.py
 
 # Generate content security data
 python mltk_data_content_security.py
+
+# Generate download security data
+python mltk_data_download_security.py
 ```
 
 ### 3. Verify in Splunk
@@ -92,12 +133,17 @@ index=main sourcetype=app_security_event event_type="login_success"
 # Check PII detection data
 index=main event_type="pii_detected" 
 | stats count by username, severity
+
+# Check download security data
+index=main event_type="post_download"
+| stats count by data.downloader_username, data.is_own_post
 ```
 
 ### 4. Train MLTK Models
 See individual guides for specific SPL queries:
 - Login: Standard MLTK DensityFunction queries
 - Content Security: `CONTENT_SECURITY_MLTK_GUIDE.md`
+- Download Security: `DOWNLOAD_SECURITY_MLTK_GUIDE.md`
 
 ---
 
@@ -115,6 +161,14 @@ See individual guides for specific SPL queries:
 - **PII rate:** 2%-12% depending on user type
 - **Anomalies:** ~20-25 per flagged user
 - **Total events:** ~450-550
+
+### Download Security Data
+- **Users:** 5 (casual, active, content creator, researcher, business)
+- **Downloads per user:** 30-120 downloads over 14 days
+- **Own vs. others ratio:** 20%-90% depending on user type
+- **Anomalies:** ~70 per flagged user (2 users flagged)
+- **Anomaly types:** Mass spikes, scraping, off-hours, geographic, bandwidth, multiple sources
+- **Total events:** ~530-600
 
 ---
 
@@ -135,10 +189,12 @@ SPLUNK_HEC_TOKEN=your-hec-token-here
 
 ```
 MLTK/
-├── README.md                           # This file
-├── mltk_data_login.py                  # Login anomaly generator
-├── mltk_data_content_security.py       # PII detection anomaly generator
-└── CONTENT_SECURITY_MLTK_GUIDE.md      # Detailed PII/MLTK guide
+├── README.md                              # This file
+├── mltk_data_login.py                     # Login anomaly generator
+├── mltk_data_content_security.py          # PII detection anomaly generator
+├── mltk_data_download_security.py         # Download monitoring data generator (NEW)
+├── CONTENT_SECURITY_MLTK_GUIDE.md         # Detailed PII/MLTK guide
+└── DOWNLOAD_SECURITY_MLTK_GUIDE.md        # Download monitoring guide
 ```
 
 ---
@@ -202,12 +258,12 @@ index=main event_type="YOUR_EVENT_TYPE"
 
 ## Future Generators (Potential)
 
-- File upload anomaly detection
 - Message attachment security patterns
 - Rate limiting violation patterns
 - WAF rule violation clustering
 - Session hijacking detection
 - Permission escalation attempts
+- Failed authentication pattern analysis
 
 ---
 

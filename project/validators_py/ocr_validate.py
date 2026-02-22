@@ -300,6 +300,234 @@ def scan_image_for_text(file_path: str, output_dir: str = None) -> Tuple[bool, s
     return has_text, full_text, result
 
 
+def extract_text_from_image(image_input, output_dir: str = None) -> Dict:
+    """
+    Extract text from image for file validation pipeline
+    Compatible with both file path (str) and file data (bytes)
+    
+    Args:
+        image_input: Either a file path (str) or image bytes (bytes/BytesIO)
+        output_dir: Optional output directory for OCR results
+        
+    Returns:
+        Dict with extraction results:
+        - success: bool
+        - text_found: bool
+        - extracted_text: str (combined text)
+        - total_detections: int
+        - high_confidence_count: int
+        - text_blocks: List[Dict] (text with confidence)
+        - error: Optional[str]
+    """
+    import tempfile
+    
+    temp_file_path = None
+    
+    try:
+        # Handle bytes input by creating temporary file
+        if isinstance(image_input, (bytes, bytearray)):
+            # Create temp file from bytes
+            temp_fd, temp_file_path = tempfile.mkstemp(suffix='.jpg')
+            try:
+                with os.fdopen(temp_fd, 'wb') as tmp_file:
+                    tmp_file.write(image_input)
+            except Exception as e:
+                os.close(temp_fd)
+                return {
+                    'success': False,
+                    'error': f'Failed to create temp file: {str(e)}',
+                    'text_found': False,
+                    'extracted_text': '',
+                    'total_detections': 0,
+                    'high_confidence_count': 0,
+                    'text_blocks': []
+                }
+            
+            image_path = temp_file_path
+        elif hasattr(image_input, 'read'):
+            # Handle file-like objects (BytesIO)
+            temp_fd, temp_file_path = tempfile.mkstemp(suffix='.jpg')
+            try:
+                with os.fdopen(temp_fd, 'wb') as tmp_file:
+                    tmp_file.write(image_input.read())
+            except Exception as e:
+                os.close(temp_fd)
+                return {
+                    'success': False,
+                    'error': f'Failed to create temp file: {str(e)}',
+                    'text_found': False,
+                    'extracted_text': '',
+                    'total_detections': 0,
+                    'high_confidence_count': 0,
+                    'text_blocks': []
+                }
+            
+            image_path = temp_file_path
+        else:
+            # Assume it's a file path string
+            image_path = str(image_input)
+        
+        # Perform OCR scan
+        result = validate_image_content(image_path, output_dir)
+        
+        # Clean up temp file if created
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.unlink(temp_file_path)
+            except:
+                pass
+        
+        if not result.get('success'):
+            return {
+                'success': False,
+                'error': result.get('error', 'OCR scan failed'),
+                'text_found': False,
+                'extracted_text': '',
+                'total_detections': 0,
+                'high_confidence_count': 0,
+                'text_blocks': []
+            }
+        
+        # Build text blocks with confidence scores
+        text_blocks = []
+        extracted_texts = result.get('extracted_text', [])
+        confidence_scores = result.get('confidence_scores', [])
+        high_confidence_count = 0
+        
+        for i, text in enumerate(extracted_texts):
+            confidence = confidence_scores[i] if i < len(confidence_scores) else 0.0
+            if confidence > 0.8:
+                high_confidence_count += 1
+            
+            text_blocks.append({
+                'text': text,
+                'confidence': confidence,
+                'confidence_percent': f"{confidence * 100:.1f}%"
+            })
+        
+        return {
+            'success': True,
+            'text_found': result.get('has_text', False),
+            'extracted_text': result.get('full_text', ''),
+            'total_detections': result.get('total_detections', 0),
+            'high_confidence_count': high_confidence_count,
+            'text_blocks': text_blocks,
+            'average_confidence': result.get('average_confidence', 0),
+            'annotated_image_path': result.get('annotated_image_path'),  # For display  
+            'json_path': result.get('json_path'),  # For reference
+            'error': None
+        }
+        
+    except Exception as e:
+        # Clean up temp file on error
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.unlink(temp_file_path)
+            except:
+                pass
+        
+        error_msg = f"OCR extraction error: {str(e)}"
+        logger.error(error_msg)
+        import traceback
+        logger.error(traceback.format_exc())
+        
+        return {
+            'success': False,
+            'error': error_msg,
+            'text_found': False,
+            'extracted_text': '',
+            'total_detections': 0,
+            'high_confidence_count': 0,
+            'text_blocks': []
+        }
+
+
+def validate_image_with_ocr(image_input, output_dir: str = None, check_sensitive: bool = False) -> Dict:
+    """
+    Validate image and optionally check for sensitive content
+    Compatible with file validation pipeline
+    
+    Args:
+        image_input: Either a file path (str) or image bytes
+        output_dir: Optional output directory
+        check_sensitive: Whether to check for sensitive content
+        
+    Returns:
+        Dict with validation results compatible with file pipeline
+    """
+    import tempfile
+    
+    temp_file_path = None
+    
+    try:
+        # Handle bytes input
+        if isinstance(image_input, (bytes, bytearray)):
+            temp_fd, temp_file_path = tempfile.mkstemp(suffix='.jpg')
+            try:
+                with os.fdopen(temp_fd, 'wb') as tmp_file:
+                    tmp_file.write(image_input)
+            except Exception as e:
+                os.close(temp_fd)
+                return {
+                    'success': False,
+                    'error': f'Failed to create temp file: {str(e)}',
+                    'ocr_performed': False
+                }
+            
+            image_path = temp_file_path
+        elif hasattr(image_input, 'read'):
+            temp_fd, temp_file_path = tempfile.mkstemp(suffix='.jpg')
+            try:
+                with os.fdopen(temp_fd, 'wb') as tmp_file:
+                    tmp_file.write(image_input.read())
+            except Exception as e:
+                os.close(temp_fd)
+                return {
+                    'success': False,
+                    'error': f'Failed to create temp file: {str(e)}',
+                    'ocr_performed': False
+                }
+            
+            image_path = temp_file_path
+        else:
+            image_path = str(image_input)
+        
+        # Perform validation with or without sensitive content check
+        if check_sensitive:
+            result = scan_and_check_sensitive_content(image_path, output_dir)
+        else:
+            result = validate_image_content(image_path, output_dir)
+        
+        # Clean up temp file
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.unlink(temp_file_path)
+            except:
+                pass
+        
+        return {
+            'success': result.get('success', False),
+            'ocr_performed': result.get('success', False) and result.get('has_text', False),
+            'has_sensitive_content': result.get('has_sensitive_content', False),
+            'severity': result.get('severity', 'NONE'),
+            'error': result.get('error')
+        }
+        
+    except Exception as e:
+        # Clean up temp file on error
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.unlink(temp_file_path)
+            except:
+                pass
+        
+        return {
+            'success': False,
+            'error': str(e),
+            'ocr_performed': False
+        }
+
+
 # CLI test function (for standalone testing)
 if __name__ == '__main__':
     import sys
